@@ -318,23 +318,13 @@ def format_dict(obj, max_width=200, indent="  "):
 
 # HexDump-Related ######################################################################
 
-from .py5 import PY2
-if PY2:
-    to_hex = {chr(i): ('%02x' % i)
-              for i in range(256)
-              }.__getitem__
+to_hex = {i: ('%02x' % i)
+          for i in range(256)
+          }.__getitem__
 
-    to_printable = {chr(ch): chr(ch) if is_printable(ch) else '.'
-                    for ch in range(256)
-                    }.__getitem__
-else:
-    to_hex = {i: ('%02x' % i)
-              for i in range(256)
-              }.__getitem__
-
-    to_printable = {ch: chr(ch) if is_printable(ch) else '.'
-                    for ch in range(256)
-                    }.__getitem__
+to_printable = {ch: chr(ch) if is_printable(ch) else '.'
+                for ch in range(256)
+                }.__getitem__
 
 
 def format_hex(buff, chunk_size=8):

@@ -1,26 +1,18 @@
 from __future__ import absolute_import
+import collections
 from numbers import Integral
 from itertools import chain, islice
 from functools import partial
 import random
-import collections
 from .predicates import make_predicate
 
-from .py5 import PY3
 import sys
-if PY3 and sys.version_info[:2] >= (3, 5):
+if sys.version_info[:2] >= (3, 5):
     # In order to support 'get_prev' and 'get_next', we need access to OrderedDict's internal .__map,
     # which we don't have in the C-implementation of the class in Python3.5
     # This hack allows us to get to the pythonic implemenation of OrderedDict
     from test.support import import_fresh_module
     PythonOrderedDict = import_fresh_module('collections', blocked=['_collections']).OrderedDict
-else:
-    PythonOrderedDict = collections.OrderedDict
-
-try:
-    xrange
-except NameError:
-    xrange = range
 
 
 class ObjectNotFound(LookupError):
@@ -151,7 +143,7 @@ class ObjectCollection(object):
 
     def safe_get(self, *preds, **filters):
         # this python fu avoids filtering the entire list, while still checking for one item
-        matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), xrange(2))]
+        matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), range(2))]
         if len(matching) > 1:
             raise ObjectNotFound("More than one object found")
         return matching[0] if matching else None
@@ -166,7 +158,7 @@ class ObjectCollection(object):
 
     def get(self, *preds, **filters):
         # this python fu avoids filtering the entire list, while still checking for one item
-        matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), xrange(2))]
+        matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), range(2))]
         if len(matching) == 0:
             raise ObjectNotFound("No objects found (%s)" % self._format_filter_string(preds, filters))
         if len(matching) != 1:

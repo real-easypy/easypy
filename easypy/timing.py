@@ -5,20 +5,14 @@ import threading
 from datetime import datetime, timedelta
 from functools import wraps
 
-from easypy.bunch import Bunch
-from easypy.decorations import parametrizeable_decorator
-from easypy.units import Duration
+from .bunch import Bunch
+from .decorations import parametrizeable_decorator
+from .units import Duration
 from .exceptions import PException
-from .py5 import *
+from .humanize import time_duration  # due to interference with jrpc
 
 
 IS_A_TTY = sys.stdout.isatty()
-
-
-if PY3:
-    from easypy.humanize import time_duration  # due to interference with jrpc
-else:
-    time_duration = lambda s: "%s seconds" % s
 
 
 class TimeoutException(PException, TimeoutError):

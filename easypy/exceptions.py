@@ -4,7 +4,7 @@ import traceback
 from time import time
 from datetime import datetime
 from contextlib import contextmanager
-from .py5 import raise_with_traceback, indent
+from textwrap import indent
 from logging import getLogger
 _logger = getLogger(__name__)
 
@@ -86,7 +86,7 @@ class PException(Exception):
         except acceptable as exc:
             exc_info = sys.exc_info()
             _logger.debug("'%s' raised; Raising as '%s'" % (type(exc), cls), exc_info=exc_info)
-            raise_with_traceback(cls(traceback=True, **kwargs), None)  # compatible with py2
+            raise cls(traceback=True, **kwargs) from None
 
 
 def make_block(d):
