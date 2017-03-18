@@ -1,6 +1,6 @@
 class Bunch(dict):
 
-    __slots__ = ("__stop_recursing",)
+    __slots__ = ("__stop_recursing__",)
 
     def __getattr__(self, name):
         try:
@@ -35,17 +35,17 @@ class Bunch(dict):
         self.update(dict)
 
     def __repr__(self):
-        if getattr(self, "__stop_recursing", False):
+        if getattr(self, "__stop_recursing__", False):
             items = sorted("%s" % k for k in self if isinstance(k, str) and not k.startswith("__"))
             attrs = ", ".join(items)
         else:
-            dict.__setattr__(self, "__stop_recursing", True)
+            dict.__setattr__(self, "__stop_recursing__", True)
             try:
                 items = sorted("%s=%r" % (k, v) for k, v in self.items()
                                if isinstance(k, str) and not k.startswith("__"))
                 attrs = ", ".join(items)
             finally:
-                dict.__delattr__(self, "__stop_recursing")
+                dict.__delattr__(self, "__stop_recursing__")
         return "%s(%s)" % (self.__class__.__name__, attrs)
 
     def _repr_pretty_(self, p, cycle):
@@ -127,18 +127,3 @@ def bunchify(d=None, **kw):
     if kw:
         d.update(bunchify(kw))
     return d
-
-
-def test_bunch_recursion():
-    x = Bunch(a= 5, b="hello", c=Bunch(d=7, e="kaki"))
-    x.c.f = x
-    x.c.g = x.c
-    print(x)
-
-
-def test_bunchify():
-    x = bunchify(dict(a=[dict(b=5), 9, (1, 2)], c=8))
-    assert x.a[0].b == 5
-    assert x.a[1] == 9
-    assert isinstance(x.a[2], tuple)
-    assert x.c == 8
