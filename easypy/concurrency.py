@@ -872,7 +872,19 @@ def _get_my_ident():
     return Hex(threading.current_thread().ident)
 
 
-class SoftLock(object):
+class RWLock(object):
+    """
+    Read-Write Lock: allows locking exclusively and non-exclusively:
+
+        rwl = RWLock()
+
+        with rwl:
+            # other can acquire this lock, but not exclusively
+
+        with rwl.exclusive():
+            # no one can acquire this lock - we are alone here
+
+    """
 
     def __init__(self):
         self.lock = RLock()
@@ -881,7 +893,7 @@ class SoftLock(object):
 
     def __repr__(self):
         owners = ", ".join(map(str, sorted(self.owners.keys())))
-        return "<SoftLock-{:X}, owned by [{}]>".format(id(self.lock), owners)
+        return "<{}-{:X}, owned by [{}]>".format(self.__class__.__name__, id(self.lock), owners)
 
     @property
     def owner_count(self):
@@ -934,6 +946,9 @@ class SoftLock(object):
                     self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
                 self.cond.notify()
                 _logger.debug('releasing exclusive lock on %s', self)
+
+
+SoftLock = RWLock
 
 
 class TagAlongThread(object):
