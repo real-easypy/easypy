@@ -1,2 +1,2 @@
 # easypy
-easypy make python even easier!
+easypy makes python even easier!
