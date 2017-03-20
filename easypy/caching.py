@@ -35,7 +35,7 @@ class PersistentCache(object):
 
     Example::
 
-        CACHE = PersistantCache("/tmp/cache", version=1, expiration=60)
+        CACHE = PersistentCache("/tmp/cache", version=1, expiration=60)
 
         @CACHE
         def fib(n):
@@ -70,16 +70,16 @@ class PersistentCache(object):
                 try:
                     db = shelve.open(self.path)
                 except:
-                    _logger.warning("Could not open PersistantCache: %s", self.path)
+                    _logger.warning("Could not open PersistentCache: %s", self.path)
                     db = {}
 
         with ExitStack() as stack:
             timestamp = time.time()
-            c_version, c_timestamp = db.get("_PersistantCacheSignature", [0, 0])
+            c_version, c_timestamp = db.get("_PersistentCacheSignature", [0, 0])
             if not ((c_version >= self.version) and (self.expiration is None or (c_timestamp + self.expiration) > timestamp)):
                 with self.lock:
                     db.clear()
-                    db["_PersistantCacheSignature"] = (self.version, timestamp)
+                    db["_PersistentCacheSignature"] = (self.version, timestamp)
             if lock:
                 stack.enter_context(self.lock)
             yield db
