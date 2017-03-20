@@ -13,6 +13,8 @@ if sys.version_info[:2] >= (3, 5):
     # This hack allows us to get to the pythonic implemenation of OrderedDict
     from test.support import import_fresh_module
     PythonOrderedDict = import_fresh_module('collections', blocked=['_collections']).OrderedDict
+else:
+    from collections import OrderedDict as PythonOrderedDict
 
 
 class ObjectNotFound(LookupError):
