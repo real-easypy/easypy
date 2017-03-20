@@ -7,7 +7,11 @@ python:
   - "3.6-dev" # 3.6 development branch
   - "3.7-dev" # 3.7 development branch
   - "nightly" # currently points to 3.7-dev
+env:
+  - GEVENT=true
+  - GEVENT=false
 
+install: pip install gevent
 script: python -m pytest -vv tests
 
 notifications:

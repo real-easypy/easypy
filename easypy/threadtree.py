@@ -2,6 +2,8 @@
 This module monkey-patches python's (3.x) threading module so that we can find which thread spawned which.
 This is useful in our contextualized logging, so that threads inherit logging context their 'parent'.
 """
+
+
 import sys, traceback
 from functools import lru_cache
 from uuid import uuid4
@@ -11,6 +13,8 @@ import os
 
 import _thread
 import threading
+
+from easypy.gevent import is_module_patched
 
 UUIDS_TREE = {}
 IDENT_TO_UUID = {}
@@ -107,9 +111,21 @@ def get_thread_parent(thread):
 
         return threading._active.get(parent_ident) or DeadThread.get(parent_uuid)
 
-
+# MainThread and DummyThread has to be patched separately because use of gevent
 threading.Thread.parent = property(get_thread_parent)
 threading.Thread.uuid = property(get_thread_uuid)
+
+if is_module_patched("threading"):
+    main_thread = threading.main_thread()
+    main_thread.parent = threading._DummyThread.parent = property(get_thread_parent)
+    main_thread.uuid = threading._DummyThread.uuid = property(get_thread_uuid)
+
+    def iter_thread_frames():
+        for thread in threading.enumerate():
+            yield thread.ident, thread._greenlet.gr_frame if hasattr(thread, '_greenlet') else None
+else:
+    def iter_thread_frames():
+        yield from sys._current_frames().items()
 
 
 def format_thread_stack(frame, after_module=threading):
@@ -152,13 +168,13 @@ def get_thread_tree(including_this=True):
     current_ident = threading.current_thread().ident
     main_ident = threading.main_thread().ident
 
-    for thread_ident, frame in sys._current_frames().items():
+    for thread_ident, frame in iter_thread_frames():
         if not including_this and thread_ident == current_ident:
             formatted = "  <this frame>"
         else:
             # show the entire stack if it's this thread, don't skip ('after_module') anything
-            after_module = None if thread_ident in (current_ident, main_ident) else threading
-            formatted = format_thread_stack(frame, after_module=after_module)
+            after_module = None if thread.ident in (current_ident, main_ident) else threading
+            formatted = format_thread_stack(frame, after_module=after_module) if frame else ''
         stacks[thread_ident] = formatted, time.time()
 
     def add_thread(parent_thread, parent):

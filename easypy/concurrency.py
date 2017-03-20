@@ -2,37 +2,81 @@
 
 from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
-import atexit
-import sys
-import threading
-from easypy.threadtree import format_thread_stack
-from itertools import chain
-from functools import partial, wraps
-from contextlib import contextmanager, ExitStack
-from traceback import format_tb, extract_stack
-import inspect
-import os
+
 from collections import defaultdict, Counter
-import logging
-import signal
-from easypy.exceptions import TException, PException
-from easypy.timing import Timer
-from easypy.humanize import IndentableTextBuffer, time_duration
-from easypy.decorations import parametrizeable_decorator
-from easypy.misc import Hex
-from easypy.units import MINUTE, HOUR
+from contextlib import contextmanager, ExitStack
+from functools import partial, wraps
+from importlib import import_module
+from itertools import chain
 from threading import Event
 from threading import RLock
+from traceback import format_tb, extract_stack
+import atexit
+import inspect
+import logging
+import os
+import signal
+import sys
+import threading
 import time
 
-from importlib import import_module
+from easypy.decorations import parametrizeable_decorator
+from easypy.exceptions import TException, PException
+from easypy.gevent import is_module_patched
+from easypy.humanize import IndentableTextBuffer, time_duration
+from easypy.misc import Hex
+from easypy.threadtree import format_thread_stack
+from easypy.timing import Timer
+from easypy.units import MINUTE, HOUR
+
 this_module = import_module(__name__)
 
 
-_logger = logging.getLogger(__name__)
-_threads_logger = logging.getLogger('threads')
-
 MAX_THREAD_POOL_SIZE = 50
+
+if is_module_patched("threading"):
+    import gevent
+    MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
+
+    def _rimt(exc):
+        _logger.info('YELLOW<<killing main thread greenlet>>')
+        main_thread_greenlet = threading.main_thread()._greenlet
+        orig_throw = main_thread_greenlet.throw
+
+        # we must override "throw" method so exception will be raised with the original traceback
+        def throw(*args):
+            if len(args) == 1:
+                ex = args[0]
+                return orig_throw(ex.__class__, ex, ex.__traceback__)
+            return orig_throw(*args)
+        main_thread_greenlet.throw = throw
+        gevent.kill(main_thread_greenlet, exc)
+        _logger.debug('exiting the thread that failed')
+        raise exc
+else:
+    def _rimt(exc):
+        from plumbum import local
+        pid = os.getpid()
+        if not REGISTERED_SIGNAL:
+            raise NotInitialized()
+
+        # sometimes the signal isn't caught by the main-thread, so we should try a few times (WEKAPP-14543)
+        def do_signal(raised_exc):
+            global LAST_ERROR
+            if LAST_ERROR is not raised_exc:
+                _logger.debug("MainThread took the exception - we're done here")
+                raiser.stop()
+                return
+
+            _logger.info("Raising %s in main thread", type(LAST_ERROR))
+            local.cmd.kill("-%d" % REGISTERED_SIGNAL, pid)
+
+        raiser = concurrent(do_signal, raised_exc=exc, loop=True, sleep=30, daemon=True, throw=False)
+        raiser.start()
+
+
+_logger = logging.getLogger(__name__)
+
 
 _disabled = False
 
@@ -569,7 +613,7 @@ def concestor(*cls_list):
 
 
 LAST_ERROR = None
-REGISTERD_SIGNAL = None
+REGISTERED_SIGNAL = None
 
 
 class Error(TException):
@@ -596,9 +640,9 @@ class TerminationSignal(TException):
     template = "Process got a termination signal: {_signal}"
 
 
-def initialize_exception_listener():
-    global REGISTERD_SIGNAL
-    if REGISTERD_SIGNAL:
+def initialize_exception_listener():  # must be invoked in main thread in "geventless" runs in order for raise_in_main_thread to work
+    global REGISTERED_SIGNAL
+    if REGISTERED_SIGNAL:
         # already registered
         return
 
@@ -616,17 +660,14 @@ def initialize_exception_listener():
     custom_signal = signal.SIGUSR1
     if signal.getsignal(custom_signal) in (signal.SIG_DFL, signal.SIG_IGN):  # check if signal is already trapped
         signal.signal(custom_signal, handle_signal)
-        REGISTERD_SIGNAL = custom_signal
+        REGISTERED_SIGNAL = custom_signal
     else:
         raise SignalAlreadyBound(signal=custom_signal)
 
 
 @contextmanager
 def raise_in_main_thread(exception_type=Exception):
-    from plumbum import local
-    pid = os.getpid()
-    if not REGISTERD_SIGNAL:
-        raise NotInitialized()
+
     try:
         yield
     except ProcessExiting:
@@ -636,27 +677,13 @@ def raise_in_main_thread(exception_type=Exception):
         if threading.current_thread() is threading.main_thread():
             raise
         exc._raised_asynchronously = True
+
         global LAST_ERROR
         if LAST_ERROR:
             _logger.warning("a different error (%s) is pending - skipping", type(LAST_ERROR))
             raise
         LAST_ERROR = exc
-
-        # sometimes the signal isn't caught by the main-thread, so we should try a few times (WEKAPP-14543)
-        def do_signal(raised_exc):
-            global LAST_ERROR
-            if LAST_ERROR is not raised_exc:
-                _logger.debug("MainThread took the exception - we're done here")
-                raiser.stop()
-                return
-
-            _logger.info("Raising %s in main thread", type(LAST_ERROR))
-            local.cmd.kill("-%d" % REGISTERD_SIGNAL, pid)
-
-        raiser = concurrent(do_signal, raised_exc=exc, loop=True, sleep=30, daemon=True, throw=False)
-        raiser.start()
-
-        raise
+        _rimt(exc)
 
 
 def initialize_termination_listener(sig=signal.SIGTERM, _registered=[]):
@@ -745,7 +772,7 @@ class concurrent(object):
         self.kwargs = kwargs
         self.throw = kwargs.pop('throw', True)
         self.daemon = kwargs.pop('daemon', True)
-        self.threadname = kwargs.pop('threadname', None)
+        self.threadname = kwargs.pop('threadname', 'anon[%X]' % id(self))
         self.stopper = kwargs.pop('stopper', Event())
         self.sleep = kwargs.pop('sleep', 1)
         self.loop = kwargs.pop('loop', False)
@@ -756,14 +783,24 @@ class concurrent(object):
             exc_type = Exception if rimt is True else rimt
             self.func = raise_in_main_thread(exc_type)(self.func)
 
+    def __repr__(self):
+        flags = ""
+        if self.daemon:
+            flags += 'D'
+        if self.loop:
+            flags += 'L'
+        return "<%s[%s] '%s'>" % (self.__class__.__name__, self.threadname, flags)
+
     def _logged_func(self):
         self.timer = Timer()
         try:
+            _logger.debug("%s - starting", self)
             while True:
                 self.result = self.func(*self.args, **self.kwargs)
                 if not self.loop:
                     return
                 if self.wait(self.sleep):
+                    _logger.debug("%s - stopped", self)
                     return
         except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback can be found in debug-level logs)", self.func)
@@ -773,6 +810,7 @@ class concurrent(object):
             self.stop()
 
     def stop(self):
+        _logger.debug("%s - stopping", self)
         self.stopper.set()
 
     def wait(self, timeout=None):
