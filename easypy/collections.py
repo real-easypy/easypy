@@ -63,6 +63,8 @@ def filtered(objects, preds, filters):
             yield obj
 
 
+# Inspired by code written by Rotem Yaari
+
 class ObjectCollection(object):
     def __init__(self):
         super().__init__()
