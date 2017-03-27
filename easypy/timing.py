@@ -173,21 +173,35 @@ def timing(t=None):
         t.stop()
 
 
+# cache result only when predicate succeeds
+class CachingPredicate():
+    def __init__(self, pred):
+        self.pred = pred
+
+    def __call__(self):
+        try:
+            return self.result
+        except AttributeError:
+            pass
+        ret = self.pred()
+        if ret in (False, None):
+            return ret
+        self.result = ret
+        return self.result
+
+
+def make_multipred(preds):
+    preds = list(map(CachingPredicate, preds))
+
+    def pred():
+        results = [pred() for pred in preds]
+        if all(results):
+            return results
+    return pred
+
+
 def iter_wait(timeout, pred=None, sleep=0.5, message=None,
               progressbar=True, throw=True, allow_interruption=False, caption=None):
-
-    """
-    Wait for predicate to return a non-zero value (anything except None/False), or throw a TimeoutException.
-    If predicate isn't provide, an exception will no be thrown.
-    Returns the value returned by the predicate.
-
-    def get_ready_item():
-        for item in items:
-            if item.is_ready():
-                return item
-
-    item = wait(10, get_ready_item)
-    """
 
     if timeout is None:
         msg = "Waiting indefinitely%s"
@@ -203,6 +217,8 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
             message = "Timed out after {duration:.1f} seconds"
 
     if pred:
+        if hasattr(pred, "__iter__"):
+            pred = make_multipred(pred)
         if not caption:
             caption = "on predicate (%s)" % pred
     else:
