@@ -80,19 +80,26 @@ def singleton_contextmanager_method(func):
     return inner
 
 
-def kwargs_resilient(func):
+def kwargs_as_needed(func):
+    """
+    If function does not specify **kwargs, pass only params which it can accept
+    """
+
     spec = inspect.getfullargspec(getattr(func, '__wrapped__', func))
     acceptable_args = set(spec.args or ())
     if isinstance(func, MethodType):
         acceptable_args -= {spec.args[0]}
 
+    @wraps(func)
     def inner(*args, **kwargs):
         if spec.varkw is None:
-            # if function does not get **kwargs, pass only params which it can accept
             kwargs = intersected_dict(kwargs, acceptable_args)
         return func(*args, **kwargs)
 
     return inner
+
+
+kwargs_resilient = kwargs_as_needed
 
 
 def reusable_contextmanager(context_manager):
