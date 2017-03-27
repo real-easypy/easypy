@@ -1,55 +1,84 @@
 """
 This module monkey-patches python's (3.x) threading module so that we can find which thread spawned which.
-This is useful in our contextualized logging, so that threads inherit logging context their 'parent'.
+This is useful in our contextualized logging, so that threads inherit logging context from their 'parent'.
 """
-
-
-import sys, traceback
-from functools import lru_cache
+import sys
+from importlib import import_module
 from uuid import uuid4
+from weakref import WeakKeyDictionary
 import time
 import logging
 from copy import deepcopy
 from contextlib import contextmanager
-
+from logging import getLogger
 import _thread
 import threading
 
+from easypy.humanize import format_thread_stack
+
+from easypy.gevent import main_thread_ident_before_patching, is_module_patched
 from .bunch import Bunch
-from .gevent import is_module_patched
 from .collections import ilistify
 
-UUIDS_TREE = {}
-IDENT_TO_UUID = {}
-UUID_TO_IDENT = {}
+from . import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
+_logger = getLogger(__name__)
 
 
-class Local(threading.local):
-    def __create(self):
-        self.uuid = uuid4()
-        IDENT_TO_UUID[_thread.get_ident()] = self.uuid
-        UUID_TO_IDENT[self.uuid] = _thread.get_ident()
+def get_thread_uuid(thread=None):
+    if not thread:
+        thread = threading.current_thread()
 
-    def get(self):
-        if not hasattr(self, 'uuid'):
-            self.__create()
-        return self.uuid
-
-
-local_uuid = Local()
+    ident = thread.ident
+    try:
+        uuid = IDENT_TO_UUID[ident]
+    except KeyError:
+        uuid = IDENT_TO_UUID.setdefault(ident, uuid4())
+        UUID_TO_IDENT[uuid] = ident
+    return uuid
 
 _orig_start_new_thread = _thread.start_new_thread
 
 
 def start_new_thread(target, *args, **kwargs):
-    parent_uuid = local_uuid.get()
+    parent_uuid = get_thread_uuid()
 
     def wrapper(*args, **kwargs):
-        uuid = local_uuid.get()
+        thread = threading.current_thread()
+        uuid = get_thread_uuid(thread)
         UUIDS_TREE[uuid] = parent_uuid
-        return target(*args, **kwargs)
+        try:
+            return target(*args, **kwargs)
+        finally:
+            IDENT_TO_UUID.pop(thread.ident)
 
     return _orig_start_new_thread(wrapper, *args, **kwargs)
+
+
+get_parent_uuid = UUIDS_TREE.get
+
+
+def get_thread_parent(thread):
+    """
+    Retrieves parent thread for provided thread
+    In case UUID table has parent but it's not valid anymore - returns DeadThread, so threads tree will be preserved
+
+    :param thread:
+    :return:
+    """
+    uuid = thread.uuid
+    parent_uuid = UUIDS_TREE.get(uuid)
+    if not parent_uuid:
+        return
+
+    # double check that values synchronized while locked
+    with threading._active_limbo_lock:
+        parent_ident = UUID_TO_IDENT.get(parent_uuid)
+        uuid_at_ident = IDENT_TO_UUID.get(parent_ident)
+        if uuid_at_ident != parent_uuid:
+            # a new thread assumed this ident[ity], which is not the original parent
+            return DeadThread.get(parent_uuid)
+
+        return threading._active.get(parent_ident) or DeadThread.get(parent_uuid)
 
 
 _thread.start_new_thread = start_new_thread
@@ -77,78 +106,48 @@ class DeadThread(object):
         return self.__repr__().__hash__()
 
     @classmethod
-    @lru_cache(None)
     def get(cls, uuid):
         return cls(uuid)
 
 
-get_parent_uuid = UUIDS_TREE.get
-
-
-def get_thread_uuid(thread=None):
-    if not thread:
-        return local_uuid.get()
-    return IDENT_TO_UUID.get(thread.ident)
-
-
-def get_thread_parent(thread):
-    """
-    Retrieves parent thread for provided thread
-    In case UUID table has parent but it's not valid anymore - returns DeadThread, so threads tree will be preserved
-
-    :param thread:
-    :return:
-    """
-    uuid = thread.uuid
-    parent_uuid = UUIDS_TREE.get(uuid)
-    if not parent_uuid:
-        return
-
-    # double check that values synchronized while locked
-    with threading._active_limbo_lock:
-        parent_ident = UUID_TO_IDENT.get(parent_uuid)
-        uuid_at_ident = IDENT_TO_UUID.get(parent_ident)
-        if uuid_at_ident != parent_uuid:
-            # a new thread assumed this ident[ity], which is not the original parent
-            return DeadThread.get(parent_uuid)
-
-        return threading._active.get(parent_ident) or DeadThread.get(parent_uuid)
-
-# MainThread and DummyThread has to be patched separately because use of gevent
 threading.Thread.parent = property(get_thread_parent)
 threading.Thread.uuid = property(get_thread_uuid)
 
 if is_module_patched("threading"):
-    main_thread = threading.main_thread()
-    main_thread.parent = threading._DummyThread.parent = property(get_thread_parent)
-    main_thread.uuid = threading._DummyThread.uuid = property(get_thread_uuid)
+    import gevent.monkey
+    gevent.monkey.saved['threading']['Thread'].parent = property(get_thread_parent)
+    gevent.monkey.saved['threading']['Thread'].uuid = property(get_thread_uuid)
+    IDENT_TO_UUID[main_thread_ident_before_patching] = get_thread_uuid()
 
     def iter_thread_frames():
+        main_thread_frame = None
+        for ident, frame in sys._current_frames().items():
+            if IDENT_TO_UUID.get(ident) == MAIN_UUID:
+                main_thread_frame = frame
+                # the MainThread should be shown in it's "greenlet" version
+                continue
+            _logger.debug("thread - %s: %s", ident, threading._active.get(ident))
+            yield ident, frame
+
         for thread in threading.enumerate():
-            yield thread.ident, thread._greenlet.gr_frame if getattr(thread, '_greenlet', None) else None
+            if not getattr(thread, '_greenlet', None):
+                # some inbetween state, before greenlet started or after it died?...
+                pass
+            elif thread._greenlet.gr_frame:
+                yield thread.ident, thread._greenlet.gr_frame
+            else:
+                # a thread with greenlet but without gr_frame will be fetched from sys._current_frames
+                # If we switch to another greenlet by the time we get there we will get inconsistent dup of threads.
+                # TODO - make best-effort attempt to show coherent thread dump
+                yield thread.ident, main_thread_frame
+
 else:
     def iter_thread_frames():
         yield from sys._current_frames().items()
 
 
-def format_thread_stack(frame, after_module=threading):
-    stack = traceback.extract_stack(frame)
-    i = 0
-    if after_module:
-        found = False
-        # skip everything until after specified module
-        for i, (fname, *_) in enumerate(stack):
-            if fname == after_module.__file__:
-                for i, (fname, *_) in enumerate(stack[i:], i):
-                    if fname != after_module.__file__:
-                        found = True
-                        break
-                break
-
-        if not found:
-            i = 0
-
-    return ''.join(traceback.format_list(stack[i:]))
+this_module = import_module(__name__)
+_BOOTSTRAPPERS = {threading, this_module}
 
 
 def get_thread_tree(including_this=True):
@@ -179,8 +178,8 @@ def get_thread_tree(including_this=True):
             formatted = "  <this frame>"
         else:
             # show the entire stack if it's this thread, don't skip ('after_module') anything
-            after_module = None if thread_ident in (current_ident, main_ident) else threading
-            formatted = format_thread_stack(frame, after_module=after_module) if frame else ''
+            show_all = thread_ident in (current_ident, main_ident)
+            formatted = format_thread_stack(frame, skip_modules=[] if show_all else _BOOTSTRAPPERS) if frame else ''
         stacks[thread_ident] = formatted, time.time()
 
     def add_thread(parent_thread, parent):
@@ -241,13 +240,17 @@ def watch_threads(interval):
     def dump_threads():
         nonlocal last_threads
 
-        tree = get_thread_tree(including_this=False)
-        _threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=tree.to_dict()))
+        with _logger.indented('getting thread tree', level=logging.DEBUG):
+            tree = get_thread_tree(including_this=False)
 
-        current_threads = set()
-        for thread in threading.enumerate():
-            if thread.ident:
-                current_threads.add(thread.ident)
+        with _logger.indented('logging threads to yaml', level=logging.DEBUG):
+            _threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=tree.to_dict()))
+
+        with _logger.indented('creating current thread set', level=logging.DEBUG):
+            current_threads = set()
+            for thread in threading.enumerate():
+                if thread.ident:
+                    current_threads.add(thread.ident)
 
         new_threads = current_threads - last_threads
         closed_threads = last_threads - current_threads
@@ -261,7 +264,7 @@ def watch_threads(interval):
 
         last_threads = current_threads
 
-    thread = concurrent(dump_threads, threadname="ThreadWatch", loop=True, sleep=interval)
+    thread = concurrent(dump_threads, threadname="ThreadWatch", loop=True, sleep=interval, real_thread_no_greenlet=True)
     thread.start()
     _logger.info("threads watcher started")
 
@@ -314,7 +317,7 @@ class ThreadContexts():
     """
 
     def __init__(self, defaults={}, counters=None, stacks=None):
-        self._context_data = {}
+        self._context_data = WeakKeyDictionary()
         self._defaults = defaults.copy()
         self._counters = set(ilistify(counters or []))
         self._stacks = set(ilistify(stacks or []))

@@ -16,23 +16,54 @@ import inspect
 import logging
 import os
 import signal
-import sys
 import threading
 import time
 
 from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException, PException
-from easypy.gevent import is_module_patched
+from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration
 from easypy.misc import Hex
-from easypy.threadtree import format_thread_stack, iter_thread_frames
+from easypy.humanize import format_thread_stack
+from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
+
 
 this_module = import_module(__name__)
 
 
 MAX_THREAD_POOL_SIZE = 50
+
+
+def async_raise_in_main_thread(exc, use_concurrent_loop=True):
+    """
+    Uses a unix signal to raise an exception to be raised in the main thread.
+    """
+
+    from plumbum import local
+    pid = os.getpid()
+    if not REGISTERED_SIGNAL:
+        raise NotInitialized()
+
+    # sometimes the signal isn't caught by the main-thread, so we should try a few times (WEKAPP-14543)
+    def do_signal(raised_exc):
+        global LAST_ERROR
+        if LAST_ERROR is not raised_exc:
+            _logger.debug("MainThread took the exception - we're done here")
+            if use_concurrent_loop:
+                raiser.stop()
+            return
+
+        _logger.info("Raising %s in main thread", type(LAST_ERROR))
+        local.cmd.kill("-%d" % REGISTERED_SIGNAL, pid)
+
+    if use_concurrent_loop:
+        raiser = concurrent(do_signal, raised_exc=exc, loop=True, sleep=30, daemon=True, throw=False)
+        raiser.start()
+    else:
+        do_signal(exc)
+
 
 if is_module_patched("threading"):
     import gevent
@@ -54,25 +85,7 @@ if is_module_patched("threading"):
         _logger.debug('exiting the thread that failed')
         raise exc
 else:
-    def _rimt(exc):
-        from plumbum import local
-        pid = os.getpid()
-        if not REGISTERED_SIGNAL:
-            raise NotInitialized()
-
-        # sometimes the signal isn't caught by the main-thread, so we should try a few times (WEKAPP-14543)
-        def do_signal(raised_exc):
-            global LAST_ERROR
-            if LAST_ERROR is not raised_exc:
-                _logger.debug("MainThread took the exception - we're done here")
-                raiser.stop()
-                return
-
-            _logger.info("Raising %s in main thread", type(LAST_ERROR))
-            local.cmd.kill("-%d" % REGISTERED_SIGNAL, pid)
-
-        raiser = concurrent(do_signal, raised_exc=exc, loop=True, sleep=30, daemon=True, throw=False)
-        raiser.start()
+    _rimt = async_raise_in_main_thread
 
 
 _logger = logging.getLogger(__name__)
@@ -785,6 +798,14 @@ class concurrent(object):
         self.loop = kwargs.pop('loop', False)
         self.timer = None
 
+        real_thread_no_greenlet = kwargs.pop('real_thread_no_greenlet', False)
+        if is_module_patched("threading"):
+            # in case of using apply_gevent_patch function - use this option in order to defer some jobs to real threads
+            self.real_thread_no_greenlet = real_thread_no_greenlet
+        else:
+            # gevent isn't active, no need to do anything special
+            self.real_thread_no_greenlet = False
+
         rimt = kwargs.pop("raise_in_main_thread", False)
         if rimt:
             exc_type = Exception if rimt is True else rimt
@@ -796,10 +817,13 @@ class concurrent(object):
             flags += 'D'
         if self.loop:
             flags += 'L'
+        if self.real_thread_no_greenlet:
+            flags += 'T'
         return "<%s[%s] '%s'>" % (self.__class__.__name__, self.threadname, flags)
 
     def _logged_func(self):
         self.timer = Timer()
+        self.exc = None
         try:
             _logger.debug("%s - starting", self)
             while True:
@@ -821,6 +845,14 @@ class concurrent(object):
         self.stopper.set()
 
     def wait(self, timeout=None):
+        if self.real_thread_no_greenlet:
+            # we can't '.wait' on this gevent event object, so instead we test it and sleep manually:
+            if self.stopper.is_set():
+                return True
+            non_gevent_sleep(timeout)
+            if self.stopper.is_set():
+                return True
+            return False
         return self.stopper.wait(timeout)
 
     @contextmanager
@@ -831,22 +863,26 @@ class concurrent(object):
 
     @contextmanager
     def _running(self):
-        self.thread = threading.Thread(target=self._logged_func, name=self.threadname)
-        self.thread.daemon = self.daemon
-        self.exc = None
-        self.stopper.clear()
-
         if _disabled:
             self._logged_func()
             yield self
             return
 
-        self.thread.start()
+        if self.real_thread_no_greenlet:
+            _logger.debug('sending job to a real OS thread')
+            self._join = defer_to_thread(func=self._logged_func, threadname=self.threadname)
+        else:
+            # threading.Thread could be a real thread or a gevent-patched thread...
+            self.thread = threading.Thread(target=self._logged_func, name=self.threadname, daemon=self.daemon)
+            _logger.debug('sending job to %s', self.thread)
+            self.stopper.clear()
+            self.thread.start()
+            self._join = self.thread.join
         try:
             yield self
         finally:
             self.stop()  # if we loop, stop it
-        self.thread.join()
+        self._join()
         if self.throw and self.exc:
             raise self.exc
 
@@ -1061,6 +1097,7 @@ def throttled(duration):
     """
     from easypy.caching import timecache
     return timecache(expiration=duration)
+
 
 class synchronized_on_first_call():
     "Decorator, that make a function synchronized but only on its first invocation"

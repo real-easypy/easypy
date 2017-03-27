@@ -29,6 +29,22 @@ def test_thread_contexts_counters():
             pass
 
 
+def test_thread_contexts_counters_multiobject():
+    TC = ThreadContexts(counters=('i',))
+    assert TC.i == 0
+
+    print("---")
+    @TC(i=True)
+    def test(n):
+        print(n, TC._context_data)
+        sleep(.1)
+        return TC.i
+
+    test(0)
+    ret = MultiObject(range(10)).call(test)
+    assert set(ret) == {1}
+
+
 def test_thread_context_stacks():
     TC = ThreadContexts(stacks=('i', 'j'))
     assert TC.i == TC.j == []
