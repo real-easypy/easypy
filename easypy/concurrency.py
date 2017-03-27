@@ -931,14 +931,15 @@ class RWLock(object):
 
     """
 
-    def __init__(self):
+    def __init__(self, name=None):
         self.lock = RLock()
         self.cond = threading.Condition(self.lock)
         self.owners = Counter()
+        self.name = name or '{}-{:X}'.format(self.__class__.__name__, id(self.lock))
 
     def __repr__(self):
         owners = ", ".join(map(str, sorted(self.owners.keys())))
-        return "<{}-{:X}, owned by [{}]>".format(self.__class__.__name__, id(self.lock), owners)
+        return "<{}, owned by [{}]>".format(self.name, owners)
 
     @property
     def owner_count(self):

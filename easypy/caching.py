@@ -159,8 +159,13 @@ def locking_lru_cache(maxsize=128, typed=False):
     return deco
 
 
-def timecache(expiration=0, typed=False):
-    "An lru cache with a lock, to prevent concurrent invocations and allow reusing from cache"
+def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False):
+    """
+    An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
+
+    If 'expiration'>0, set an expiration on the cache.
+    The 'get_ts_func' can be used to provide an alternative timestamp for measuring expiration
+    """
 
     NOT_FOUND = object()
     NOT_CACHED = NOT_FOUND, 0
@@ -169,6 +174,7 @@ def timecache(expiration=0, typed=False):
         cache = {}
         main_lock = RLock()
         keyed_locks = defaultdict(RLock)
+        name = func.__name__
 
         @wraps(func)
         def inner(*args, **kwargs):
@@ -178,15 +184,20 @@ def timecache(expiration=0, typed=False):
             with key_lock:
                 result, ts = cache.get(key, NOT_CACHED)
 
-                if expiration > 0:
-                    if result is not NOT_FOUND and time.time() - ts > expiration:
-                        result = NOT_FOUND
-                        del cache[key]
+                if expiration <= 0:
+                    pass  # nothing to fuss with, cache does not expire
+                elif result is NOT_FOUND:
+                    pass  # cache is empty
+                elif get_ts_func() - ts >= expiration:
+                    # cache expired
+                    result = NOT_FOUND
+                    del cache[key]
 
                 if result is NOT_FOUND:
-                    ts = time.time()
+                    if log_recalculation:
+                        _logger.debug('time cache expired, calculating new value for %s', name)
                     result = func(*args, **kwargs)
-                    cache[key] = result, ts
+                    cache[key] = result, get_ts_func()
 
                 return result
 
