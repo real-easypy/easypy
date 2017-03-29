@@ -54,12 +54,12 @@ class PException(Exception):
                 text += indent("GREEN(BLUE)@{tip = %s}@\n" % tip, " "*4)
                 self.params['tip'] = tip  # put it back in params, even though it might've been on the class
 
-        if context and self.context:
-            text += "Context:\n" + indent("".join(make_block(self.context)), " "*4)
-
         if timestamp and self.timestamp:
             ts = datetime.fromtimestamp(self.timestamp).isoformat()
-            text += "Timestamp: MAGENTA<<%s>>\n" % ts
+            text += indent("MAGENTA<<timestamp = %s>>\n" % ts, " "*4)
+
+        if context and self.context:
+            text += "Context:\n" + indent("".join(make_block(self.context)), " "*4)
 
         if traceback and self.traceback:
             fmt = "DARK_GRAY@{{{}}}@"
