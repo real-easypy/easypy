@@ -122,7 +122,7 @@ if is_module_patched("threading"):
 
     def iter_thread_frames():
         for thread in threading.enumerate():
-            yield thread.ident, thread._greenlet.gr_frame if getattr(thread, '_greenlet') else None
+            yield thread.ident, thread._greenlet.gr_frame if getattr(thread, '_greenlet', None) else None
 else:
     def iter_thread_frames():
         yield from sys._current_frames().items()
