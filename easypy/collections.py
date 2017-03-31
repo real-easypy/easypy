@@ -594,7 +594,10 @@ def shuffled(l):
 
 
 class SlidingWindow(list):
-    def __init__(self, size, *args):
+    """
+    A list that maintains a constant size, popping old items as new items are appended (FIFO)
+    """
+    def __init__(self, *args, size):
         self.size = size
         super().__init__(*args)
 
