@@ -190,14 +190,23 @@ class ObjectCollection(object):
         return self._new(sorted(self, key=key))
 
     def sample(self, num, *preds, **filters):
-        if isinstance(num, int):
-            if num < 0:
-                num += len(self)
-        elif isinstance(num, float):
-            if 0 <= num <= 1.0:
-                num *= len(self)
-            else:
-                raise Exception('Invalid sample num: %s', num)
+        """
+        If 'num' is negative, leaves 'num' out of the sample:
+
+            >>> ListCollection([1, 2, 3]).sample(-1)
+            [1, 3]
+
+        If 'num' is a float, use it as a weighted random sample:
+
+            >>> x = ListCollection([1, 2, 3, 4, 5])
+            >>> Counter(len(x.sample(2.25)) for _ in range(10000))
+            Counter({2: 7494, 3: 2506})
+        """
+        if num < 0:
+            num += len(self)
+        if isinstance(num, float):
+            num, d = divmod(num, 1)
+            num = int(num + (random.random() <= d))
 
         matching = []
         if num:
@@ -493,6 +502,12 @@ class IndexedObjectCollection(SimpleObjectCollection):
 
 
 def grouped(sequence, key=None):
+    """
+    Parse the sequence into groups, according to key:
+
+        >>> grouped(range(10), lambda n: n % 3 == 0)
+        {False: [1, 2, 4, 5, 7, 8], True: [0, 3, 6, 9]}
+    """
     groups = {}
     if not key:
         key = lambda x: x
@@ -506,16 +521,29 @@ def iterable(obj):
 
 
 def ilistify(obj):
+    """
+    Conform input into an iterable:
+
+        >>> list(ilistify(1))
+        [1]
+        list(ilistify([1, 2, 3]))
+        [1, 2, 3]
+    """
     if not iterable(obj):
         yield obj
     else:
-        for piece in obj:
-            yield piece
+        yield from obj
 
 listify = lambda obj: list(ilistify(obj))
 
 
 def chunkify(sequence, size):
+    """
+    Chunk a sequence into equal-size chunks:
+
+        >>> ["".join(p) for p in chunkify('abcdefghijklmnopqrstuvwxyz', 7)]
+        ['abcdefg', 'hijklmn', 'opqrstu', 'vwxyz']
+    """
     sequence = iter(sequence)
     while True:
         chunk = [e for _, e in zip(range(size), sequence)]
