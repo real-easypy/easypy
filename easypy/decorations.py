@@ -117,8 +117,26 @@ def reusable_contextmanager(context_manager):
     return ReusableCtx()
 
 
-def as_list(generator):
+@parametrizeable_decorator
+def as_list(generator, sort_by=None):
+    """
+    Forces a generator to output a list.
+    When writing a generator is more convenient
+
+    @as_list(sort_by=lambda n: -n)
+    def g():
+        yield 1
+        yield 2
+        yield from range(2)
+
+    >>> g()
+    [2, 1, 1, 0]
+
+    """
     @wraps(generator)
     def inner(*args, **kwargs):
-        return list(generator(*args, **kwargs))
+        l = list(generator(*args, **kwargs))
+        if sort_by:
+            l.sort(key=sort_by)
+        return l
     return inner
