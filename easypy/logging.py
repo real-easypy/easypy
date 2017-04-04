@@ -17,12 +17,12 @@ from easypy.bunch import Bunch
 from easypy.colors import colorize_by_patterns as C, uncolorize
 from easypy.humanize import compact as _compact
 from easypy.timing import timing as timing_context, Timer
+from easypy.threadtree import ThreadContexts
 
 logging.INFO1 = logging.INFO+1
 logging.addLevelName(logging.INFO1, "INFO1")
 
 
-BASE_INDENTATION = 0
 CLEAR_EOL = '\x1b[0K'
 IS_A_TTY = sys.stdout.isatty()
 
@@ -138,74 +138,6 @@ class ConsoleFormatter(logging.Formatter):
         return msg
 
 
-class ContextHandler(logging.NullHandler):
-    CONTEXT_DATA = {}
-    DEFAULTS = {}
-
-    def __init__(self, defaults={}):
-        self.DEFAULTS.update(defaults)
-        super().__init__()
-
-    @classmethod
-    def _get_context_data(cls, thread_uuid=None, combined=False):
-        from easypy.threadtree import get_thread_uuid, get_parent_uuid
-
-        if not thread_uuid:
-            thread_uuid = get_thread_uuid()
-
-        ctx = cls.CONTEXT_DATA.setdefault(thread_uuid, [])
-        if not combined:
-            return ctx
-
-        parent_uuid = get_parent_uuid(thread_uuid)
-        if parent_uuid:
-            parent_ctx = cls._get_context_data(parent_uuid, combined=True)
-            ctx = deepcopy(parent_ctx) + ctx
-        return ctx
-
-    @contextmanager
-    def context(self, kw):
-        for v in kw.values():
-            assert (v is None) or (isinstance(v, (str, int, float))), "Can't use %r as context vars" % v
-        ctx = self._get_context_data()
-        ctx.append(Bunch(kw))
-        try:
-            yield
-        except Exception as exc:
-            context = get_current_context()
-            if context and not getattr(exc, "context", None):
-                try:
-                    exc.context = context
-                except:
-                    logging.warning("could not attach context to exception")
-            raise
-        finally:
-            ctx.pop(-1)
-
-    def flatten(self, thread_uuid=None):
-        stack = self._get_context_data(thread_uuid=thread_uuid, combined=True)
-        contexts = []
-        indentation = BASE_INDENTATION
-        extra = dict(self.DEFAULTS)
-        for ctx in stack:
-            indentation += ctx.get("indentation", 0)
-            contexts.append(ctx.get('context', None))
-            extra.update(ctx)
-        contexts = ";".join(str(s) for s in contexts if s)
-        extra.update(
-            context=("[%s] " % contexts) if contexts else "",
-            indentation=indentation,
-        )
-        return extra
-
-    def handle(self, record):
-        extra = self.flatten()
-        record.__dict__.update(dict(extra, **record.__dict__))
-        drawing = getattr(record, "drawing", INDENT_SEGMENT)
-        indents = chain(repeat(INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
-        record.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
-
-
 try:
     import yaml
 except ImportError:
@@ -215,6 +147,7 @@ else:
         from yaml import CDumper as Dumper
     except ImportError:
         from yaml import Dumper
+
     class YAMLFormatter(logging.Formatter):
 
         def __init__(self, **kw):
@@ -224,15 +157,31 @@ else:
             return yaml.dump(vars(record), Dumper=Dumper) + "\n---\n"
 
 
-# It essentially behaves as a singleton
-CONTEXT_HANDLER = ContextHandler()
-def get_current_context():
-    return {k: v for k, v in CONTEXT_HANDLER.flatten().items()
-            if v and k not in {"indentation"}}
+class ContextHandler(logging.NullHandler):
+
+    def __init__(self, **kw):
+        self._ctx = ExitStack()
+        indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
+        kw.setdefault("indentation", indentation)
+        self._ctx.enter_context(THREAD_LOGGING_CONTEXT(**kw))
+        super().__init__()
+
+    def handle(self, record):
+        contexts = THREAD_LOGGING_CONTEXT.context
+        extra = THREAD_LOGGING_CONTEXT.flatten()
+        extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
+        record.__dict__.update(dict(extra, **record.__dict__))
+        drawing = getattr(record, "drawing", INDENT_SEGMENT)
+        indents = chain(repeat(INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
+        record.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+
+
+THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context")
+get_current_context = THREAD_LOGGING_CONTEXT.flatten
 
 
 def get_indentation():
-    return CONTEXT_HANDLER.flatten().get("indentation", 0)
+    return THREAD_LOGGING_CONTEXT.indentation
 
 
 def _progress():
@@ -346,7 +295,7 @@ class ContextLoggerMixin(object):
         if context:
             kw['context'] = context
         with ExitStack() as stack:
-            stack.enter_context(CONTEXT_HANDLER.context(kw))
+            stack.enter_context(THREAD_LOGGING_CONTEXT(kw))
             timing = kw.pop("timing", True)
             if indent:
                 header = indent if isinstance(indent, str) else ("[%s]" % context)
@@ -370,7 +319,7 @@ class ContextLoggerMixin(object):
         header = compact((header % args) if header else "")
         self._log(level, "WHITE@{%s}@" % header, (), extra=dict(drawing=INDENT_OPEN))
         with ExitStack() as stack:
-            stack.enter_context(CONTEXT_HANDLER.context(dict(indentation=True)))
+            stack.enter_context(THREAD_LOGGING_CONTEXT(indentation=1))
 
             get_duration = lambda: ""
             if timing:
@@ -403,7 +352,7 @@ class ContextLoggerMixin(object):
             typ, exc, tb = exc
         header = "%s.%s" % (typ.__module__, typ.__name__)
         self.error("YELLOW@{%s}@ RED@{%s}@", header, LINE*(80-len(header)-1), extra=dict(drawing=RED(INDENT_OPEN)))
-        with CONTEXT_HANDLER.context(dict(indentation=True, drawing=RED(INDENT_SEGMENT))):
+        with THREAD_LOGGING_CONTEXT(indentation=1, drawing=RED(INDENT_SEGMENT)):
             if hasattr(exc, "render"):
                 exc_text = exc.render()
             elif tb:
@@ -536,7 +485,7 @@ def log_context(method=None, **ctx):
     @wraps(method)
     def inner(*args, **kwargs):
         context = {k: fmt.format(*args, **kwargs) for k, fmt in ctx.items()}
-        with CONTEXT_HANDLER.context(context):
+        with THREAD_LOGGING_CONTEXT(context):
             return method(*args, **kwargs)
     return inner
 

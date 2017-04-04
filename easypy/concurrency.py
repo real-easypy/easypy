@@ -174,7 +174,11 @@ class MultiException(PException):
                     buff.write(exc.render(**kw))
                 else:
                     if hasattr(exc, "context"):
-                        context = "(%s)" % ", ".join("%s=%s" % p for p in sorted(exc.context.items()))
+                        context = exc.context.copy()
+                        context.pop("indentation", None)
+                        if 'context' in context:  # 'context' should be renamed 'breadcrumbs'
+                            context['context'] = ";".join(context['context'])
+                        context = "(%s)" % ", ".join("%s=%s" % p for p in sorted(context.items()))
                     else:
                         context = ""
                     buff.write("{}: {}", exc, context)
