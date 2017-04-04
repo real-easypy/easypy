@@ -195,18 +195,13 @@ class ObjectCollection(object):
 
             >>> ListCollection([1, 2, 3]).sample(-1)
             [1, 3]
-
-        If 'num' is a float, use it as a weighted random sample:
-
-            >>> x = ListCollection([1, 2, 3, 4, 5])
-            >>> Counter(len(x.sample(2.25)) for _ in range(10000))
-            Counter({2: 7494, 3: 2506})
         """
         if num < 0:
             num += len(self)
+
         if isinstance(num, float):
             num, d = divmod(num, 1)
-            num = int(num + (random.random() <= d))
+            assert d == 0, "Can't sample a non-integer number of items"
 
         matching = []
         if num:
