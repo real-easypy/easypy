@@ -132,17 +132,20 @@ def format_thread_stack(frame, after_module=threading):
     stack = traceback.extract_stack(frame)
     i = 0
     if after_module:
+        found = False
         # skip everything until after specified module
         for i, (fname, *_) in enumerate(stack):
             if fname == after_module.__file__:
-                break
-        for i, (fname, *row) in enumerate(stack[i:], i):
-            if fname != after_module.__file__:
+                for i, (fname, *_) in enumerate(stack[i:], i):
+                    if fname != after_module.__file__:
+                        found = True
+                        break
                 break
 
-    formatted = ""
-    formatted += ''.join(traceback.format_list(stack[i:]))
-    return formatted
+        if not found:
+            i = 0
+
+    return ''.join(traceback.format_list(stack[i:]))
 
 
 def get_thread_tree(including_this=True):
@@ -173,7 +176,7 @@ def get_thread_tree(including_this=True):
             formatted = "  <this frame>"
         else:
             # show the entire stack if it's this thread, don't skip ('after_module') anything
-            after_module = None if thread.ident in (current_ident, main_ident) else threading
+            after_module = None if thread_ident in (current_ident, main_ident) else threading
             formatted = format_thread_stack(frame, after_module=after_module) if frame else ''
         stacks[thread_ident] = formatted, time.time()
 
