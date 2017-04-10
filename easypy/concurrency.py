@@ -25,7 +25,7 @@ from easypy.exceptions import TException, PException
 from easypy.gevent import is_module_patched
 from easypy.humanize import IndentableTextBuffer, time_duration
 from easypy.misc import Hex
-from easypy.threadtree import format_thread_stack
+from easypy.threadtree import format_thread_stack, iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 
@@ -233,7 +233,7 @@ class Futures(list):
 
     def dump_stacks(self, futures=None, verbose=False):
         futures = futures or self
-        frames = sys._current_frames()
+        frames = dict(iter_thread_frames())
         for i, future in enumerate(futures, 1):
             try:
                 frame = frames[future.ctx['thread_ident']]
