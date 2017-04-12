@@ -9,12 +9,15 @@ from functools import lru_cache
 from uuid import uuid4
 import time
 import logging
-import os
+from copy import deepcopy
+from contextlib import contextmanager
 
 import _thread
 import threading
 
-from easypy.gevent import is_module_patched
+from .bunch import Bunch
+from .gevent import is_module_patched
+from .collections import ilistify
 
 UUIDS_TREE = {}
 IDENT_TO_UUID = {}
@@ -149,7 +152,7 @@ def format_thread_stack(frame, after_module=threading):
 
 
 def get_thread_tree(including_this=True):
-    from .logging import CONTEXT_HANDLER
+    from .logging import THREAD_LOGGING_CONTEXT
     from .bunch import Bunch
 
     tree = {}
@@ -158,7 +161,7 @@ def get_thread_tree(including_this=True):
     stacks = {}
 
     def add_to_tree(thread):
-        contexts[thread.ident] = CONTEXT_HANDLER.flatten(thread.uuid)
+        contexts[thread.ident] = THREAD_LOGGING_CONTEXT.flatten(thread.uuid)
         parent = get_thread_parent(thread)
         if isinstance(parent, DeadThread) and parent not in dead_threads:
             dead_threads.add(parent)
@@ -261,3 +264,116 @@ def watch_threads(interval):
     thread = concurrent(dump_threads, threadname="ThreadWatch", loop=True, sleep=interval)
     thread.start()
     _logger.info("threads watcher started")
+
+
+class ThreadContexts():
+    """
+    A structure for storing arbitrary data per thread.
+    Unlike threading.local, data stored here will be inherited into
+    child-threads (threads spawned from threads).
+
+        TC = ThreadContexts()
+
+        # (thread-a)
+        with TC(my_data='b'):
+            spawn_thread_b()
+
+        # (thread-b)
+        assert TC.my_data == 'b'
+        with TC(my_data='c'):
+            spawn_thread_c()
+        assert TC.my_data == 'b'
+
+        # (thread-c)
+        assert TC.my_data == 'c'
+
+    'counters': attributes named here get incremented each time, instead of overwritten:
+
+        TC = ThreadContexts(counters=('i', 'j'))
+        assert TC.i == TC.j == 0
+
+        with TC(i=1):
+            assert TC.i == 1
+            assert TC.j == 0
+
+            with TC(i=1, j=1):
+                assert TC.i == 2
+                assert TC.j == 1
+
+
+    'stacks': attributes named here get pushed into a list, instead of overwritten:
+
+        TC = ThreadContexts(stacks=('i', 'j'))
+        with TC(i='a'):
+            assert TC.i == ['a']
+            assert TC.j == []
+            with TC(i='i', j='j'):
+                assert TC.i == ['a', 'i']
+                assert TC.j == ['j']
+
+    """
+
+    def __init__(self, defaults={}, counters=None, stacks=None):
+        self._context_data = {}
+        self._defaults = defaults.copy()
+        self._counters = set(ilistify(counters or []))
+        self._stacks = set(ilistify(stacks or []))
+
+    def _get_context_data(self, thread_uuid=None, combined=False):
+        if not thread_uuid:
+            thread_uuid = get_thread_uuid()
+
+        ctx = self._context_data.setdefault(thread_uuid, [])
+        if not combined:
+            return ctx
+
+        parent_uuid = get_parent_uuid(thread_uuid)
+        if parent_uuid:
+            parent_ctx = self._get_context_data(parent_uuid, combined=True)
+            ctx = deepcopy(parent_ctx) + ctx
+        return ctx
+
+    def get(self, k, default=None):
+        return self.flatten().get(k, default)
+
+    def __getattr__(self, k):
+        ret = self.get(k, AttributeError)
+        if ret is AttributeError:
+            raise AttributeError(k)
+        return ret
+
+    @contextmanager
+    def __call__(self, kw=None, **kwargs):
+        kw = dict(kw or {}, **kwargs)
+        for v in kw.values():
+            assert (v is None) or (isinstance(v, (str, int, float))), "Can't use %r as context vars" % v
+        ctx = self._get_context_data()
+        ctx.append(Bunch(kw))
+        try:
+            yield
+        except Exception as exc:
+            context = self.flatten()
+            if context and not getattr(exc, "context", None):
+                try:
+                    exc.context = context
+                except:
+                    logging.warning("could not attach context to exception")
+            raise
+        finally:
+            ctx.pop(-1)
+
+    def flatten(self, thread_uuid=None):
+        stack = self._get_context_data(thread_uuid=thread_uuid, combined=True)
+        concats = {k: self._defaults.get(k, []) for k in self._stacks}
+        accums = {k: self._defaults.get(k, 0) for k in self._counters}
+        extra = dict(self._defaults)
+        for ctx in stack:
+            for k in self._counters:
+                accums[k] += ctx.get(k, 0)
+            for k in self._stacks:
+                if k in ctx:
+                    concats[k].append(ctx[k])
+            extra.update(ctx)
+        extra.update(concats)
+        extra.update(accums)
+        return extra
