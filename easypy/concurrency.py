@@ -963,7 +963,7 @@ class RWLock(object):
             if not self.owners[my_ident]:
                 self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
             self.cond.notify()
-            _logger.debug("released bob exclusive lock on %s", self)
+            _logger.debug("released non exclusive lock on %s", self)
         finally:
             self.cond.release()
 
