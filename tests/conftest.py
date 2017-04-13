@@ -15,4 +15,4 @@ if not issubclass(logging.Logger, easypy_logging.ContextLoggerMixin):
     logging.Logger.__bases__ = logging.Logger.__bases__ + (easypy_logging.ContextLoggerMixin,)
 
 
-logging.basicConfig()
+# logging.basicConfig(level=logging.DEBUG)

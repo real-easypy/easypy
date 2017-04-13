@@ -4,7 +4,6 @@ import threading
 import functools
 from itertools import chain, count
 import logging
-from weakref import ref
 from enum import Enum
 from contextlib import contextmanager, ExitStack
 
@@ -22,6 +21,7 @@ ids = set()
 class MissingIdentifier(TException):
     template = "signal handler {_signal_name} must be called with a '{_identifier}' argument"
 
+
 def make_id(name):
     # from md5 import md5
     # id = md5(name).hexdigest()[:5].upper()
@@ -33,15 +33,24 @@ def make_id(name):
     return id
 
 
+def get_original_func(func):
+    while True:
+        if isinstance(func, functools.partial):
+            func = func.func
+        elif hasattr(func, "__wrapped__"):
+            func = func.__wrapped__
+        else:
+            return func
+
+
 class SignalHandler(object):
 
     _idx_gen = count(100)
 
-    def __init__(self, func, async=False, priority=PRIORITIES.NONE, times=None):
-        self._func = func  # save the original funtion so we can unregister based on the function
+    def __init__(self, func, async=False, priority=PRIORITIES.NONE, times=None, identifier=None):
         self.func = kwargs_resilient(func)
-        if isinstance(func, functools.partial):
-            func = func.func
+        self._func = get_original_func(func)  # save the original funtion so we can unregister based on the function
+        self.identifier = identifier if inspect.ismethod(self._func) else None  # identifier only applicable to methods
         self.filename = func.__code__.co_filename
         self.lineno = func.__code__.co_firstlineno
         self.name = self.__name__ = func.__name__
@@ -56,8 +65,31 @@ class SignalHandler(object):
     def __call__(self, *, swallow_exceptions, **kwargs):
         if self.times == 0:
             return
+
+        if self.identifier:
+            handler_object = self._func.__self__
+            target_object = kwargs[self.identifier]
+
+            if hasattr(self._func, 'identifier_path'):
+                # special case if the signal method defined a user-defined attribute path for fiding the associated identifier
+                path = self._func.identifier_path
+                handler_object = eval('obj.%s' % path.strip('.'), dict(obj=handler_object), {})
+            elif hasattr(handler_object, self.identifier):
+                # the identifier exists as an attribute on the handler object, named the same
+                handler_object = getattr(handler_object, self.identifier)
+            elif isinstance(handler_object, target_object.__class__):
+                # the handler_object is itself of the same type as the target_object, so we should regard it is the identifier itself
+                pass
+            else:
+                # the handler_object isn't identifiable, so we'll just pass it the identifier and hope it knows what to do
+                handler_object = None
+
+            if handler_object is not None and handler_object != target_object:
+                return
+
         if self.times is not None:
             self.times -= 1
+
         try:
             return self.func(**kwargs)
         except:
@@ -83,6 +115,7 @@ class Signal:
         signal.name = name
         signal.swallow_exceptions = swallow_exceptions
         signal.async = async
+        signal.identifier = None
         signal.log = log
         return cls.ALL.setdefault(name, signal)
 
@@ -100,14 +133,18 @@ class Signal:
             async = False if self.async is None else self.async
         elif self.async is not None:
             assert self.async == async, "Signal is set with async=%s" % self.async
-        handler = SignalHandler(func, async, priority, times=times)
+        handler = SignalHandler(func, async, priority, times=times, identifier=self.identifier)
         self.handlers[priority].append(handler)
         _logger.debug("registered handler for '%s' (%s): %s", self.name, priority.name, handler)
         return func
 
     def unregister(self, func):
         for handler in self.iter_handlers():
-            if handler._func is func:
+            if func in (
+                    handler._func,  # simple case
+                    getattr(handler._func, "__wrapped__", None),  # wrapped with @wraps
+                    getattr(handler._func, "func", None),  # wrapped with 'partial'
+                    ):
                 self.remove_handler(handler)
 
     @contextmanager
@@ -119,6 +156,13 @@ class Signal:
             self.unregister(func)
 
     def __call__(self, **kwargs):
+        if not self.identifier:
+            pass
+        elif self.identifier in kwargs:
+            pass
+        else:
+            raise MissingIdentifier(_signal_name=self.name, _identifier=self.identifier)
+
         if self.log:
             # log signal for centralized logging analytics.
             # minimize text message as most of the data is sent in the 'extra' dict
@@ -156,40 +200,6 @@ class Signal:
         return "<Signal %s (%s)>" % (self.name, self.id)
 
     __repr__ = __str__
-
-
-def method_identifier_decorator(signal_method, identifier):
-    kwargs_resilient_method = kwargs_resilient(signal_method)  # allow the method not to take the identifier as argument
-
-
-    def new_method(*args, **kwargs):
-        if identifier not in kwargs:
-            raise MissingIdentifier(_signal_name=signal_method.__name__, _identifier=identifier)
-
-        handler_object = signal_method.__self__
-        target_object = kwargs[identifier]
-
-        if hasattr(signal_method, 'identifier_path'):
-            # special case if the signal method defined a user-defined attribute path for fiding the associated identifier
-            path = signal_method.identifier_path
-            handler_object = eval('obj.%s' % path.strip('.'), dict(obj=handler_object), {})
-        elif hasattr(handler_object, identifier):
-            # the identifier exists as an attribute on the handler object, named the same
-            handler_object = getattr(handler_object, identifier)
-        elif isinstance(handler_object, target_object.__class__):
-            # the handler_object is itself of the same type as the target_object, so we should regard it is the identifier itself
-            pass
-        else:
-            # the handler_object isn't identifiable, so we'll just pass it the identifier and hope it knows what to do
-            handler_object = None
-
-        if handler_object is not None and handler_object != target_object:
-            return
-
-        return kwargs_resilient_method(*args, **kwargs)
-
-    new_method._signal_handler_params = getattr(signal_method, '_signal_handler_params', {})  # inherit handlers params from original method
-    return new_method
 
 
 @parametrizeable_decorator
@@ -296,18 +306,14 @@ def register_object(obj, **kwargs):
         intersection = set(params).intersection(kwargs)
         assert not intersection, "parameter conflict in signal object registration (%s)" % (intersection)
         params.update(kwargs)
+
         method_name, *_ = method_name.partition("__")  # allows multiple methods for the same signal
-
-        signal = Signal.ALL.get(method_name)
-        if signal and hasattr(signal, 'identifier'):
-            method = method_identifier_decorator(method, signal.identifier)
-
         register_signal(method_name, method, **params)
 
 
 def unregister_object(obj):
     for method_name in get_signals_for_type(type(obj)):
-        method = getattr(obj, method_name[3:])
+        method = getattr(obj, method_name)
         if not callable(method):
             continue
         method_name, *_ = method_name.partition("__")
