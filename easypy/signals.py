@@ -160,19 +160,34 @@ class Signal:
 
 def method_identifier_decorator(signal_method, identifier):
     kwargs_resilient_method = kwargs_resilient(signal_method)  # allow the method not to take the identifier as argument
+
+
     def new_method(*args, **kwargs):
-        self = signal_method.__self__
         if identifier not in kwargs:
             raise MissingIdentifier(_signal_name=signal_method.__name__, _identifier=identifier)
 
+        handler_object = signal_method.__self__
+        target_object = kwargs[identifier]
+
         if hasattr(signal_method, 'identifier_path'):
+            # special case if the signal method defined a user-defined attribute path for fiding the associated identifier
             path = signal_method.identifier_path
-            should_execute = eval('obj.%s' % path.strip('.'), dict(obj=self), {}) == kwargs[identifier]
+            handler_object = eval('obj.%s' % path.strip('.'), dict(obj=handler_object), {})
+        elif hasattr(handler_object, identifier):
+            # the identifier exists as an attribute on the handler object, named the same
+            handler_object = getattr(handler_object, identifier)
+        elif isinstance(handler_object, target_object.__class__):
+            # the handler_object is itself of the same type as the target_object, so we should regard it is the identifier itself
+            pass
         else:
-            should_execute = kwargs[identifier] in [self, getattr(self, identifier)]
-        if not should_execute:
+            # the handler_object isn't identifiable, so we'll just pass it the identifier and hope it knows what to do
+            handler_object = None
+
+        if handler_object is not None and handler_object != target_object:
             return
+
         return kwargs_resilient_method(*args, **kwargs)
+
     new_method._signal_handler_params = getattr(signal_method, '_signal_handler_params', {})  # inherit handlers params from original method
     return new_method
 
@@ -276,7 +291,6 @@ def register_object(obj, **kwargs):
         # type in the system, or not at all if there are no objects of that type
         # in the system.
         assert method is not getattr(type(obj), method_name, None), "'%s' is a static/class method" % method
-
 
         params = getattr(method, '_signal_handler_params', {})
         intersection = set(params).intersection(kwargs)
