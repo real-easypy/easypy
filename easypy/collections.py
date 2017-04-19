@@ -511,6 +511,24 @@ def grouped(sequence, key=None):
     return groups
 
 
+def separate(sequence, key=None):
+    """
+    Partition the sequence into items that don't match (nonzero) and those do:
+
+        >>> above_three, three_or_less = separate(range(10), lambda n: n > 3)
+
+        >>> print(three_or_less)
+            [0, 1, 2, 3]
+
+        >>> print(above_three)
+            [4, 5, 6, 7, 8, 9]
+    """
+    if not key:
+        key = lambda x: x
+    groups = grouped(sequence, key=lambda e: bool(key(e)))
+    return groups.get(True, []), groups.get(False, [])
+
+
 def iterable(obj):
     return isinstance(obj, collections.Iterable) and not isinstance(obj, (str, bytes))
 
@@ -528,6 +546,7 @@ def ilistify(obj):
         yield obj
     else:
         yield from obj
+
 
 listify = lambda obj: list(ilistify(obj))
 
