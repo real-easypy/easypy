@@ -62,7 +62,7 @@ class TimestampedStream(object):
                 match = regex.search(line)
             if match:
                 return converter(*match.groups())
-        return None
+        return 0
 
 
 def iter_zipped_logs(*log_streams):
