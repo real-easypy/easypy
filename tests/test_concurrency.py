@@ -1,6 +1,7 @@
-from easypy.threadtree import get_thread_stacks, ThreadContexts
-from easypy.concurrency import concurrent
+import pytest
 from time import sleep
+from easypy.threadtree import get_thread_stacks, ThreadContexts
+from easypy.concurrency import concurrent, MultiObject, MultiException
 
 
 def test_thread_stacks():
@@ -46,3 +47,24 @@ def test_thread_context_stacks():
 
         with concurrent(check1):
             pass
+
+
+def test_multiobject_1():
+    m = MultiObject(range(10))
+
+    def mul(a, b, *c):
+        return a*b + sum(c)
+
+    assert sum(m.call(mul, 2)) == 90
+    assert sum(m.call(mul, b=10)) == 450
+    assert sum(m.call(mul, 1, 1, 1)) == 65
+
+    assert m.filter(None).L == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert sum(m.denominator) == 10
+
+    with pytest.raises(MultiException) as info:
+        m.call(lambda i: 1 / (i % 2))
+
+    assert info.value.count == 5
+    assert info.value.common_type == ZeroDivisionError
+    assert not info.value.complete

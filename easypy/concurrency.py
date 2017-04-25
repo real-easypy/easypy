@@ -555,13 +555,14 @@ class MultiObject(object):
         "Return a new MultiObject based on current items with the specified number of workers"
         return self._new(workers=workers)
 
-    def call(self, func, **kw):
+    def call(self, func, *args, **kw):
         "Concurrently call a function on each of the object contained by this MultiObject (as first param)"
         initial_log_interval = kw.pop("initial_log_interval", None)
         if kw:
             func = wraps(func)(partial(func, **kw))
+        params = [((item,) + args) for item in self] if args else self
         return self._new(concurrent_map(
-            func, self,
+            func, params,
             log_contexts=self._log_ctx,
             workers=self._workers,
             initial_log_interval=initial_log_interval))
