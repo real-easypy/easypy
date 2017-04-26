@@ -424,9 +424,10 @@ def concurrent_map(func, params, workers=None, log_contexts=None, initial_log_in
 
 class MultiObject(object):
 
-    def __init__(self, items=None, log_ctx=None, workers=None):
+    def __init__(self, items=None, log_ctx=None, workers=None, initial_log_interval=None):
         self._items = list(items) if items else []
         self._workers = workers
+        self._initial_log_interval = initial_log_interval
         cstr = concestor(*map(type, self))
         if hasattr(cstr, '_multiobject_log_ctx'):
             # override the given log_ctx if the new items have it
@@ -545,11 +546,12 @@ class MultiObject(object):
         else:
             return "<MultiObject (Empty)>"
 
-    def _new(self, items=None, ctxs=None, workers=None):
+    def _new(self, items=None, ctxs=None, workers=None, initial_log_interval=None):
         return self.__class__(
             self._items if items is None else items,
             self._log_ctx if ctxs is None else ctxs,
-            self._workers if workers is None else workers)
+            self._workers if workers is None else workers,
+            self._initial_log_interval if initial_log_interval is None else initial_log_interval)
 
     def with_workers(self, workers):
         "Return a new MultiObject based on current items with the specified number of workers"
@@ -557,7 +559,7 @@ class MultiObject(object):
 
     def call(self, func, *args, **kw):
         "Concurrently call a function on each of the object contained by this MultiObject (as first param)"
-        initial_log_interval = kw.pop("initial_log_interval", None)
+        initial_log_interval = kw.pop("initial_log_interval", self._initial_log_interval)
         if kw:
             func = wraps(func)(partial(func, **kw))
         params = [((item,) + args) for item in self] if args else self
@@ -565,7 +567,7 @@ class MultiObject(object):
             func, params,
             log_contexts=self._log_ctx,
             workers=self._workers,
-            initial_log_interval=initial_log_interval))
+            initial_log_interval=initial_log_interval), initial_log_interval=initial_log_interval)
     each = call
 
     def filter(self, pred):
