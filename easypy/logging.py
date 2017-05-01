@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 import traceback
-from contextlib import contextmanager, ExitStack
+from contextlib import ExitStack
 from copy import deepcopy
 from functools import wraps, partial
 from itertools import cycle, chain, repeat
@@ -18,6 +18,7 @@ from easypy.colors import colorize_by_patterns as C, uncolorize
 from easypy.humanize import compact as _compact
 from easypy.timing import timing as timing_context, Timer
 from easypy.threadtree import ThreadContexts
+from easypy.contexts import contextmanager
 
 logging.INFO1 = logging.INFO+1
 logging.addLevelName(logging.INFO1, "INFO1")
@@ -337,6 +338,8 @@ class ContextLoggerMixin(object):
             except KeyboardInterrupt:
                 footer_log("CYAN", "ABORTED", INDENT_EXCEPTION)
                 raise
+            except GeneratorExit:
+                footer_log("DARK_GRAY", "DONE", INDENT_CLOSE)
             except:
                 footer_log("RED", "FAILED", INDENT_EXCEPTION)
                 raise
