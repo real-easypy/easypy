@@ -1,6 +1,15 @@
 import pytest
-from easypy.collections import ListCollection, partial_dict
 from easypy.collections import separate
+from easypy.collections import ListCollection, partial_dict, UNIQUE, ObjectNotFound
+from easypy.bunch import Bunch
+from collections import Counter
+
+
+class O(Bunch):
+    def __repr__(self):
+        return "%(name)s:%(id)s:%(v)s" % self
+
+L = ListCollection(O(name=n, id=i, v=v) for n, i, v in zip("aabcdddeff", "1234567890", "xxxyyyxxyz") for _ in range(100))
 
 
 def test_collection_filter():
@@ -30,3 +39,52 @@ def test_collection_sample():
 
     with pytest.raises(AssertionError):
         l.sample(1.5)
+
+
+def test_collection_select():
+    assert len(L.select(name='a', id='1')) == 100
+
+
+def test_collection_select_no_unique():
+    with pytest.raises(AssertionError):
+        L.select(name=UNIQUE)
+
+
+def test_collection_sample_too_much():
+    len(L.select(name='a', id='2').sample(100)) == 100
+    with pytest.raises(ObjectNotFound):
+        L.select(name='a', id='2').sample(101)
+
+
+def test_collection_sample_unique0():
+    assert not L.sample(0, name=UNIQUE)
+
+
+def test_collection_sample_unique1():
+    s = L.sample(3, name=UNIQUE)
+    assert len({b.name for b in s}) == 3
+
+
+def test_collection_sample_unique2():
+    x, = L.sample(1, name=UNIQUE, id='1')
+    assert x.id == '1'
+
+
+def test_collection_sample_unique3():
+    s = L.sample(6, name=UNIQUE, id=UNIQUE)
+    assert len({(b.name, b.id) for b in s}) == 6
+
+
+def test_collection_sample_unique4():
+    with pytest.raises(ObjectNotFound):
+        L.sample(7, name=UNIQUE)  # too many
+
+
+def test_collection_sample_unique5():
+    s = L.sample(3, name=UNIQUE, id=UNIQUE, v=UNIQUE)
+    assert len({(b.name, b.id) for b in s}) == 3
+
+
+def test_collection_sample_unique_diverse():
+    x = Counter(repr(x) for _ in range(100) for x in L.sample(1, name=UNIQUE))
+    assert len(x) == 10

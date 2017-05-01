@@ -5,6 +5,7 @@ from itertools import chain, islice
 from functools import partial
 import random
 from .predicates import make_predicate
+from .tokens import UNIQUE
 
 import sys
 if sys.version_info[:2] >= (3, 5):
@@ -40,9 +41,17 @@ class defaultlist(list):
         return list.__getitem__(self, index)
 
 
+def _get_value(obj, attr):
+    value = getattr(obj, attr)
+    if callable(value):
+        value = value()
+    return value
+
+
 def _validate(obj, key, value):
-    actual = getattr(obj, key)
-    return (actual() if callable(actual) else actual) == value
+    assert value is not UNIQUE, "Can't specify %s except with '.sample()'" % UNIQUE
+    actual = _get_value(obj, key)
+    return actual == value
 
 
 def filters_to_predicates(filters):
@@ -61,6 +70,36 @@ def filtered(objects, preds, filters):
                 break
         else:
             yield obj
+
+
+def uniquify(items, num, attrs):
+    item_map = {}
+    partitions = collections.defaultdict(lambda: collections.defaultdict(set))
+
+    for item in items:
+        k = id(item)
+        item_map[k] = item
+        for attr in attrs:
+            value = _get_value(item, attr)
+            partitions[attr][value].add(k)
+
+    if not all(len(group.values()) >= num for group in partitions.values()):
+        return []
+
+    def gen(available, collected=[]):
+        if len(collected) == num:
+            yield [item_map[k] for k in collected]
+            return
+
+        for k in shuffled(available):
+            excluded = {i for attr in attrs for i in partitions[attr][_get_value(item_map[k], attr)]}
+            remain = available - {k} - excluded
+            yield from gen(remain, collected=collected + [k])
+
+    try:
+        return next(gen(set(item_map.keys())))
+    except StopIteration:
+        return []
 
 
 # Inspired by code written by Rotem Yaari
@@ -202,15 +241,32 @@ class ObjectCollection(object):
         if isinstance(num, float):
             num, d = divmod(num, 1)
             assert d == 0, "Can't sample a non-integer number of items"
+            num = int(num)
 
-        matching = []
-        if num:
-            for obj in self.iter_filtered(_shuffle=True, *preds, **filters):
-                matching.append(obj)
-                if len(matching) >= num:
-                    break
+        if not num:
+            return self._new([])
+
+        uniquifiers = []
+        for k, v in list(filters.items()):
+            if v is UNIQUE:
+                filters.pop(k)
+                uniquifiers.append(k)
+
+        if uniquifiers:
+            if (preds or filters):
+                matching = self.iter_filtered(_shuffle=True, *preds, **filters)
             else:
-                raise ObjectNotFound("Not enough objects for sampling (need at least %s)" % num)
+                matching = self
+
+            matching = uniquify(matching, num, uniquifiers)
+
+        else:
+            # use 'zip' as a limiter
+            matching = [obj for _, obj in zip(range(num), self.iter_filtered(_shuffle=True, *preds, **filters))]
+
+        if len(matching) < num:
+            raise ObjectNotFound("Not enough objects for sampling (need at least %s)" % num)
+
         return self._new(matching)
 
     def _choose_sampling_size(self, minimum=0, maximum=None):
