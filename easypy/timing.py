@@ -1,6 +1,7 @@
 from contextlib import contextmanager, ExitStack
 import sys
 import time
+import warnings
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
@@ -10,6 +11,7 @@ from .decorations import parametrizeable_decorator
 from .units import Duration
 from .exceptions import PException
 from .humanize import time_duration  # due to interference with jrpc
+from .misc import stack_level_to_get_out_of_file
 
 
 IS_A_TTY = sys.stdout.isatty()
@@ -202,6 +204,17 @@ def make_multipred(preds):
 
 def iter_wait(timeout, pred=None, sleep=0.5, message=None,
               progressbar=True, throw=True, allow_interruption=False, caption=None):
+
+    # Calling wait() with a predicate and no message is very not informative
+    # and is pending deprecation (throw=False disables this behavior)
+    if throw and pred and not message:
+        stack_level = stack_level_to_get_out_of_file()
+        warnings.warn(
+            "Function iter_wait()'s parameter `message` is required if "
+            "`pred` is passed",
+            category=DeprecationWarning,
+            stacklevel=stack_level
+        )
 
     if timeout is None:
         msg = "Waiting indefinitely%s"
