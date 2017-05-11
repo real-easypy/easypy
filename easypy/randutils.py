@@ -1,8 +1,11 @@
+import os
 import string
 import itertools
 import random
 import bisect
+import collections
 from random import choice, sample
+
 choose = choice
 
 
@@ -40,6 +43,39 @@ class XRandom(random.Random):
                 yield offset, size
             total_size -= size
             offset += size
+
+
+def random_nice_name(max_length=64, entropy=2, sep='-'):
+    """Generates a nice random name from the dictionaries in words
+    Args:
+        max_length (int, optional): Max length for the name.
+        entropy (int, optional): How unique th name will be, currently
+            entropy - 1 adjectives are joined with one noun.
+        sep (str, optional: Seperator between name parts.
+
+    Returns:
+        string: The generated name.
+
+    Raises:
+        ValueError: If `param2` is equal to `param1`.
+    """
+
+    from .words import (adjectives, creatures)
+
+    name = None
+    entropy = max(entropy, 1)
+    parts = (creatures, ) + (adjectives, ) * (entropy - 1)
+    for _ in range(10):
+        name_parts = [random.choice(p) for p in parts[::-1]]
+        joined = sep.join(name_parts)
+        if len(joined) <= max_length:
+            name = joined
+            break
+
+    if not name:
+        raise ValueError("Can't generate name under these conditions")
+
+    return name
 
 
 def random_string(length, charset=string.printable):
