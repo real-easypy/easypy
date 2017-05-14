@@ -11,6 +11,7 @@ def test_wait_warning():
         wait(0.1, pred=lambda: True)
         wait(0.1)
         wait(0.1, pred=lambda: True, message='message')
+        wait(0.1, pred=lambda: True, message=False)
         repeat(0.1, callback=lambda: True)
 
         # Only the first call should throw a DeprecationWarning
@@ -28,7 +29,8 @@ def test_iter_wait_warning():
         no_warn_iters = [
             iter_wait(0.1),
             iter_wait(0.1, pred=lambda: True, message='message'),
-            iter_wait(0.1, pred=lambda: True, throw=False)
+            iter_wait(0.1, pred=lambda: True, throw=False),
+            iter_wait(0.1, pred=lambda: True, message=False)
         ]
         for i in no_warn_iters:
             for _ in i:
