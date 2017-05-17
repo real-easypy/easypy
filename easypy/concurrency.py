@@ -1052,22 +1052,23 @@ class TagAlongThread(object):
             return last_result
 
 
-def throttled(func, ms):
-    last_run = 0
-    lock = RLock()
-
-    @wraps(func)
-    def throttled_func():
-        nonlocal last_run
-        ts = time.time() * 1000
-        run = False
-        with lock:
-            if ts - last_run > ms:
-                last_run = ts
-                run = True
-        if run:
-            return func()
-    return throttled_func
+def throttled(ms):
+    def deco(func):
+        last_run = 0
+        lock = RLock()
+        @wraps(func)
+        def throttled_func(*args, **kwargs):
+            nonlocal last_run
+            ts = time.time() * 1000
+            run = False
+            with lock:
+                if ts - last_run > ms:
+                    last_run = ts
+                    run = True
+            if run:
+                return func(*args, **kwargs)
+        return throttled_func
+    return deco
 
 
 class synchronized_on_first_call():
