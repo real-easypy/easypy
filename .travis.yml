@@ -11,7 +11,7 @@ env:
   - GEVENT=true
   - GEVENT=false
 
-install: pip install gevent
+install: pip install gevent PyYaml
 script: python -m pytest -vv tests
 
 notifications:
