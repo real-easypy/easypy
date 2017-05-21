@@ -326,17 +326,15 @@ def wait_progress(*args, **kwargs):
 
 def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf"), state_threshold=0, sleep=0.5, throw=True,
                        allow_regression=True, advancer_name=None, progressbar=True):
+
     ADVANCE_TIMEOUT_MESSAGE = "did not advance for {duration: .1f} seconds"
     TOTAL_TIMEOUT_MESSAGE = "advanced but failed to finish in {duration: .1f} seconds"
 
     state = state_getter()  # state_getter should return a number, represent current state
-    # we need this bunch to avoid using "nonlocal" keyword, for compatability with python2
+
     progress = Bunch(state=state, finished=False, changed=False)
     progress.total_timer = Timer(expiration=total_timeout)
     progress.advance_timer = Timer(expiration=advance_timeout)
-
-    def finished():
-        return progress.state <= state_threshold
 
     def did_advance():
         current_state = state_getter()
@@ -346,15 +344,29 @@ def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf")
             progress.state = current_state
         return progress.advanced
 
-    while not finished():
+    # We want to make sure each iteration sleeps at least once,
+    # since the internal 'wait' could return immediately without sleeping at all,
+    # and if the external while loop isn't done we could be iterating too much
+    min_sleep = None
+
+    while progress.state > state_threshold:
         progress.timeout, message = min(
             (progress.total_timer.remain, TOTAL_TIMEOUT_MESSAGE),
             (progress.advance_timer.remain, ADVANCE_TIMEOUT_MESSAGE))
         if advancer_name:
             message = advancer_name + ' ' + message
+
+        if min_sleep:
+            wait(min_sleep.remain)
+        min_sleep = Timer(expiration=sleep)
+
         result = wait(progress.timeout, pred=did_advance, sleep=sleep, message=message, throw=throw, progressbar=progressbar)
         if not result:  # if wait times out without throwing
             return
+
+        if progress.total_timer.expired:
+            raise TimeoutException(message, duration=progress.total_timer.duration)
+
         progress.advance_timer.reset()
         yield progress
 
