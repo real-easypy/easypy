@@ -134,9 +134,9 @@ def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(
     if unacceptable is None:
         unacceptable = ()
     elif isinstance(unacceptable, tuple):
-        unacceptable += (NameError, AttributeError)
+        unacceptable += (NameError, AttributeError, TypeError)
     else:
-        unacceptable = (unacceptable, NameError, AttributeError)
+        unacceptable = (unacceptable, NameError, AttributeError, TypeError)
     try:
         yield
     except unacceptable as exc:
