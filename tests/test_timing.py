@@ -50,7 +50,7 @@ def test_iter_wait_progress_inbetween_sleep():
         data.a -= 1
         return data.a
 
-    sleep = .05
+    sleep = .07
     g = iter_wait_progress(get, advance_timeout=10, sleep=sleep)
 
     # first iteration should be immediate
