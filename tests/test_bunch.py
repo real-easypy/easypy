@@ -15,6 +15,7 @@ def test_bunchify():
     assert x.a[1] == 9
     assert isinstance(x.a[2], tuple)
     assert x.c == 8
+    assert x.pop("c") == 8
 
 
 def test_required_keys():

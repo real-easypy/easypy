@@ -52,7 +52,7 @@ class Bunch(dict):
     def pop(self, key, *args):
         if key in self.KEYS:
             raise CannotDeleteRequiredKey(_required=key)
-        super().pop(key, *args)
+        return super().pop(key, *args)
 
     def __getattr__(self, name):
         try:
