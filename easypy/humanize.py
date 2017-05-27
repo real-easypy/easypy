@@ -525,12 +525,31 @@ def format_tb(*args, **kw):
 
 
 def format_table(table, titles=True):
-    widths = [max(map(len, map(str, column))) for column in zip(*table)]
+    """
+    Returns a multilined string representing the given table (2d list) as a table, with equal-width columns.
+    If 'titles' is true, the first row in the table is taken as headers for the table, adding a separator on the
+    second line
+    """
+
+    fmt_simple = "{:{width}}"
+    fmt_string = "{!s:{width}}"  # for type that don't accept a ':width' specifier when formatted (NoneType, dict, ...)
+
+    def safe_format(cell, width=1):
+        if isinstance(cell, bool):
+            # because if we force it to str it becomes an int (True -> 1, False -> 0)
+            return fmt_string.format(cell, width=width)
+
+        try:
+            return fmt_simple.format(cell, width=width)
+        except TypeError:
+            return fmt_string.format(cell, width=width)
+
+    widths = [max(map(len, map(safe_format, column))) for column in zip(*table)]
     txt = ''
     for i, row in enumerate(table):
         if titles and i == 1:
             txt += '-'.join('-' * width for width in widths) + '\n'
-        txt += '|'.join("{:{width}}".format('None' if cell is None else cell, width=width) for cell, width in zip(row, widths))
+        txt += '|'.join(safe_format(cell, width=width) for cell, width in zip(row, widths))
         txt += '\n'
     return txt
 

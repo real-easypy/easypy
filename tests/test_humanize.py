@@ -1,4 +1,4 @@
-from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer
+from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table
 
 
 _SAMPLE_DATA = b'J\x9c\xe8Z!\xc2\xe6\x8b\xa0\x01\xcb\xc3.x]\x11\x9bsC\x1c\xb2\xcd\xb3\x9eM\xf7\x13`\xc8\xce\xf8g1H&\xe2\x9b'     \
@@ -49,3 +49,38 @@ def test_indentable_text_buffer():
     f = StringIO()
     buff.render(prune=True, textual=False, width=40, overflow="ignore", file=f)
     assert open("tests/indentable_buffer2.txt", "r").read() == f.getvalue()
+
+
+def test_format_table_with_titles():
+    table = [
+        'abc',
+        range(3),
+        [None, True, False],
+        [dict(x='x'), b'bytes', 'string']
+    ]
+
+    output = (
+        "a         |b       |c     \n"
+        "--------------------------\n"
+        "         0|       1|     2\n"
+        "None      |True    |False \n"
+        "{'x': 'x'}|b'bytes'|string\n")
+
+    assert output == format_table(table)
+
+
+def test_format_table_without_titles():
+    table = [
+        'abc',
+        range(3),
+        [None, True, False],
+        [dict(x='x'), b'bytes', 'string']
+    ]
+
+    output = (
+        "a         |b       |c     \n"
+        "         0|       1|     2\n"
+        "None      |True    |False \n"
+        "{'x': 'x'}|b'bytes'|string\n")
+
+    assert output == format_table(table, titles=False)
