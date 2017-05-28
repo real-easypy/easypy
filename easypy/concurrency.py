@@ -386,7 +386,7 @@ def concurrent_find(func, params, **kw):
                     return future.result()
             else:
                 if future:
-                    future.result()
+                    return future.result()
         except FutureTimeoutError as exc:
             if not timeout:
                 # ??

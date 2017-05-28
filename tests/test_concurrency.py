@@ -68,3 +68,20 @@ def test_multiobject_1():
     assert info.value.count == 5
     assert info.value.common_type == ZeroDivisionError
     assert not info.value.complete
+
+
+def test_multiobject_concurrent_find_found():
+    m = MultiObject(range(10))
+    from time import sleep
+    ret = m.concurrent_find(lambda n: sleep(n/10) or n)  # n==0 is not nonzero, so it's not eligible
+    assert ret == 1
+
+
+def test_multiobject_concurrent_find_not_found():
+    m = MultiObject(range(10))
+    ret = m.concurrent_find(lambda n: n < 0)
+    assert ret is False
+
+    m = MultiObject([0]*5)
+    ret = m.concurrent_find(lambda n: n)
+    assert ret is 0
