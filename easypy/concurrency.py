@@ -186,14 +186,16 @@ class MultiException(PException):
                 elif hasattr(exc, "render"):
                     buff.write(exc.render(**kw))
                 else:
-                    if hasattr(exc, "context"):
+                    if not hasattr(exc, "context"):
+                        context = ""
+                    elif not isinstance(exc.context, dict):
+                        context = repr(exc)
+                    else:
                         context = exc.context.copy()
                         context.pop("indentation", None)
                         if 'context' in context:  # 'context' should be renamed 'breadcrumbs'
                             context['context'] = ";".join(context['context'])
                         context = "(%s)" % ", ".join("%s=%s" % p for p in sorted(context.items()))
-                    else:
-                        context = ""
                     buff.write("{}: {}", exc, context)
                 if hasattr(exc, "__traceback__"):
                     for line in format_tb(exc.__traceback__):
