@@ -84,7 +84,8 @@ def random_string(length, charset=string.printable):
 
 def random_filename(length=(3, 50)):
     if hasattr(length, "__iter__"):
-        length = random.randrange(*length)
+        mn, mx = length
+        length = random.randrange(mn, mx+1)  # randrange does not include upper bound
     return random_string(length, charset=string.ascii_letters)
 
 
