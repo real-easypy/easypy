@@ -20,7 +20,7 @@ from easypy.humanize import format_thread_stack
 from . import _set_thread_uuid, _set_main_uuid
 
 
-_logger = getLogger(__name__)
+_logger = getLogger('gevent')
 
 
 main_thread_ident_before_patching = threading.main_thread().ident
