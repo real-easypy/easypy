@@ -151,7 +151,7 @@ def detect_hogging():
                 _logger.info('RED<<unknown greentlet hogger detected (%s seconds):>>', current_blocker_time)
                 _logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
                 _logger.debug('hub is: %s', HUB)
-            _logger.info(format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
+            _logger.debug("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
             last_warning_time = current_blocker_time
             continue
 
