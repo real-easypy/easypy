@@ -12,8 +12,10 @@ from collections import namedtuple
 from contextlib import contextmanager
 from io import StringIO
 from datetime import datetime, timedelta
+
 from easypy.bunch import Bunch, bunchify
 from easypy.colors import colorize
+from easypy.collections import ilistify
 
 
 def compact(line, length, ellipsis="....", suffix_length=20):
@@ -531,7 +533,7 @@ def format_thread_stack(frame, skip_modules=[threading]):
     if skip_modules:
         itr_stack = iter(stack)
         items = []
-        fnames = {m.__file__ for m in skip_modules}
+        fnames = {m.__file__ for m in ilistify(skip_modules)}
         # skip everything until after specified module
         for fname, *_ in itr_stack:
             if fname in fnames:
