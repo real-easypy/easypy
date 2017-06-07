@@ -268,7 +268,7 @@ class Futures(list):
                 continue
 
             with _logger.indented("%3s - %s (%s)", i, future.funcname, _get_context(future), footer=False):
-                lines = format_thread_stack(frame, this_module).splitlines()
+                lines = format_thread_stack(frame, skip_modules=[this_module]).splitlines()
                 for line in lines:
                     _logger.info(line.strip())
 
