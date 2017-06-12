@@ -1,7 +1,10 @@
+from mock import patch, call
 import pytest
 from time import sleep
+import threading
 from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
+from easypy.concurrency import LoggedRLock, LockLeaseExpired
 
 
 def test_thread_stacks():
@@ -101,3 +104,34 @@ def test_multiobject_concurrent_find_not_found():
     m = MultiObject([0]*5)
     ret = m.concurrent_find(lambda n: n)
     assert ret is 0
+
+
+def test_logged_lock():
+    lock = LoggedRLock("test", default_expiration=1, log_interval=.2)
+
+    step1 = threading.Event()
+    step2 = threading.Event()
+
+    def do_lock():
+        with lock:
+            step1.set()
+            step2.wait()
+
+    with concurrent(do_lock):
+        # wait for thread to hold the lock
+        step1.wait()
+
+        # the expiration mechanism should kick in
+        with pytest.raises(LockLeaseExpired):
+
+            # we'll mock the logger so we can ensure it logged
+            with patch("easypy.concurrency._logger") as _logger:
+                lock.acquire()
+
+        # let other thread finish
+        step2.set()
+
+    with lock:
+        pass
+
+    assert sum(c == call("%s - waiting...", lock) for c in _logger.debug.call_args_list) > 3

@@ -3,13 +3,12 @@
 from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
 
+import re
 from collections import defaultdict, Counter
 from contextlib import contextmanager, ExitStack
 from functools import partial, wraps
 from importlib import import_module
 from itertools import chain
-from threading import Event
-from threading import RLock
 from traceback import format_tb, extract_stack
 import atexit
 import inspect
@@ -117,6 +116,10 @@ class ProcessExiting(TException):
 class TimebombExpired(TException):
     template = "Timebomb Expired - process killed itself"
     exit_with_code = 234
+
+
+class LockLeaseExpired(TException):
+    template = "Lock Lease Expired - thread is holding this lock for too long"
 
 
 _exiting = False  # we use this to break out of lock-acquisition loops
@@ -744,7 +747,7 @@ def kill_this_process(graceful=False):
 class Timebomb(object):
 
     def __init__(self, timeout, alert_interval=None):
-        self.fuse = Event()  # use this to cancel the timebomb
+        self.fuse = threading.Event()  # use this to cancel the timebomb
         self.timeout = timeout
         self.alert_interval = alert_interval
 
@@ -794,8 +797,8 @@ class concurrent(object):
         self.kwargs = kwargs
         self.throw = kwargs.pop('throw', True)
         self.daemon = kwargs.pop('daemon', True)
-        self.threadname = kwargs.pop('threadname', 'anon[%X]' % id(self))
-        self.stopper = kwargs.pop('stopper', Event())
+        self.threadname = kwargs.pop('threadname', 'anon-%X' % id(self))
+        self.stopper = kwargs.pop('stopper', threading.Event())
         self.sleep = kwargs.pop('sleep', 1)
         self.loop = kwargs.pop('loop', False)
         self.timer = None
@@ -955,6 +958,77 @@ def _get_my_ident():
     return Hex(threading.current_thread().ident)
 
 
+class LoggedRLock():
+    """
+    Like RLock, but more logging friendly.
+
+        name: give it a name, so it's identifiable in the logs
+        log_interval: the interval between log messages
+        default_expiration: throw an exception if the lock is held for more than this duration
+    """
+
+    # we could inherit from this and support other types, but that'll require changes in the repr
+    LockType = threading.RLock
+
+    slots = ("_lock", "_name", "_default_expiration", "_timer", "_log_interval")
+    _RE_OWNER = re.compile(".*owner=(\d+) count=(\d+).*")
+
+    def __init__(self, name=None, log_interval=15, default_expiration=None):
+        self._lock = self.__class__.LockType()
+        self._name = name or '{}-{:X}'.format(self.LockType.__name__, id(self))
+        self._default_expiration = default_expiration
+        self._expiration_timer = None
+        self._log_interval = log_interval
+
+        # we want to support both the gevent and builtin lock
+        try:
+            self._lock._owner
+        except AttributeError:
+            def _get_data():
+                return tuple(map(int, self._RE_OWNER.match(repr(self._lock)).groups()))
+        else:
+            def _get_data():
+                return self._lock._owner, self._lock._count
+        self._get_data = _get_data
+
+    def __repr__(self):
+        owner, count = self._get_data()
+        try:
+            owner = threading._active[owner].name
+        except KeyError:
+            pass
+        if owner:
+            return "<{}: owned by <{}>x{} for {}>".format(self._name, owner, count, self._expiration_timer.elapsed)
+        else:
+            return "<{}: unowned>".format(self._name)
+
+    def acquire(self, blocking=True, timeout=-1, expiration=None):
+        if not blocking:
+            return self._lock.acquire(blocking=False)
+
+        log_timer = Timer(expiration=None if timeout < 0 else timeout)
+        while not log_timer.expired:
+            timeout = min(log_timer.remain or self._log_interval, self._log_interval)
+            if self._expiration_timer:
+                timeout = min(self._expiration_timer.remain, timeout)
+            if self._lock.acquire(blocking=True, timeout=timeout):
+                # set the timer after acquiring the lock!
+                self._expiration_timer = self._expiration_timer or Timer(expiration=expiration or self._default_expiration)
+                _logger.debug("%s - acquired", self)
+                return True
+            if self._expiration_timer.expired:
+                raise LockLeaseExpired(lock=self)
+            _logger.debug("%s - waiting...", self)
+
+    def release(self, *args):
+        _logger.debug("%s - releasing...", self)
+        self._expiration_timer = None  # clear the timer before releasing the lock!
+        self._lock.release()
+
+    __exit__ = release
+    __enter__ = acquire
+
+
 class RWLock(object):
     """
     Read-Write Lock: allows locking exclusively and non-exclusively:
@@ -970,7 +1044,7 @@ class RWLock(object):
     """
 
     def __init__(self, name=None):
-        self.lock = RLock()
+        self.lock = threading.RLock()
         self.cond = threading.Condition(self.lock)
         self.owners = Counter()
         self.name = name or '{}-{:X}'.format(self.__class__.__name__, id(self.lock))
@@ -991,7 +1065,7 @@ class RWLock(object):
             while not self.cond.acquire(timeout=15):
                 _logger.debug("waiting on %s", self)
             self.owners[_get_my_ident()] += 1
-            _logger.debug("aquired %s non-exclusively", self)
+            _logger.debug("acquired %s non-exclusively", self)
             return self
         finally:
             self.cond.release()
@@ -1041,10 +1115,10 @@ class TagAlongThread(object):
         self._func = func
         self.minimal_sleep = minimal_sleep
 
-        self._iteration_trigger = Event()
+        self._iteration_trigger = threading.Event()
 
-        self._iterating = Event()
-        self._not_iterating = Event()
+        self._iterating = threading.Event()
+        self._not_iterating = threading.Event()
         self._not_iterating.set()
 
         self._last_exception = None
@@ -1105,7 +1179,7 @@ class synchronized_on_first_call():
     "Decorator, that make a function synchronized but only on its first invocation"
 
     def __init__(self, func):
-        self.lock = RLock()
+        self.lock = threading.RLock()
         self.func = func
         self.initialized = False
 
