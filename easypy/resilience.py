@@ -50,6 +50,11 @@ class ExpiringCounter(object):
         self.times -= 1
         return self.times < 0
 
+    @property
+    def remain(self):
+        return self.times
+
+
 def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
           max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
 
@@ -90,7 +95,7 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
             if sleep:
                 # support for ExponentialBackoff
                 sleep_for = sleep() if callable(sleep) else sleep
-            _logger.log(log_level, "Retrying... (%s attempts left) in %s seconds", times, sleep_for)
+            _logger.log(log_level, "Retrying... (%r remain) in %s seconds", stopper.remain, sleep_for)
             time.sleep(sleep_for)
 
 
