@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from functools import wraps
+from functools import wraps, update_wrapper
 
 from .exceptions import TException
 
@@ -47,6 +47,10 @@ class _LockstepInvocation(object):
         for self._current_step in self._generator:
             pass
 
+    def __iter__(self):
+        yield from self._generator
+        self._current_step = 'finished'
+
     def _next_step_and_value(self):
         yield_result = next(self._generator)
         if isinstance(yield_result, tuple) and len(yield_result) == 2:
@@ -58,34 +62,64 @@ class _LockstepInvocation(object):
         return '%s<%s>' % (self._name, self._current_step)
 
 
-class _LockstepContextManagerWrapper(object):
-    def __init__(self, cm):
-        self._cm = cm
-
-    def __enter__(self):
-        return self._cm.__enter__()
-
-    def __exit__(self, *args):
-        return self._cm.__exit__(*args)
-
-    def __iter__(self):
-        with self._cm as invocation:
-            yield from invocation._generator
-
-
-def lockstep(generator_func):
+class lockstep(object):
     """
     Synchronize a coroutine that runs a process step-by-step.
 
     Decorate a generator that yields step names to create a context manager.
-    The context object has a `.step_next`/`.step_until` methods that must be
-    called, in order, with all expected step names, to make the generator
-    progress to each step.
+
+    * Use like a regular method(that returns `None`).
+    * Use `.lockstep(...)` on the method to get a context manager. The context
+      object has a `.step_next`/`.step_until` methods that must be called, in
+      order, with all expected step names, to make the generator progress to
+      each step.
+    * Yield from the context object to embed the lockstep inside a bigger
+      lockstep function.
+
+    Example:
+
+        @lockstep
+        def my_process():
+            # things before step A
+            yield 'A'
+            # things between step A and step B
+            yield 'B'
+            # things between step B and step C
+            yield 'C'
+            # things between step C and step D
+            yield 'D'
+            # things after step D
+
+        my_process()  # just run it like a normal function, ignoring the lockstep
+
+        with my_process.lockstep() as process:
+            process.step_next('A')  # go to next step - A
+            process.step_until('C')  # go through steps until you reach C
+            process.step_all()  # go through all remaining steps until the end
+
+        @lockstep
+        def bigger_process():
+            yield 'X'
+
+            # Embed `my_process`'s steps inside `bigger_process`:
+            with my_process.lockstep() as process:
+                yield from process
+
+            yield 'Y'
     """
 
+    def __init__(self, generator_func, _object=None):
+        self.generator_func = generator_func
+        self._object = _object
+        update_wrapper(self, generator_func)
+
     @contextmanager
-    def cm(*args, **kwargs):
-        invocation = _LockstepInvocation(generator_func.__name__, generator_func(*args, **kwargs))
+    def lockstep(self, *args, **kwargs):
+        if self._object is None:
+            generator = self.generator_func(*args, **kwargs)
+        else:
+            generator = self.generator_func(self._object, *args, **kwargs)
+        invocation = _LockstepInvocation(self.generator_func.__name__, generator)
 
         yield invocation
 
@@ -99,8 +133,12 @@ def lockstep(generator_func):
                                        expected_step='finished',
                                        actual_step=step_not_taken)
 
-    @wraps(generator_func)
-    def wrapper(*args, **kwargs):
-        return _LockstepContextManagerWrapper(cm(*args, **kwargs))
+    def __call__(self, *args, **kwargs):
+        with self.lockstep(*args, **kwargs) as process:
+            process.step_all()
 
-    return wrapper
+    def __get__(self, obj, _=None):
+        if obj is None:
+            return self
+
+        return lockstep(self.generator_func, _object=obj)
