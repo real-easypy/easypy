@@ -450,6 +450,10 @@ class ContextLoggerMixin(object):
         return cm()
 
 
+if not issubclass(logging.Logger, ContextLoggerMixin):
+    logging.Logger.__bases__ = logging.Logger.__bases__ + (ContextLoggerMixin,)
+
+
 class HeartbeatHandler(logging.Handler):
     "Heartbeat notifications based on the application's logging activity"
 
