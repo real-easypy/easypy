@@ -107,7 +107,7 @@ def test_multiobject_concurrent_find_not_found():
 
 
 def test_logged_lock():
-    lock = LoggedRLock("test", default_expiration=1, log_interval=.2)
+    lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
 
     step1 = threading.Event()
     step2 = threading.Event()
@@ -121,11 +121,13 @@ def test_logged_lock():
         # wait for thread to hold the lock
         step1.wait()
 
-        # the expiration mechanism should kick in
-        with pytest.raises(LockLeaseExpired):
+        # we'll mock the logger so we can ensure it logged
+        with patch("easypy.concurrency._logger") as _logger:
 
-            # we'll mock the logger so we can ensure it logged
-            with patch("easypy.concurrency._logger") as _logger:
+            assert not lock.acquire(timeout=0.5)  # below the lease_expiration
+
+            # the expiration mechanism should kick in
+            with pytest.raises(LockLeaseExpired):
                 lock.acquire()
 
         # let other thread finish

@@ -272,6 +272,9 @@ class Duration(float):
     # def __str__(self):
 
     def render(self, unit=None, precision=None):
+        if self == NEVER:
+            return "Never"
+
         if not unit:
             for unit_size in self.SORTED_UNITS:
                 if unit_size <= abs(self):
@@ -326,7 +329,7 @@ DAY = Duration(24 * HOUR)
 WEEK = Duration(7 * DAY)
 MONTH = Duration(31 * DAY)
 YEAR = Duration(365 * DAY)
-
+NEVER = Duration("inf")
 
 # ------
 

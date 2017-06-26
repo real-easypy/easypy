@@ -26,7 +26,7 @@ from easypy.misc import Hex
 from easypy.humanize import format_thread_stack
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
-from easypy.units import MINUTE, HOUR
+from easypy.units import NEVER, MINUTE, HOUR
 
 
 this_module = import_module(__name__)
@@ -964,20 +964,21 @@ class LoggedRLock():
 
         name: give it a name, so it's identifiable in the logs
         log_interval: the interval between log messages
-        default_expiration: throw an exception if the lock is held for more than this duration
+        lease_expiration: throw an exception if the lock is held for more than this duration
     """
 
     # we could inherit from this and support other types, but that'll require changes in the repr
     LockType = threading.RLock
 
-    slots = ("_lock", "_name", "_default_expiration", "_timer", "_log_interval")
+    __slots__ = ("_lock", "_name", "_lease_expiration", "_lease_timer", "_log_interval", "_get_data")
     _RE_OWNER = re.compile(".*owner=(\d+) count=(\d+).*")
+    _MIN_TIME_FOR_LOGGING = 10
 
-    def __init__(self, name=None, log_interval=15, default_expiration=None):
+    def __init__(self, name=None, log_interval=15, lease_expiration=NEVER):
         self._lock = self.__class__.LockType()
         self._name = name or '{}-{:X}'.format(self.LockType.__name__, id(self))
-        self._default_expiration = default_expiration
-        self._expiration_timer = None
+        self._lease_expiration = lease_expiration
+        self._lease_timer = None
         self._log_interval = log_interval
 
         # we want to support both the gevent and builtin lock
@@ -998,31 +999,54 @@ class LoggedRLock():
         except KeyError:
             pass
         if owner:
-            return "<{}: owned by <{}>x{} for {}>".format(self._name, owner, count, self._expiration_timer.elapsed)
+            return "<{}, owned by <{}>x{} for {}>".format(self._name, owner, count, self._lease_timer.elapsed)
         else:
-            return "<{}: unowned>".format(self._name)
+            return "<{}, unowned>".format(self._name)
 
-    def acquire(self, blocking=True, timeout=-1, expiration=None):
+    def _acquired(self, lease_expiration, should_log=False):
+        # we don't want to replace the lease timer, so not to effectively extend the original lease
+        self._lease_timer = self._lease_timer or Timer(expiration=lease_expiration or self._lease_expiration)
+        if should_log:
+            _logger.debug("%s - acquired", self)
+
+    def acquire(self, blocking=True, timeout=-1, lease_expiration=None):
         if not blocking:
-            return self._lock.acquire(blocking=False)
-
-        log_timer = Timer(expiration=None if timeout < 0 else timeout)
-        while not log_timer.expired:
-            timeout = min(log_timer.remain or self._log_interval, self._log_interval)
-            if self._expiration_timer:
-                timeout = min(self._expiration_timer.remain, timeout)
-            if self._lock.acquire(blocking=True, timeout=timeout):
-                # set the timer after acquiring the lock!
-                self._expiration_timer = self._expiration_timer or Timer(expiration=expiration or self._default_expiration)
-                _logger.debug("%s - acquired", self)
-                return True
-            if self._expiration_timer.expired:
+            ret = self._lock.acquire(blocking=False)
+            if ret:
+                self._acquired(lease_expiration)
+            elif self._lease_timer.expired:
                 raise LockLeaseExpired(lock=self)
+            return ret
+
+        # this timer implements the 'timeout' parameter
+        acquisition_timer = Timer(expiration=NEVER if timeout < 0 else timeout)
+        while not acquisition_timer.expired:
+
+            # the timeout on actually acquiring this lock is the minimum of:
+            # 1. the time remaining on the acquisition timer, set by the 'timeout' param
+            # 2. the logging interval - the minimal frequency for logging while the lock is awaited
+            # 3. the time remaining on the lease timer, which would raise if expired
+            timeout = min(acquisition_timer.remain, self._log_interval)
+            lease_timer = self._lease_timer  # we want to touch it once, so we don't hit a race since it occurs before the acquisition
+            if lease_timer:
+                timeout = min(lease_timer.remain, timeout)
+
+            if self._lock.acquire(blocking=True, timeout=timeout):
+                self._acquired(lease_expiration, should_log=acquisition_timer.elapsed > self._MIN_TIME_FOR_LOGGING)
+                return True
+
+            if self._lease_timer.expired:
+                raise LockLeaseExpired(lock=self)
+
             _logger.debug("%s - waiting...", self)
 
     def release(self, *args):
-        _logger.debug("%s - releasing...", self)
-        self._expiration_timer = None  # clear the timer before releasing the lock!
+        _, count = self._get_data()
+        if count == 1:
+            # we're last: clear the timer before releasing the lock!
+            if self._lease_timer.elapsed > self._MIN_TIME_FOR_LOGGING:
+                _logger.debug("%s - releasing...", self)
+            self._lease_timer = None
         self._lock.release()
 
     __exit__ = release
@@ -1048,10 +1072,16 @@ class RWLock(object):
         self.cond = threading.Condition(self.lock)
         self.owners = Counter()
         self.name = name or '{}-{:X}'.format(self.__class__.__name__, id(self.lock))
+        self._lease_timer = None
 
     def __repr__(self):
         owners = ", ".join(map(str, sorted(self.owners.keys())))
-        return "<{}, owned by [{}]>".format(self.name, owners)
+        lease_timer = self._lease_timer  # touch once to avoid races
+        if lease_timer:
+            mode = "exclusively ({})".format(lease_timer.elapsed)
+        else:
+            mode = "non-exclusively"
+        return "<{}, owned by <{}> {}>".format(self.name, owners, mode)
 
     @property
     def owner_count(self):
@@ -1063,9 +1093,9 @@ class RWLock(object):
     def __enter__(self):
         try:
             while not self.cond.acquire(timeout=15):
-                _logger.debug("waiting on %s", self)
+                _logger.debug("%s - waiting...", self)
             self.owners[_get_my_ident()] += 1
-            _logger.debug("acquired %s non-exclusively", self)
+            _logger.debug("%s - acquired (non-exclusively)", self)
             return self
         finally:
             self.cond.release()
@@ -1073,13 +1103,13 @@ class RWLock(object):
     def __exit__(self, *args):
         try:
             while not self.cond.acquire(timeout=15):
-                _logger.debug("waiting on %s", self)
+                _logger.debug("%s - waiting...", self)
             my_ident = _get_my_ident()
             self.owners[my_ident] -= 1
             if not self.owners[my_ident]:
                 self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
             self.cond.notify()
-            _logger.debug("released non exclusive lock on %s", self)
+            _logger.debug("%s - released (non-exclusive)", self)
         finally:
             self.cond.release()
 
@@ -1092,18 +1122,20 @@ class RWLock(object):
                 if need_to_wait_message:
                     _logger.info(need_to_wait_message)
                     need_to_wait_message = None  # only print it once
-                _logger.debug("waiting for exclusivity on %s", self)
+                _logger.debug("%s - waiting (for exclusivity)...", self)
             my_ident = _get_my_ident()
             self.owners[my_ident] += 1
-            _logger.debug("%s - acquired exclusively", self)
+            self._lease_timer = Timer()
+            _logger.debug("%s - acquired (exclusively)", self)
             try:
                 yield
             finally:
+                _logger.debug('%s - releasing (exclusive)', self)
+                self._lease_timer = None
                 self.owners[my_ident] -= 1
                 if not self.owners[my_ident]:
                     self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
                 self.cond.notify()
-                _logger.debug('releasing exclusive lock on %s', self)
 
 
 SoftLock = RWLock
