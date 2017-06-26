@@ -8,6 +8,7 @@ from functools import wraps, _make_key, partial, lru_cache
 from threading import RLock
 from logging import getLogger
 from .resilience import retrying
+from .decorations import kwargs_resilient
 
 
 _logger = getLogger(__name__)
@@ -102,6 +103,8 @@ class PersistentCache(object):
         if validator and not func:
             return partial(self.__call__, validator=validator)
 
+        validator = validator and kwargs_resilient(validator)
+
         @wraps(func)
         def inner(*args, **kwargs):
             key = str(_make_key(
@@ -115,7 +118,7 @@ class PersistentCache(object):
             else:
                 if not validator:
                     return value
-                validated_value = validator(value)
+                validated_value = validator(value, args=args, kwargs=kwargs)
                 if validated_value:
                     self.set(key, validated_value)
                     return validated_value
