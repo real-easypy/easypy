@@ -552,7 +552,7 @@ class IndexedObjectCollection(SimpleObjectCollection):
         return filtered(objects, preds, filters)
 
 
-def grouped(sequence, key=None):
+def grouped(sequence, key=None, transform=None):
     """
     Parse the sequence into groups, according to key:
 
@@ -562,8 +562,10 @@ def grouped(sequence, key=None):
     groups = {}
     if not key:
         key = lambda x: x
+    if not transform:
+        transform = lambda x: x
     for item in sequence:
-        groups.setdefault(key(item), []).append(item)
+        groups.setdefault(key(item), []).append(transform(item))
     return groups
 
 
