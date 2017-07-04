@@ -2,6 +2,9 @@ from mock import patch, call
 import pytest
 from time import sleep
 import threading
+import random
+from contextlib import ExitStack
+
 from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
@@ -137,3 +140,25 @@ def test_logged_lock():
         pass
 
     assert sum(c == call("%s - waiting...", lock) for c in _logger.debug.call_args_list) > 3
+
+
+# this might be useful sometimes, but for now it didn't catch a bug
+def disabled_test_logged_lock_races():
+    lease_expiration = 1
+    lock = LoggedRLock("test", lease_expiration=lease_expiration, log_interval=.1)
+    import logging
+
+    def do_lock(idx):
+        sleep(random.random())
+        if lock.acquire(timeout=1):
+            logging.info("%02d: acquired", idx)
+            sleep(random.random() * lease_expiration * 0.9)
+            lock.release()
+            logging.info("%02d: released", idx)
+        else:
+            logging.info("%02d: timed out", idx)
+
+    with ExitStack() as stack:
+        for i in range(30):
+            stack.enter_context(concurrent(do_lock, idx=i, loop=True, sleep=0))
+        sleep(5)

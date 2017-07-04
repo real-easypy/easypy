@@ -1027,7 +1027,7 @@ class LoggedRLock():
             # 2. the logging interval - the minimal frequency for logging while the lock is awaited
             # 3. the time remaining on the lease timer, which would raise if expired
             timeout = min(acquisition_timer.remain, self._log_interval)
-            lease_timer = self._lease_timer  # we want to touch it once, so we don't hit a race since it occurs before the acquisition
+            lease_timer = self._lease_timer  # touch it once, so we don't hit a race since it occurs outside of the lock acquisition
             if lease_timer:
                 timeout = min(lease_timer.remain, timeout)
 
@@ -1035,7 +1035,8 @@ class LoggedRLock():
                 self._acquired(lease_expiration, should_log=acquisition_timer.elapsed > self._MIN_TIME_FOR_LOGGING)
                 return True
 
-            if self._lease_timer.expired:
+            lease_timer = self._lease_timer  # touch it once, so we don't hit a race since it occurs outside of the lock acquisition
+            if lease_timer and lease_timer.expired:
                 raise LockLeaseExpired(lock=self)
 
             _logger.debug("%s - waiting...", self)

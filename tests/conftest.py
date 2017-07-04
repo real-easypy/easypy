@@ -13,4 +13,4 @@ if not issubclass(logging.Logger, easypy_logging.ContextLoggerMixin):
     logging.Logger.__bases__ = logging.Logger.__bases__ + (easypy_logging.ContextLoggerMixin,)
 
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s|%(process)2s:%(threadName)-25s|%(name)-40s|%(levelname)-5s|%(funcName)-30s |%(message)s')
