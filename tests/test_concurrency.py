@@ -143,14 +143,14 @@ def test_logged_lock():
 
 
 # this might be useful sometimes, but for now it didn't catch a bug
-def disabled_test_logged_lock_races():
+def disable_test_logged_lock_races():
     lease_expiration = 1
     lock = LoggedRLock("test", lease_expiration=lease_expiration, log_interval=.1)
     import logging
 
     def do_lock(idx):
         sleep(random.random())
-        if lock.acquire(timeout=1):
+        if lock.acquire(timeout=1, blocking=random.random() > 0.5):
             logging.info("%02d: acquired", idx)
             sleep(random.random() * lease_expiration * 0.9)
             lock.release()

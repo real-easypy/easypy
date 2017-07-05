@@ -1012,9 +1012,10 @@ class LoggedRLock():
     def acquire(self, blocking=True, timeout=-1, lease_expiration=None):
         if not blocking:
             ret = self._lock.acquire(blocking=False)
+            lease_timer = self._lease_timer  # touch it once, so we don't hit a race since it occurs outside of the lock acquisition
             if ret:
                 self._acquired(lease_expiration)
-            elif self._lease_timer.expired:
+            elif lease_timer and lease_timer.expired:
                 raise LockLeaseExpired(lock=self)
             return ret
 
