@@ -32,12 +32,15 @@ def test_required_keys():
     x = RB(a='a', b='b', c='c')
     assert 'a' in x
     assert x['b']
-    assert x['c']
+    x.c = 'C'
 
     x = RB.fromkeys("abc", True)
     assert 'a' in x
     assert x['b']
-    assert x['c']
+    x.c = 'C'
+
+    with pytest.raises(KeyNotAllowed):
+        x.d = 'd'
 
     with pytest.raises(CannotDeleteRequiredKey):
         x.pop("a")

@@ -40,17 +40,17 @@ class Bunch(dict):
         return self
 
     def __delitem__(self, key):
-        if key in self.KEYS:
+        if self.KEYS and key in self.KEYS:
             raise CannotDeleteRequiredKey(_required=key)
         super().__delitem__(key)
 
     def __setitem__(self, key, value):
-        if key in self.KEYS:
+        if self.KEYS and key not in self.KEYS:
             raise KeyNotAllowed(_disallowed=key)
         super().__setitem__(key, value)
 
     def pop(self, key, *args):
-        if key in self.KEYS:
+        if self.KEYS and key in self.KEYS:
             raise CannotDeleteRequiredKey(_required=key)
         return super().pop(key, *args)
 
