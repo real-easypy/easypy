@@ -33,7 +33,7 @@ for orig, dark in [('dark_gray', 'black'),
 # list(re.finditer("\\x1b\[([\d;]+)m(.*?)\\x1b\[m", x))
 
 MAGIC = "\x1b"
-END_CODE = MAGIC + "[m"
+END_CODE = MAGIC + "[0m"
 
 _RE_ANSI_COLOR = re.compile(re.escape(MAGIC) + '.+?m')
 _COLORIZER_RE_PATTERN = re.compile("([\w]+)(?:\((.*)\))?")
