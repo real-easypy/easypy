@@ -591,6 +591,21 @@ def format_size(num, suffix='B'):
     return "%.1f%s%s" % (num, 'Yi', suffix)
 
 
+def ipython_mapping_repr(mapping, p, cycle):
+    # used by IPython. add to any mapping class as '_repr_pretty_'
+    from easypy.colors import DARK_CYAN
+    if cycle:
+        p.text('%s(...)' % mapping.__class__.__name__)
+        return
+    with p.group(6, '%s(' % mapping.__class__.__name__, ')'):
+        for idx, (k, v) in enumerate(sorted(mapping.items())):
+            if idx:
+                p.text(',')
+                p.breakable()
+            with p.group(len(k)+1, DARK_CYAN(k) + "="):
+                p.pretty(mapping[k])
+
+
 BAR_SEQUENCE = ' ▏▎▍▌▋▊▉██'
 VERT_SEQUENCE = ' ▁▂▃▄▅▆▇█'
 LITTLE_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'

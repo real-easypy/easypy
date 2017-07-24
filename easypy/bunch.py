@@ -100,19 +100,9 @@ class Bunch(dict):
                 dict.__delattr__(self, "__stop_recursing__")
         return "%s(%s)" % (self.__class__.__name__, attrs)
 
-    def _repr_pretty_(self, p, cycle):
-        # used by IPython
-        from easypy.colors import DARK_CYAN
-        if cycle:
-            p.text('Bunch(...)')
-            return
-        with p.group(6, 'Bunch(', ')'):
-            for idx, (k, v) in enumerate(sorted(self.items())):
-                if idx:
-                    p.text(',')
-                    p.breakable()
-                with p.group(len(k)+1, DARK_CYAN(k) + "="):
-                    p.pretty(self[k])
+    def _repr_pretty_(self, *args, **kwargs):
+        from easypy.humanize import ipython_mapping_repr
+        return ipython_mapping_repr(self, *args, **kwargs)
 
     def to_dict(self):
         return unbunchify(self)
