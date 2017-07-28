@@ -356,7 +356,7 @@ class ContextLoggerMixin(object):
         header = "%s.%s" % (typ.__module__, typ.__name__)
         self.error("YELLOW@{%s}@ RED@{%s}@", header, LINE*(80-len(header)-1), extra=dict(drawing=RED(INDENT_OPEN)))
         with THREAD_LOGGING_CONTEXT(indentation=1, drawing=RED(INDENT_SEGMENT)):
-            if hasattr(exc, "render"):
+            if hasattr(exc, "render") and callable(exc.render):
                 exc_text = exc.render()
             elif tb:
                 fmt = "DARK_GRAY@{{{}}}@"
