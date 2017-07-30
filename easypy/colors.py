@@ -304,5 +304,5 @@ globals().update((name.upper(), get_colorizer(name)) for name in COLORS)
 
 if __name__ == '__main__':
     import fileinput
-    for line in fileinput.input():
+    for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
         print(colorize_by_patterns(line), end="", flush=True)
