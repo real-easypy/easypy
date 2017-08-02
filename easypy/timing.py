@@ -277,11 +277,12 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
 
         while True:
             s_timer = Timer()
+            expired = l_timer.expired
             ret = pred()
             if ret not in (None, False):
                 yield ret
                 return
-            if l_timer.expired:
+            if expired:
                 duration = l_timer.stop()
                 if throw:
                     raise TimeoutException(message, duration=duration)

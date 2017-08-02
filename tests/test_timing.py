@@ -78,3 +78,21 @@ def test_iter_wait_progress_total_timeout():
         for state in iter_wait_progress(get, advance_timeout=1, sleep=.05, total_timeout=.1):
             pass
     assert exc.value.message.startswith("advanced but failed to finish")
+
+
+def test_wait_long_predicate():
+    """
+    After the actual check the predicate is held for 3 seconds. Make sure
+    that we don't get a timeout after 2 seconds - because the actual
+    condition should be met in 1 second!
+    """
+
+    t = Timer()
+
+    def pred():
+        try:
+            return 1 < t.duration
+        finally:
+            wait(3)
+
+    wait(2, pred)
