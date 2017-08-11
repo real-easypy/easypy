@@ -109,6 +109,18 @@ def test_multiobject_concurrent_find_not_found():
     assert ret is 0
 
 
+def test_multiobject_zip_with():
+    m = MultiObject(range(4))
+
+    with pytest.raises(AssertionError):
+        m.zip_with(range(3), range(5))  # too few objects
+
+    m.zip_with(range(5), range(6))  # too many objects
+
+    ret = m.zip_with(range(1, 5)).call(lambda a, b: a+b).L
+    assert ret == [1, 3, 5, 7]
+
+
 def test_logged_lock():
     lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
 

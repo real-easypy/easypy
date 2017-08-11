@@ -599,6 +599,11 @@ class MultiObject(object):
         "Chain the iterables contained by this MultiObject"
         return self.__class__(chain(*self))
 
+    def zip_with(self, *collections):
+        mo = self.__class__(zip(self, *collections))
+        assert len(mo) == len(self), "All collection must have at least %s items" % len(self)
+        return mo
+
     def zip(self):
         "Concurrently iterate through the iterables contained by this MultiObject"
         iters = list(map(iter, self))
