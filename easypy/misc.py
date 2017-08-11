@@ -18,8 +18,15 @@ class Hex(int):
 
 class Token(str):
 
+    _all = {}
+
     def __new__(cls, name):
-        return super().__new__(cls, "<%s>" % name.strip("<>"))
+        try:
+            return cls._all[name]
+        except KeyError:
+            pass
+        cls._all[name] = self = super().__new__(cls, "<%s>" % name.strip("<>"))
+        return self
 
     def __repr__(self):
         return self
