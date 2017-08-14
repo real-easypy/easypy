@@ -42,6 +42,46 @@ class _BetterGeneratorContextManager(_GeneratorContextManager):
         return wraps(func)(inner)
 
 
+def accepting_stack(func):
+    """Lets a context manager to accept a stack from the caller
+
+    Usage:
+
+    @contextmanager
+    @accepting_stack
+    def foo(stack):
+        print('foo enter')
+        stack.callback(print, 'foo exit')
+
+    @contextmanager
+    def bar():
+        print('bar enter')
+        yield
+        print('bar exit')
+
+    with ExitStack() as stack:
+        stack.enter_context(bar())
+        foo(stack=stack)
+        print('after foo and bar')
+
+    This will output:
+    >> bar enter
+    >> foo enter
+    >> after foo and bar
+    >> foo exit
+    >> bar exit
+    """
+
+    @wraps(func)
+    def inner(*args, stack=None, **kwargs):
+        if stack is None:
+            with ExitStack() as stack:
+                return func(*args, stack=stack, **kwargs)
+        else:
+            return func(*args, stack=stack, **kwargs)
+    return inner
+
+
 # Some python version have a different signature for '_GeneratorContextManager.__init__', so we must adapt:
 if signature(_GeneratorContextManager).parameters['args'].kind is Parameter.VAR_POSITIONAL:
     def contextmanager(func):
