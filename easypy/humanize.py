@@ -597,7 +597,8 @@ def ipython_mapping_repr(mapping, p, cycle):
     if cycle:
         p.text('%s(...)' % mapping.__class__.__name__)
         return
-    with p.group(6, '%s(' % mapping.__class__.__name__, ')'):
+    prefix = '%s(' % mapping.__class__.__name__
+    with p.group(len(prefix), prefix, ')'):
         for idx, (k, v) in enumerate(sorted(mapping.items())):
             if idx:
                 p.text(',')
