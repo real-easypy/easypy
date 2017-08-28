@@ -18,11 +18,31 @@ class Hex(int):
 
 class Token(str):
 
+    _all = {}
+
     def __new__(cls, name):
-        return super().__new__(cls, "<%s>" % name.strip("<>"))
+        name = name.strip("<>")
+        try:
+            return cls._all[name]
+        except KeyError:
+            pass
+        cls._all[name] = self = super().__new__(cls, "<%s>" % name)
+        return self
 
     def __repr__(self):
         return self
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            return self is other
+        elif isinstance(other, str):
+            return self.strip("<>").lower() == other.strip("<>").lower()
+        return False
+
+    # we're already case insensitive when comparing
+    def lower(self): return self
+
+    def upper(self): return self
 
 
 def __LOCATION__():
