@@ -19,7 +19,7 @@ def test_lockstep_side_effects():
         calculation_result += 5
         yield 'ADD_FIVE'
 
-    with simple_calculation(5) as calculation:
+    with simple_calculation.lockstep(5) as calculation:
         calculation.step_next('SET_NUMBER')
         assert calculation_result == 5
 
@@ -30,6 +30,57 @@ def test_lockstep_side_effects():
         assert calculation_result == 15
 
 
+def test_lockstep_run_as_function():
+    calculation_result = 0
+
+    @lockstep
+    def simple_calculation(number):
+        nonlocal calculation_result
+
+        calculation_result = number
+        yield 'SET_NUMBER'
+
+        calculation_result *= 2
+        yield 'MULTIPLY_IT_BY_TWO'
+
+        calculation_result += 5
+        yield 'ADD_FIVE'
+
+    simple_calculation(10)
+    assert calculation_result == 25
+
+
+def test_lockstep_class_method():
+    class SimpleCalculation():
+        def __init__(self, number):
+            self.calculation_result = number
+
+        @lockstep
+        def calculation(self):
+            self.calculation_result *= 2
+            yield 'MULTIPLY_IT_BY_TWO'
+
+            self.calculation_result += 5
+            yield 'ADD_FIVE'
+
+    simple_calculation = SimpleCalculation(5)
+    with simple_calculation.calculation.lockstep() as calculation:
+        assert simple_calculation.calculation_result == 5
+
+        calculation.step_next('MULTIPLY_IT_BY_TWO')
+        assert simple_calculation.calculation_result == 10
+
+        calculation.step_next('ADD_FIVE')
+        assert simple_calculation.calculation_result == 15
+    assert simple_calculation.calculation_result == 15
+
+    # run as function
+    simple_calculation2 = SimpleCalculation(10)
+    assert simple_calculation2.calculation_result == 10
+    simple_calculation2.calculation()
+    assert simple_calculation2.calculation_result == 25
+
+
 def test_lockstep_wrong_step_name():
     @lockstep
     def process():
@@ -38,7 +89,7 @@ def test_lockstep_wrong_step_name():
         yield 'STEP_3'
 
     with pytest.raises(LockstepSyncMismatch) as excinfo:
-        with process() as process:
+        with process.lockstep() as process:
             process.step_next('STEP_1')
             process.step_next('STEP_TWO')
             process.step_next('STEP_3')
@@ -55,7 +106,7 @@ def test_lockstep_not_exhausted():
         yield 'STEP_3'
 
     with pytest.raises(LockstepSyncMismatch) as excinfo:
-        with process() as process:
+        with process.lockstep() as process:
             process.step_next('STEP_1')
             process.step_next('STEP_2')
 
@@ -70,7 +121,7 @@ def test_lockstep_exhausted_prematurely():
         yield 'STEP_2'
 
     with pytest.raises(LockstepSyncMismatch) as excinfo:
-        with process() as process:
+        with process.lockstep() as process:
             process.step_next('STEP_1')
             process.step_next('STEP_2')
             process.step_next('STEP_3')
@@ -93,7 +144,7 @@ def test_lockstep_exhaust():
         finished = True
 
     assert not finished
-    with process() as process:
+    with process.lockstep() as process:
         assert not finished
         process.step_all()
         assert finished
@@ -107,7 +158,7 @@ def test_lockstep_yielded_values():
         yield 'STEP_2'
         yield 'STEP_3', 3
 
-    with process() as process:
+    with process.lockstep() as process:
         assert process.step_next('STEP_1') == 1
         assert process.step_next('STEP_2') is None
         assert process.step_next('STEP_3') == 3
@@ -122,10 +173,11 @@ def test_lockstep_nested():
     @lockstep
     def external_process():
         yield 'EXTERNAL_1'
-        yield from internal_process()
+        with internal_process.lockstep() as process:
+            yield from process
         yield 'EXTERNAL_2'
 
-    with external_process() as process:
+    with external_process.lockstep() as process:
         process.step_next('EXTERNAL_1')
         process.step_next('INTERNAL_1')
         process.step_next('INTERNAL_2')
@@ -139,7 +191,7 @@ def test_lockstep_step_util():
         yield 'STEP_2'
         yield 'STEP_3'
 
-    with process() as process:
+    with process.lockstep() as process:
         process.step_until('STEP_3')
 
 
@@ -151,7 +203,7 @@ def test_lockstep_step_util_wrong_order():
         yield 'STEP_3'
 
     with pytest.raises(LockstepSyncMismatch) as excinfo:
-        with process() as process:
+        with process.lockstep() as process:
             process.step_until('STEP_2')
             process.step_until('STEP_1')
 
