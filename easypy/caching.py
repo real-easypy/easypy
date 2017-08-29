@@ -47,6 +47,7 @@ class PersistentCache(object):
     """
 
     DELETED = object()
+    NONE = object()
 
     def __init__(self, path, version=0, expiration=60*60*4):
         self.path = path
@@ -95,9 +96,15 @@ class PersistentCache(object):
             else:
                 db[key] = value
 
-    def get(self, key):
-        with self.db_opened() as db:
-            return db[key]
+    def get(self, key, default=NONE):
+        try:
+            with self.db_opened() as db:
+                return db[key]
+        except KeyError:
+            if default is PersistentCache.NONE:
+                raise
+            else:
+                return default
 
     def __call__(self, func=None, *, validator=None):
         if validator and not func:
