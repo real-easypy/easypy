@@ -182,6 +182,15 @@ class MultiException(PException):
             buff.write(("WHITE<<%s>>" % self.message) if color else self.message)
 
         traceback_fmt = "DARK_GRAY@{{{}}}@" if color else "{}"
+
+        # workaround incompatibilty with rpyc, which serializes .actual into an str
+        # instead of a list of exceptions. This makes the string flatten into a long
+        # and incomprehensible text buffer.
+        if hasattr(self, "_remote_tb"):
+            with buff.indent("Remote Traceback:"):
+                buff.write(self._remote_tb)
+            return buff
+
         for exc in self.actual:
             with buff.indent("{.__class__.__qualname__}", exc):
                 if isinstance(exc, self.__class__):
