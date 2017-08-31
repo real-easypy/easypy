@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
+from easypy.concurrency import TeamsLock
 
 
 def test_thread_stacks():
@@ -174,3 +175,46 @@ def disable_test_logged_lock_races():
         for i in range(30):
             stack.enter_context(concurrent(do_lock, idx=i, loop=True, sleep=0))
         sleep(5)
+
+
+def test_teams_lock():
+    lock = TeamsLock('a', 'b')
+
+    result = []
+
+    def team_player(player, team):
+        for _ in range(4):
+            with lock.acquire_for_team(team):
+                result.append((player, team))
+                sleep(0.5)
+
+    players_and_teams = [(1, 'a'), (2, 'a'), (3, 'a'),
+                         (4, 'b'), (5, 'b'), (6, 'b')]
+
+    threads = []
+    for player, team in players_and_teams:
+        threads.append(threading.Thread(target=team_player, args=(player, team)))
+
+    for thread in threads:
+        thread.start()
+
+    for thread in threads:
+        thread.join()
+
+    # Little sanity check - we rely on numbers in the next tests so just to
+    # make sure we really did append everything we wanted
+    for player, team in players_and_teams:
+        assert 4 == sum(1 for p, t in result if p == player and t == team)
+    assert 24 == len(result)
+
+    # Use Python's groupby and not easypy.collections.grouped because we *NEED*
+    # similar items separated by other groups to be collected separately
+    from itertools import groupby
+
+    # Teams are grouped together(so there are only two sequential groups of them)
+    assert 2 == len(list(groupby(t for p, t in result)))
+
+    # Inside each team there is no mutual locking, so the players' actions are
+    # not sequential and there are more than 3 groups per team
+    assert 3 < len(list(groupby(p for p, t in result if t == 'a')))
+    assert 3 < len(list(groupby(p for p, t in result if t == 'b')))
