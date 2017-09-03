@@ -367,9 +367,13 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
         for field in self._fields:
             if field.collection_type is not None:
                 value = field.collection_type(self, field)
-                if field.default is not MANDATORY:
-                    value._set(deepcopy(field.default))
-                field.__set__(self, value)
+                try:
+                    raw_value = kwargs.pop(field.name)
+                except KeyError:
+                    if field.default is not MANDATORY:
+                        value._set(deepcopy(field.default))
+                else:
+                    value._set(raw_value)
             else:
                 try:
                     value = kwargs.pop(field.name)
@@ -378,7 +382,8 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
                         raise MissingField(typed_struct=type(self),
                                            field=field) from None
                     value = deepcopy(field.default)
-                field.__set__(self, value)
+
+            field.__set__(self, value)
         if kwargs:
             raise NotFields(typed_struct=type(self), field_names=', '.join(kwargs.keys()))
 
@@ -392,7 +397,7 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
         self._get_field(name, NotAField).__set__(self, value)
 
     def __repr__(self):
-        return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % pair for pair in self._fields_and_values()))
+        return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % pair for pair in self.items()))
 
     def _repr_pretty_(self, *args, **kwargs):
         from easypy.humanize import ipython_mapping_repr

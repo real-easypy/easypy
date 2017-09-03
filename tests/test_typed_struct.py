@@ -128,8 +128,15 @@ def test_typed_struct_list_fields(use_full_syntax):
             foos = [Foo]
             nums = [int]
 
+    # C'tor
+    bar = Bar(foos=[Foo(a=1), Foo(a=2)], nums=[1, 2, 3])
+    assert bar.foos == [Foo(a=1), Foo(a=2)]
+    assert bar.nums == [1, 2, 3]
+
+    # Default
     bar = Bar()
     assert bar.foos == []
+    assert bar.nums == []
 
     # append()
     bar.foos.append(Foo(a=1))
@@ -209,7 +216,15 @@ def test_typed_struct_dict_fields(use_full_syntax):
             foos = {int: Foo}
             nums = {int: int}
 
+    # C'tor
+    bar = Bar(foos={1: Foo(a=2)}, nums={3: 4})
+    assert bar.foos == {1: Foo(a=2)}
+    assert bar.nums == {3: 4}
+
+    # Default
     bar = Bar()
+    assert bar.foos == {}
+    assert bar.nums == {}
 
     # __setitem__()
 
@@ -294,9 +309,10 @@ def test_typed_struct_bunch_fields(use_full_syntax):
         class Bar(ts.TypedStruct):
             nums = {str: int}
 
-    bar = Bar()
-
     # NOTE: TypedBunch shares most things with TypedDict, so I'm only doing a quick sanity test
+
+    bar = Bar(nums=Bunch(a=0))
+    assert bar.nums.a == 0
 
     bar.nums.a = 1
     bar.nums['b'] = 2
