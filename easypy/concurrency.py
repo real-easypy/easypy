@@ -1202,8 +1202,14 @@ class TagAlongThread(object):
 
         self._iteration_trigger.set()  # Signal that we want an iteration
 
-        self._iterating.wait()  # Wait until an iteration starts
-        self._not_iterating.wait()  # Wait until it finishes
+        while not self._iterating.wait(1):  # Wait until an iteration starts
+            # It is possible that we missed the loop and _iterating was already
+            # cleared. If this is the case, _not_iterating will not be set -
+            # and we can use it as a signal to stop waiting for iteration.
+            if self._not_iterating.is_set():
+                break
+        else:
+            self._not_iterating.wait()  # Wait until it finishes
 
         # To avoid races, copy last exception and result to local variables
         last_exception, last_result = self._last_exception, self._last_result

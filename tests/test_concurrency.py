@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
+from easypy.concurrency import TagAlongThread
 
 
 def test_thread_stacks():
@@ -174,3 +175,24 @@ def disable_test_logged_lock_races():
         for i in range(30):
             stack.enter_context(concurrent(do_lock, idx=i, loop=True, sleep=0))
         sleep(5)
+
+
+def test_tag_along_thread():
+    counter = 0
+
+    def increment_counter():
+        nonlocal counter
+        counter += 1
+        sleep(2)
+
+    tag_along_thread = TagAlongThread(increment_counter, 'counter-incrementer')
+
+    MultiObject(range(8)).call(lambda _: tag_along_thread())
+
+    # The first call should get it's own iteration of the TagAlongThread. The
+    # rest should wait for it to finish, and then all use the second iteration.
+    # We don't have control over the timing inside the threads though, so we
+    # allow fewer or more iterations - as long as an iteration did happen(at
+    # least 1) and that invocations did stack together(less than 5 should do
+    # it)
+    assert 1 <= counter < 5
