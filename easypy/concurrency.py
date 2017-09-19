@@ -760,10 +760,11 @@ def kill_this_process(graceful=False):
 
 class Timebomb(object):
 
-    def __init__(self, timeout, alert_interval=None):
+    def __init__(self, timeout, alert_interval=None, quiet=False):
         self.fuse = threading.Event()  # use this to cancel the timebomb
         self.timeout = timeout
         self.alert_interval = alert_interval
+        self.quiet = quiet
 
     def __enter__(self):
         return self.start()
@@ -782,7 +783,8 @@ class Timebomb(object):
     @raise_in_main_thread()
     def wait_and_kill(self):
         timer = Timer(expiration=self.timeout)
-        _logger.info("Timebomb set - this process will YELLOW<<self-destruct>> in RED<<%r>>...", timer.remain)
+        if not self.quiet:
+            _logger.info("Timebomb set - this process will YELLOW<<self-destruct>> in RED<<%r>>...", timer.remain)
         while not timer.expired:
             if self.alert_interval:
                 _logger.info("Time Elapsed: MAGENTA<<%r>>", timer.elapsed)
