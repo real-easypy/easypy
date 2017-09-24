@@ -50,6 +50,10 @@ def test_indentable_text_buffer():
     buff.render(prune=True, textual=False, width=40, overflow="ignore", file=f)
     assert open("tests/indentable_buffer2.txt", "r").read() == f.getvalue()
 
+    f = StringIO()
+    buff.render(prune=True, textual=False, width=40, edges=False, file=f)
+    assert open("tests/indentable_buffer3.txt", "r").read() == f.getvalue()
+
 
 def test_format_table_with_titles():
     table = [

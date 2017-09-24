@@ -240,7 +240,8 @@ class IndentableTextBuffer():
                     for line in lines:
                         line = prefix + line
                         if len(line) < width:
-                            line = line.ljust(width-1) + (G.SECTION_SEGMENT if edges else "")
+                            if edges:
+                                line = line.ljust(width-1) + G.SECTION_SEGMENT
                         buff.write(line + "\n")
             elif not prune or has_descendents(elem):
                 if depth:
