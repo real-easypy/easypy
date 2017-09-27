@@ -126,7 +126,6 @@ if is_module_patched("threading"):
                 main_thread_frame = frame
                 # the MainThread should be shown in it's "greenlet" version
                 continue
-            _logger.debug("thread - %s: %s", ident, threading._active.get(ident))
             yield ident, frame
 
         for thread in threading.enumerate():
