@@ -50,11 +50,14 @@ def __LOCATION__():
     return "%s @ %s:%s" % (frame.function, frame.filename, frame.lineno)
 
 
-def get_all_subclasses(cls):
+def get_all_subclasses(cls, include_mixins=False):
     _all = cls.__subclasses__() + [rec_subclass
                                    for subclass in cls.__subclasses__()
-                                   for rec_subclass in get_all_subclasses(subclass)]
-    return [subclass for subclass in _all if not hasattr(subclass, "_%s__is_mixin" % subclass.__name__)]
+                                   for rec_subclass in get_all_subclasses(subclass, include_mixins=include_mixins)]
+    if not include_mixins:
+        return [subclass for subclass in _all if not hasattr(subclass, "_%s__is_mixin" % subclass.__name__)]
+    else:
+        return _all
 
 
 def stack_level_to_get_out_of_file():
