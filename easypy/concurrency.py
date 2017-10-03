@@ -88,6 +88,7 @@ else:
 
 
 _logger = logging.getLogger(__name__)
+_verbose_logger = logging.getLogger('%s.locks' % __name__)  # logger for less important logs of RWLock.
 
 
 _disabled = False
@@ -1113,7 +1114,7 @@ class RWLock(object):
             while not self.cond.acquire(timeout=15):
                 _logger.debug("%s - waiting...", self)
             self.owners[_get_my_ident()] += 1
-            _logger.debug("%s - acquired (non-exclusively)", self)
+            _verbose_logger.debug("%s - acquired (non-exclusively)", self)
             return self
         finally:
             self.cond.release()
@@ -1127,33 +1128,36 @@ class RWLock(object):
             if not self.owners[my_ident]:
                 self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
             self.cond.notify()
-            _logger.debug("%s - released (non-exclusive)", self)
+            _verbose_logger.debug("%s - released (non-exclusive)", self)
         finally:
             self.cond.release()
 
     @contextmanager
     def exclusive(self, need_to_wait_message=None):
-        with self.cond:
-            # wait until this thread is the sole owner of this lock
-            while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=15):
-                _check_exiting()
-                if need_to_wait_message:
-                    _logger.info(need_to_wait_message)
-                    need_to_wait_message = None  # only print it once
-                _logger.debug("%s - waiting (for exclusivity)...", self)
-            my_ident = _get_my_ident()
-            self.owners[my_ident] += 1
-            self._lease_timer = Timer()
-            _logger.debug("%s - acquired (exclusively)", self)
-            try:
-                yield
-            finally:
-                _logger.debug('%s - releasing (exclusive)', self)
-                self._lease_timer = None
-                self.owners[my_ident] -= 1
-                if not self.owners[my_ident]:
-                    self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
-                self.cond.notify()
+        while not self.cond.acquire(timeout=15):
+            _logger.debug("%s - waiting...", self)
+
+        # wait until this thread is the sole owner of this lock
+        while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=15):
+            _check_exiting()
+            if need_to_wait_message:
+                _logger.info(need_to_wait_message)
+                need_to_wait_message = None  # only print it once
+            _logger.debug("%s - waiting (for exclusivity)...", self)
+        my_ident = _get_my_ident()
+        self.owners[my_ident] += 1
+        self._lease_timer = Timer()
+        _verbose_logger.debug("%s - acquired (exclusively)", self)
+        try:
+            yield
+        finally:
+            _verbose_logger.debug('%s - releasing (exclusive)', self)
+            self._lease_timer = None
+            self.owners[my_ident] -= 1
+            if not self.owners[my_ident]:
+                self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
+            self.cond.notify()
+            self.cond.release()
 
 
 SoftLock = RWLock
