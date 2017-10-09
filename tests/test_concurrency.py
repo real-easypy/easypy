@@ -9,6 +9,7 @@ from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
 from easypy.concurrency import TagAlongThread
+from easypy.concurrency import SynchorinzedSingleton
 
 
 def test_thread_stacks():
@@ -183,7 +184,7 @@ def test_tag_along_thread():
     def increment_counter():
         nonlocal counter
         counter += 1
-        sleep(2)
+        sleep(0.5)
 
     tag_along_thread = TagAlongThread(increment_counter, 'counter-incrementer')
 
@@ -196,3 +197,13 @@ def test_tag_along_thread():
     # least 1) and that invocations did stack together(less than 5 should do
     # it)
     assert 1 <= counter < 5
+
+
+def test_sync_singleton():
+
+    class S(metaclass=SynchorinzedSingleton):
+        def __init__(self):
+            sleep(1)
+
+    a, b = MultiObject(range(2)).call(lambda _: S())
+    assert a is b
