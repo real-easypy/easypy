@@ -15,6 +15,9 @@ from logging import getLogger
 _logger = getLogger(__name__)
 
 
+UNACCEPTABLE_EXCEPTIONS = (NameError, AttributeError, TypeError, KeyboardInterrupt)
+
+
 class ExponentialBackoff:
 
     def __init__(self, initial=1, maximum=30, base=1.5, iteration=0):
@@ -61,9 +64,9 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
     if unacceptable is None:
         unacceptable = ()
     elif isinstance(unacceptable, tuple):
-        unacceptable += (NameError, AttributeError)
+        unacceptable += UNACCEPTABLE_EXCEPTIONS
     else:
-        unacceptable = (unacceptable, NameError, AttributeError)
+        unacceptable = (unacceptable,) + UNACCEPTABLE_EXCEPTIONS
 
     if isinstance(times, Timer):
         stopper = times  # a timer is a valid stopper
@@ -139,9 +142,9 @@ def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(
     if unacceptable is None:
         unacceptable = ()
     elif isinstance(unacceptable, tuple):
-        unacceptable += (NameError, AttributeError, TypeError)
+        unacceptable += UNACCEPTABLE_EXCEPTIONS
     else:
-        unacceptable = (unacceptable, NameError, AttributeError, TypeError)
+        unacceptable = (unacceptable,) + UNACCEPTABLE_EXCEPTIONS
     try:
         yield
     except unacceptable as exc:
