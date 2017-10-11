@@ -9,7 +9,7 @@ from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
 from easypy.concurrency import TagAlongThread
-from easypy.concurrency import SynchorinzedSingleton
+from easypy.concurrency import SynchronizedSingleton
 
 
 def test_thread_stacks():
@@ -201,7 +201,7 @@ def test_tag_along_thread():
 
 def test_sync_singleton():
 
-    class S(metaclass=SynchorinzedSingleton):
+    class S(metaclass=SynchronizedSingleton):
         def __init__(self):
             sleep(1)
 

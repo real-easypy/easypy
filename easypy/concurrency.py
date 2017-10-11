@@ -1254,7 +1254,7 @@ class synchronized_on_first_call():
             return ret
 
 
-class SynchorinzedSingleton(type):
+class SynchronizedSingleton(type):
     _instances = {}
 
     @synchronized
