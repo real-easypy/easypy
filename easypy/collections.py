@@ -588,7 +588,7 @@ def separate(sequence, key=None):
 
 
 def iterable(obj):
-    return isinstance(obj, collections.Iterable) and not isinstance(obj, (str, bytes))
+    return isinstance(obj, collections.Iterable) and not isinstance(obj, (str, bytes, dict))
 
 
 def ilistify(obj):
