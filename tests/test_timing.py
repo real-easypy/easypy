@@ -3,6 +3,7 @@ import pytest
 
 from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException
 from easypy.bunch import Bunch
+from easypy.concurrency import concurrent
 
 
 # Temporary tests for iter_wait() warnings
@@ -96,3 +97,16 @@ def test_wait_long_predicate():
             wait(3)
 
     wait(2, pred)
+
+
+def test_wait_with_callable_message():
+    val = ['FOO']
+
+    with pytest.raises(TimeoutException) as e:
+        def pred():
+            val[0] = 'BAR'
+            return False
+        wait(pred=pred, timeout=1, message=lambda: 'val is %s' % val[0])
+
+    assert val[0] == 'BAR'
+    assert e.value.message == 'val is BAR'

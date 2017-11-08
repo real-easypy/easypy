@@ -285,6 +285,8 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
             if expired:
                 duration = l_timer.stop()
                 if throw:
+                    if callable(message):
+                        message = message()
                     raise TimeoutException(message, duration=duration)
                 yield None
                 return
