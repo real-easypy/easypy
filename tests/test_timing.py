@@ -3,45 +3,32 @@ import pytest
 
 from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException
 from easypy.bunch import Bunch
-from easypy.concurrency import concurrent
 
 
-# Temporary tests for iter_wait() warnings
-def test_wait_warning():
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+def test_wait_exception():
+    with pytest.raises(Exception, match=".*`message` is required.*"):
         wait(0.1, pred=lambda: True)
-        wait(0.1)
-        wait(0.1, pred=lambda: True, message='message')
-        wait(0.1, pred=lambda: True, message=False)
-        repeat(0.1, callback=lambda: True)
 
-        # Only the first call should throw a DeprecationWarning
-        assert len(w) == 1
-        assert issubclass(w[-1].category, DeprecationWarning)
-        assert "wait()" in str(w[-1].message)
+    wait(0.1)
+    wait(0.1, pred=lambda: True, message='message')
+    wait(0.1, pred=lambda: True, message=False)
+    repeat(0.1, callback=lambda: True)
 
 
 def test_iter_wait_warning():
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
+    with pytest.raises(Exception, match=".*`message` is required.*"):
         for _ in iter_wait(0.1, pred=lambda: True):
             pass
 
-        no_warn_iters = [
-            iter_wait(0.1),
-            iter_wait(0.1, pred=lambda: True, message='message'),
-            iter_wait(0.1, pred=lambda: True, throw=False),
-            iter_wait(0.1, pred=lambda: True, message=False)
-        ]
-        for i in no_warn_iters:
-            for _ in i:
-                pass
-
-        # Only the first call should throw a DeprecationWarning
-        assert len(w) == 1
-        assert issubclass(w[-1].category, DeprecationWarning)
-        assert "wait()" in str(w[-1].message)
+    no_warn_iters = [
+        iter_wait(0.1),
+        iter_wait(0.1, pred=lambda: True, message='message'),
+        iter_wait(0.1, pred=lambda: True, throw=False),
+        iter_wait(0.1, pred=lambda: True, message=False)
+    ]
+    for i in no_warn_iters:
+        for _ in i:
+            pass
 
 
 def test_iter_wait_progress_inbetween_sleep():
@@ -92,11 +79,11 @@ def test_wait_long_predicate():
 
     def pred():
         try:
-            return 1 < t.duration
+            return 0.1 < t.duration
         finally:
-            wait(3)
+            wait(0.3)
 
-    wait(2, pred)
+    wait(0.2, pred, message=False)
 
 
 def test_wait_with_callable_message():
@@ -106,7 +93,7 @@ def test_wait_with_callable_message():
         def pred():
             val[0] = 'BAR'
             return False
-        wait(pred=pred, timeout=1, message=lambda: 'val is %s' % val[0])
+        wait(pred=pred, timeout=.1, message=lambda: 'val is %s' % val[0])
 
     assert val[0] == 'BAR'
     assert e.value.message == 'val is BAR'

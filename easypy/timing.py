@@ -206,16 +206,13 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
               progressbar=True, throw=True, allow_interruption=False, caption=None):
 
     # Calling wait() with a predicate and no message is very not informative
-    # and is pending deprecation (throw=False or message=False disables this behavior)
+    # (throw=False or message=False disables this behavior)
     if message is False:
         message = None
     elif throw and pred and not message:
-        stack_level = stack_level_to_get_out_of_file()
-        warnings.warn(
+        raise Exception(
             "Function iter_wait()'s parameter `message` is required if "
             "`pred` is passed",
-            category=DeprecationWarning,
-            stacklevel=stack_level
         )
 
     if timeout is None:
