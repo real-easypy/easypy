@@ -135,6 +135,11 @@ class Bunch(dict):
         import yaml
         return cls.from_dict(yaml.load(d))
 
+    @classmethod
+    def from_xml(cls, d):
+        import xmltodict
+        return cls.from_dict(xmltodict.parse(d))
+
     def __dir__(self):
         members = set(k for k in self if isinstance(k, str) and (k[0] == "_" or k.replace("_", "").isalnum()))
         members.update(dict.__dir__(self))
