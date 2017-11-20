@@ -4,6 +4,7 @@ from functools import partial, wraps
 from contextlib import contextmanager
 from easypy.timing import Timer
 from easypy.units import Duration
+from easypy.decorations import kwargs_resilient
 import random
 import time
 
@@ -82,9 +83,14 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
     if not pred:
         pred = lambda exc: True
 
+    func = kwargs_resilient(func)  # so that we can pass it the 'retries' param
+    retries = 0
     while True:
+        retries += 1
+        # so that we don't inadvertantly override the user's param
+        kw = dict(dict(retries_so_far=retries), **kwargs)
         try:
-            return func(*args, **kwargs)
+            return func(*args, **kw)
         except unacceptable as exc:
             raise
         except acceptable as exc:
