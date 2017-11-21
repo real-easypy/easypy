@@ -83,7 +83,8 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
     if not pred:
         pred = lambda exc: True
 
-    func = kwargs_resilient(func)  # so that we can pass it the 'retries' param
+    # pass retries_so_far only if func explicitly asked for it
+    func = kwargs_resilient(func, strict=True)
     retries = 0
     while True:
         retries += 1

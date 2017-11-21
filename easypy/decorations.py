@@ -116,19 +116,18 @@ def singleton_contextmanager_method(func):
     return inner
 
 
-def kwargs_as_needed(func):
+def kwargs_as_needed(func, strict=False):
     """
     If function does not specify **kwargs, pass only params which it can accept
     """
-
-    spec = inspect.getfullargspec(getattr(func, '__wrapped__', func))
+    spec = inspect.getfullargspec(inspect.unwrap(func))
     acceptable_args = set(spec.args or ())
     if isinstance(func, MethodType):
         acceptable_args -= {spec.args[0]}
 
     @wraps(func)
     def inner(*args, **kwargs):
-        if spec.varkw is None:
+        if strict or spec.varkw is None:
             kwargs = intersected_dict(kwargs, acceptable_args)
         return func(*args, **kwargs)
 
