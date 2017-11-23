@@ -98,6 +98,10 @@ def parse_isoformat(source):
         return timestamp
 
 
-short_utc_fmt = lambda dt: "%s,%02dZ" % (dt.strftime("%T"), dt.microsecond//10000)
+def short_utc_fmt(dt):
+    tzname = dt.tzname() or ''
+    if tzname.startswith('UTC'):
+        tzname = tzname[3:] or 'Z'
+    return "%s,%02d%s" % (dt.strftime("%T"), dt.microsecond // 10000, tzname)
 
 utc_ts = lambda: int(TimeZone.utc.now().timestamp())
