@@ -367,7 +367,7 @@ def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0,
 
     futures = Futures()
     for args, ctx in zip(params, log_contexts):
-        future = executor.submit(_run_with_exception_logging, func, args, {}, ctx)
+        future = executor.submit(_run_with_exception_logging, func, args, kw, ctx)
         future.ctx = ctx
         future.funcname = funcname
         futures.append(future)
