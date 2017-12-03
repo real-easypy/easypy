@@ -2,6 +2,7 @@ import os
 import time
 from logging import getLogger
 from uuid import uuid4
+import random
 
 import pytest
 
@@ -19,35 +20,36 @@ def test_timecache():
     def get_ts():
         return ts
 
-    @timecache(expiration=1, get_ts_func=get_ts)
-    def inc(k):
+    @timecache(expiration=1, get_ts_func=get_ts, ignored_keywords="x")
+    def inc(k, x):
+        x += 1
         data[k] += 1
 
     assert data.a == data.b == 0
-    inc('a')
+    inc('a', x=random.random())
     assert (data.a, data.b) == (1, 0)
 
-    inc('a')
+    inc('a', x=random.random())
     assert (data.a, data.b) == (1, 0)
 
     ts += 1
-    inc('a')
+    inc('a', x=random.random())
     assert (data.a, data.b) == (2, 0)
 
-    inc('b')
+    inc('b', x=random.random())
     assert (data.a, data.b) == (2, 1)
 
-    inc('b')
+    inc('b', x=random.random())
     assert (data.a, data.b) == (2, 1)
 
     ts += 1
-    inc('b')
+    inc('b', x=random.random())
     assert (data.a, data.b) == (2, 2)
 
     inc.cache_clear()
-    inc('a')
+    inc('a', x=random.random())
     assert (data.a, data.b) == (3, 2)
-    inc('b')
+    inc('b', x=random.random())
     assert (data.a, data.b) == (3, 3)
 
 
@@ -88,21 +90,23 @@ def test_persistent_cache(persistent_cache_path):
     class UnnecessaryFunctionCall(Exception):
         pass
 
-    @ps(validator=lambda _: use_cache)
-    def cached_func():
+    ps = PersistentCache(persistent_cache_path, version=2, ignored_keywords="x")
+
+    @ps(validator=lambda _, **__: use_cache)
+    def cached_func(x):
         nonlocal value_generated
         if value_generated:
             raise UnnecessaryFunctionCall()
         value_generated = True
         return True
 
-    assert cached_func() is cached_func()
+    assert cached_func(x=random.random()) is cached_func(x=random.random())
     assert value_generated
 
     # Testing validator
     use_cache = False
     with pytest.raises(UnnecessaryFunctionCall):
-        cached_func()
+        cached_func(x=random.random())
 
     # Removing data
     ps.clear()
@@ -113,3 +117,23 @@ def test_persistent_cache(persistent_cache_path):
     ps.set(TEST_KEY, TEST_VALUE)
     ps.set("_PersistentCacheSignature", [3, time.time() - 2 * DAY])
     assert ps.get(TEST_KEY, None) is None, "Database was not cleaned up on expiration"
+
+
+def test_locking_timecache():
+    from easypy.concurrency import MultiObject
+
+    # Cached func should be called only once
+    value_generated = False
+
+    class UnnecessaryFunctionCall(Exception):
+        pass
+
+    @timecache(ignored_keywords='x')
+    def test(x):
+        nonlocal value_generated
+        if value_generated:
+            raise UnnecessaryFunctionCall()
+        value_generated = True
+        return True
+
+    MultiObject(range(10)).call(lambda x: test(x=x))

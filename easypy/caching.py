@@ -8,7 +8,8 @@ from functools import wraps, _make_key, partial, lru_cache
 from threading import RLock
 from logging import getLogger
 from .resilience import retrying
-from .decorations import kwargs_resilient
+from .decorations import kwargs_resilient, parametrizeable_decorator
+from .collections import ilistify
 
 
 _logger = getLogger(__name__)
@@ -49,11 +50,12 @@ class PersistentCache(object):
     DELETED = object()
     NONE = object()
 
-    def __init__(self, path, version=0, expiration=60*60*4):
+    def __init__(self, path, version=0, expiration=60*60*4, ignored_keywords=None):
         self.path = path
         self.version = version
         self.expiration = expiration
         self.lock = RLock()
+        self.ignored_keywords = set(ilistify(ignored_keywords)) if ignored_keywords else set()
 
     @contextmanager
     def db_opened(self, lock=False):
@@ -114,8 +116,9 @@ class PersistentCache(object):
 
         @wraps(func)
         def inner(*args, **kwargs):
+            key_kwargs = {k: v for k, v in kwargs.items() if k not in self.ignored_keywords}
             key = str(_make_key(
-                (func.__module__, func.__qualname__,) + args, kwargs,
+                (func.__module__, func.__qualname__,) + args, key_kwargs,
                 typed=False, kwd_mark=("_KWD_MARK_",)))
 
             try:
@@ -142,7 +145,7 @@ class PersistentCache(object):
             db.clear()
 
 
-def locking_lru_cache(maxsize=128, typed=False):
+def locking_lru_cache(maxsize=128, typed=False):  # can't implement ignored_keywords because we use python's lru_cache...
     "An lru cache with a lock, to prevent concurrent invocations and allow reusing from cache"
 
     def deco(func):
@@ -169,7 +172,7 @@ def locking_lru_cache(maxsize=128, typed=False):
     return deco
 
 
-def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False):
+def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None):
     """
     An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
 
@@ -179,6 +182,7 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
 
     NOT_FOUND = object()
     NOT_CACHED = NOT_FOUND, 0
+    ignored_keywords = set(ilistify(ignored_keywords)) if ignored_keywords else set()
 
     def deco(func):
         cache = {}
@@ -188,7 +192,8 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
 
         @wraps(func)
         def inner(*args, **kwargs):
-            key = _make_key(args, kwargs, typed=typed)
+            key_kwargs = {k: v for k, v in kwargs.items() if k not in ignored_keywords}
+            key = _make_key(args, key_kwargs, typed=typed)
             with main_lock:
                 key_lock = keyed_locks[key]
             with key_lock:
@@ -222,6 +227,11 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
         return inner
 
     return deco
+
+
+@parametrizeable_decorator
+def locking_cache(func=None, typed=False, log_recalculation=False, ignored_keywords=False):
+    return timecache(typed=typed, log_recalculation=log_recalculation, ignored_keywords=ignored_keywords)(func)
 
 
 class cached_property(object):
