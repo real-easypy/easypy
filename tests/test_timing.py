@@ -97,3 +97,24 @@ def test_wait_with_callable_message():
 
     assert val[0] == 'BAR'
     assert e.value.message == 'val is BAR'
+
+
+@pytest.mark.parametrize("multipred", [False, True])
+def test_wait_do_something_on_final_attempt(multipred):
+    data = []
+
+    def pred(is_final_attempt):
+        if is_final_attempt:
+            data.append('final')
+        data.append('regular')
+        return False
+
+    if multipred:
+        pred = [pred]
+
+    with pytest.raises(TimeoutException):
+        wait(pred=pred, timeout=.5, sleep=.1, message=False)
+
+    assert all(iteration == 'regular' for iteration in data[:-2])
+    assert data[-2] == 'final'
+    assert data[-1] == 'regular'
