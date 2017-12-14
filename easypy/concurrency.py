@@ -252,9 +252,10 @@ class Futures(list):
     def executor(cls, workers=MAX_THREAD_POOL_SIZE, ctx={}):
         futures = cls()
         with ThreadPoolExecutor(workers) as executor:
-            def submit(func, *args, **kwargs):
-                future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
-                future.ctx = ctx
+            def submit(func, *args, log_ctx={}, **kwargs):
+                _ctx = dict(ctx, **log_ctx)
+                future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
+                future.ctx = _ctx
                 future.funcname = _get_func_name(func)
                 futures.append(future)
                 return future
