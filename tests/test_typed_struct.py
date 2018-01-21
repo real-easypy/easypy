@@ -453,3 +453,52 @@ def test_typed_struct_preprocess(use_helper_methods):
 
     with pytest.raises(Error2):
         Foo(a='32')
+
+
+def test_typed_struct_collection_type_verification():
+    """
+    To prevent things like this:
+
+        In [1]: from easypy import typed_struct as ts
+
+        In [2]: class Foo(ts.TypedStruct):
+           ...:     bars = [str]
+           ...:
+
+        In [3]: Foo(bars='hello')
+        Out[3]:
+        Foo(bars=['h',
+                  'e',
+                  'l',
+                  'l',
+                  'o'])
+    """
+
+    class Foo(ts.TypedStruct):
+        a = ts.Field([str])
+        b = ts.Field({str: str})
+        c = ts.Field({int: str})
+
+    # Test list:
+
+    assert Foo(a=['1']).a == ['1']
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(a='2')
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(a={'3': '4'})
+
+    # Test dict:
+
+    assert Foo(b={'5': '6'}).b == {'5': '6'}
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(b='8')
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(b=['9'])
+
+    # Test Bunch:
+
+    assert Foo(c={10: '11'}).c == {10: '11'}
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(c='13')
+    with pytest.raises(ts.FieldCollectionTypeMismatch):
+        Foo(c=['14'])

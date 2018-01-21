@@ -2,7 +2,7 @@ from copy import deepcopy
 
 from .exceptions import TException
 from .tokens import MANDATORY
-from .collections import ListCollection, PythonOrderedDict
+from .collections import ListCollection, PythonOrderedDict, iterable
 from .bunch import Bunch, bunchify
 
 
@@ -32,6 +32,10 @@ class FieldTypeMismatch(TException, TypeError):
 
 class FieldKeyTypeMismatch(TException, TypeError):
     template = 'keys of {field.name} are {expected_type}, not {received_type}'
+
+
+class FieldCollectionTypeMismatch(TException, TypeError):
+    template = '{field.name} is {field.collection_type.__name__} - not {received_type.__name__}'
 
 
 class Field(object):
@@ -201,6 +205,8 @@ class TypedCollection(object):
 
 class TypedList(TypedCollection, ListCollection):
     def _set(self, values):
+        if not iterable(values):
+            raise FieldCollectionTypeMismatch(field=self._field, received_type=type(values))
         # Must eagerly verify them all before clearing the list
         values = [self._field._process_new_value(value) for value in values]
         self.clear()
@@ -241,6 +247,8 @@ class TypedList(TypedCollection, ListCollection):
 
 class TypedDict(TypedCollection, dict):
     def _set(self, values):
+        if not isinstance(values, dict):
+            raise FieldCollectionTypeMismatch(field=self._field, received_type=type(values))
         # Must eagerly verify them all before clearing the list
         values = {self._process_new_key(k): self._field._process_new_value(v) for k, v in values.items()}
         self.clear()
