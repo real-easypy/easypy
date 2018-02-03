@@ -602,7 +602,7 @@ class MultiObject(object, metaclass=MultiObjectMeta):
     CONCESTOR = object
 
     def __init__(self, items=None, log_ctx=None, workers=None, initial_log_interval=None):
-        self._items = list(items) if items else []
+        self._items = tuple(items) if items else ()
         self._workers = workers
         self._initial_log_interval = initial_log_interval
         cstr = self.CONCESTOR
@@ -610,15 +610,15 @@ class MultiObject(object, metaclass=MultiObjectMeta):
             # override the given log_ctx if the new items have it
             # some objects (Plumbum Cmd) are expensive to just get the attribute, so we require it
             # on the base class
-            self._log_ctx = [item._multiobject_log_ctx for item in self._items]
+            self._log_ctx = tuple(item._multiobject_log_ctx for item in self._items)
         elif callable(log_ctx):
-            self._log_ctx = list(map(log_ctx, self._items))
+            self._log_ctx = tuple(map(log_ctx, self._items))
         elif log_ctx:
-            self._log_ctx = list(log_ctx)
+            self._log_ctx = tuple(log_ctx)
         elif issubclass(cstr, str):
-            self._log_ctx = [dict(context="%s" % item) for item in self._items]
+            self._log_ctx = tuple(dict(context="%s" % item) for item in self._items)
         else:
-            self._log_ctx = [dict(context="%s<M%03d>" % (cstr.__name__, i)) for i, item in enumerate(self._items)]
+            self._log_ctx = tuple(dict(context="%s<M%03d>" % (cstr.__name__, i)) for i, item in enumerate(self._items))
 
         if self._workers is None and hasattr(cstr, '_multiobject_workers'):
             _workers = cstr._multiobject_workers
@@ -632,7 +632,11 @@ class MultiObject(object, metaclass=MultiObjectMeta):
 
     @property
     def L(self):
-        return list(self)
+        return list(self._items)
+
+    @property
+    def T(self):
+        return self._items
 
     @property
     def C(self):
@@ -671,62 +675,19 @@ class MultiObject(object, metaclass=MultiObjectMeta):
         return self._new(ret)
 
     def __dir__(self):
-        return sorted(set.intersection(*(set(dir(obj)) for obj in self)))
+        return sorted(set.intersection(*(set(dir(obj)) for obj in self)).union(super().__dir__()))
+
     trait_names = __dir__
 
     def __iter__(self):
         return iter(self._items)
 
-    def __getitem__(self, key):
-        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
-        ret = self._items[key]
-        if isinstance(key, slice):
-            return self._new(ret, self._log_ctx[key])
-        else:
-            return ret
-
-    # === Mutation =====
-    # TODO: ensure the relationship between items/workers/logctx
-    def __delitem__(self, key):
-        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
-        del self._log_ctx[key]
-        del self._items[key]
-
     def __len__(self):
         return len(self._items)
 
-    def __add__(self, other):
-        return self.__class__(chain(self, other))
-
-    def __iadd__(self, other):
-        self._log_ctx.extend(other._log_ctx)
-        return self._items.extend(other)
-
-    def sort(self, *args, **kwargs):
-        order = {id(obj): log_ctx for (obj, log_ctx) in zip(self._items, self._log_ctx)}
-        ret = self._items.sort(*args, **kwargs)
-        self._log_ctx[:] = [order[id(obj)] for obj in self._items]
-        return ret
-
-    def append(self, item, *, log_ctx=None):
-        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
-
-        self._log_ctx.append(log_ctx)
-        return self._items.append(item)
-
-    def insert(self, pos, item, *, log_ctx=None):
-        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
-
-        self._log_ctx.insert(pos, log_ctx)
-        return self._items.insert(pos, item)
-
-    def pop(self, *args):
-        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
-
-        self._log_ctx.pop(*args)
-        return self._items.pop(*args)
-
     # ================
+    def __getitem__(self, key):
+        return self.call(lambda i: i[key])
 
     def _new(self, items=None, ctxs=None, workers=None, initial_log_interval=None):
         return MultiObject(
@@ -750,6 +711,7 @@ class MultiObject(object, metaclass=MultiObjectMeta):
             log_contexts=self._log_ctx,
             workers=self._workers,
             initial_log_interval=initial_log_interval), initial_log_interval=initial_log_interval)
+
     each = call
 
     def filter(self, pred):
@@ -757,7 +719,7 @@ class MultiObject(object, metaclass=MultiObjectMeta):
             pred = bool
         filtering = self.call(pred)
         filtered = [t for (*t, passed) in zip(self, self._log_ctx, filtering) if passed]
-        return self._new(*(zip(*filtered) if filtered else ((),())))
+        return self._new(*(zip(*filtered) if filtered else ((), ())))
 
     def chain(self):
         "Chain the iterables contained by this ``MultiObject``"

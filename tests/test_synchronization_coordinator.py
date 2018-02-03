@@ -232,10 +232,11 @@ def test_synchronization_coordinator_with_multiobject_method():
 
     mo = MultiObject(Foo(i) for i in range(3))
 
-    assert mo.foo().L == [
+    assert mo.foo().T == (
         (0, [0, 1, 2]),
         (1, [0, 1, 2]),
-        (2, [0, 1, 2])]
+        (2, [0, 1, 2]),
+        )
 
 
 def test_synchronization_coordinator_timeout():
