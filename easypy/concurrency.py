@@ -123,6 +123,10 @@ class LockLeaseExpired(TException):
     template = "Lock Lease Expired - thread is holding this lock for too long"
 
 
+class WaitAborted(TException):
+    template = "Aborting wait - function raised an exception"
+
+
 _exiting = False  # we use this to break out of lock-acquisition loops
 
 
@@ -1268,3 +1272,61 @@ class SynchronizedSingleton(type):
     @synchronized
     def get_instance(cls):
         return cls._instances.get(cls)
+
+
+def awaitable(func):
+    """
+    Make the function usable with `@waits_for`.
+    Use 'func.awaitable_reset()' to reset between calls.
+    """
+
+    func.done_event = threading.Event()
+    func.done_event._reenterance = 0
+
+    @wraps(func)
+    def inner(*args, **kwargs):
+        if func.done_event._reenterance == 0:
+            func.done_event.clear()
+            func.done_event.exc = None
+
+        func.done_event._reenterance += 1
+
+        try:
+            return func(*args, **kwargs)
+        except BaseException as exc:
+            func.done_event.exc = exc
+            raise
+        finally:
+            func.done_event._reenterance -= 1
+            if func.done_event._reenterance == 0:
+                func.done_event.set()
+
+    inner.awaitable_reset = func.done_event.clear
+    return inner
+
+
+def waits_for(*other_funcs):
+    """
+    Wait for other functions to complete before proceeding with this function.
+    Other functions must be decorated with `@awaitable`.
+    """
+
+    events = []
+    for f in other_funcs:
+        try:
+            events.append(f.done_event)
+        except AttributeError:
+            raise ValueError("%s was not decorated with @awaitable", f)
+
+    def deco(func):
+        @wraps(func)
+        def inner(*args, **kwargs):
+            for event in events:
+                event.wait()
+                if event.exc:
+                    raise WaitAborted(func=func, exc=event.exc)
+
+            return func(*args, **kwargs)
+        return inner
+
+    return deco

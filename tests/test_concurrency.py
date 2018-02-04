@@ -10,6 +10,7 @@ from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
 from easypy.concurrency import TagAlongThread
 from easypy.concurrency import SynchronizedSingleton
+from easypy.concurrency import awaitable, waits_for, WaitAborted
 
 
 def test_thread_stacks():
@@ -207,3 +208,130 @@ def test_sync_singleton():
 
     a, b = MultiObject(range(2)).call(lambda _: S())
     assert a is b
+
+
+def test_awaitables():
+
+    results = []
+
+    @awaitable
+    def f1():
+        nonlocal results
+        results = []
+        sleep(.02)
+        results.append(1)
+        return 1
+
+    @awaitable
+    @waits_for(f1)
+    def f2():
+        sleep(.01)
+        results.append(2)
+        return 2
+
+    @waits_for(f1, f2)
+    def f3():
+        results.append(3)
+        return 3
+
+    ret = MultiObject([f1, f2, f3])()
+    assert list(ret) == [1, 2, 3]
+    assert results == [1, 2, 3]
+
+    ret = MultiObject([f1, f2, f3])()
+    assert list(ret) == [1, 2, 3]
+    assert results == [3, 2, 1]
+
+    MultiObject([f1, f2]).awaitable_reset()
+    ret = MultiObject([f1, f2, f3])()
+    assert list(ret) == [1, 2, 3]
+    assert results == [1, 2, 3]
+
+
+def test_awaitables_chain():
+
+    results = []
+
+    @awaitable
+    def f1():
+        sleep(.02)
+        results.append(1)
+        return 1
+
+    @awaitable
+    @waits_for(f1)
+    def f2():
+        sleep(.01)
+        results.append(2)
+        return 2
+
+    @waits_for(f2)
+    def f3():
+        results.append(3)
+        return 3
+
+    ret = MultiObject([f1, f2, f3])()
+    assert list(ret) == [1, 2, 3]
+
+    assert results == [1, 2, 3]
+
+
+def test_awaitables_exceptions():
+
+    results = []
+
+    @awaitable
+    def f1():
+        sleep(.02)
+        results.append(1)
+        1/0
+
+    @awaitable
+    @waits_for(f1)
+    def f2():
+        sleep(.01)
+        results.append(2)
+        return 2
+
+    @waits_for(f2)
+    def f3():
+        results.append(3)
+        return 3
+
+    with pytest.raises(MultiException) as info:
+        MultiObject([f1, f2, f3])()
+
+    assert results == [1]
+    assert info.value.count == 3
+    assert [type(exc) for exc in info.value.actual] == [ZeroDivisionError, WaitAborted, WaitAborted]
+
+
+def test_awaitables_reenterance():
+
+    results = []
+
+    @awaitable
+    def f1(x):
+        sleep(.03)
+        if x:
+            ret = f1(x-1)
+            results.append(x)
+            sleep(.03)
+            return ret
+        results.append(x)
+        return 1
+
+    @waits_for(f1)
+    def f2(x):
+        sleep(0)
+        if x:
+            ret = f2(x-1)
+            results.append(10+x)
+            return ret
+        results.append(10+x)
+        return 2
+
+    ret = MultiObject([f1, f2])(x=3)
+
+    assert results == [0, 1, 2, 3, 10, 11, 12, 13]
+    assert list(ret) == [1, 2]
