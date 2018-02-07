@@ -12,7 +12,7 @@ from .units import Duration
 from .exceptions import PException
 from .humanize import time_duration  # due to interference with jrpc
 from .misc import stack_level_to_get_out_of_file
-
+from .decorations import kwargs_resilient
 
 IS_A_TTY = sys.stdout.isatty()
 
@@ -180,12 +180,12 @@ class CachingPredicate():
     def __init__(self, pred):
         self.pred = pred
 
-    def __call__(self):
+    def __call__(self, *args, **kwargs):
         try:
             return self.result
         except AttributeError:
             pass
-        ret = self.pred()
+        ret = self.pred(*args, **kwargs)
         if ret in (False, None):
             return ret
         self.result = ret
@@ -195,8 +195,8 @@ class CachingPredicate():
 def make_multipred(preds):
     preds = list(map(CachingPredicate, preds))
 
-    def pred():
-        results = [pred() for pred in preds]
+    def pred(*args, **kwargs):
+        results = [pred(*args, **kwargs) for pred in preds]
         if all(results):
             return results
     return pred
@@ -230,11 +230,13 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
 
     if pred:
         if hasattr(pred, "__iter__"):
-            pred = make_multipred(pred)
+            pred = make_multipred(map(kwargs_resilient, pred))
+        else:
+            pred = kwargs_resilient(pred)
         if not caption:
             caption = "on predicate (%s)" % pred
     else:
-        pred = lambda: False
+        pred = lambda **kwargs: False
         throw = False
 
     if caption:
@@ -275,7 +277,7 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
         while True:
             s_timer = Timer()
             expired = l_timer.expired
-            ret = pred()
+            ret = pred(is_final_attempt=bool(expired))
             if ret not in (None, False):
                 yield ret
                 return
