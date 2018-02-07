@@ -366,6 +366,20 @@ def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0,
 
     funcname = _get_func_name(func)
 
+    try:
+        signature = inspect.signature(func)
+    except ValueError:
+        # In Python 3.5+, inspect.signature returns this for built-in types
+        pass
+    else:
+        if '_sync' in signature.parameters and '_sync' not in kw:
+            assert len(params) <= executor._max_workers, 'SynchronizationCoordinator with %s tasks but only %s workers' % (
+                len(params), executor._max_workers)
+            synchronization_coordinator = SynchronizationCoordinator(len(params))
+            kw['_sync'] = synchronization_coordinator
+
+            func = synchronization_coordinator._abandon_when_done(func)
+
     futures = Futures()
     for args, ctx in zip(params, log_contexts):
         future = executor.submit(_run_with_exception_logging, func, args, kw, ctx)
@@ -502,8 +516,9 @@ class MultiObject(object):
             if not callable(obj):
                 raise Exception("%s is not callable" % obj)
 
-        def do_it(obj):
-            return obj(*args, **kwargs)
+        def do_it(obj, **more_kwargs):
+            more_kwargs.update(kwargs)
+            return obj(*args, **more_kwargs)
 
         if all(hasattr(obj, "__qualname__") for obj in self):
             do_it = wraps(obj)(do_it)
@@ -1268,3 +1283,174 @@ class SynchronizedSingleton(type):
     @synchronized
     def get_instance(cls):
         return cls._instances.get(cls)
+
+
+class SynchronizationCoordinatorWrongWait(TException):
+    template = "Task is waiting on {this_file}:{this_line} instead of {others_file}:{others_line}"
+
+
+class SynchronizationCoordinator(object):
+    """
+    Synchronization helper for functions that run concurrently.
+
+        sync = SynchronizationCoordinator(5)
+
+        def foo(a):
+            sync.wait_for_everyone()
+            sync.collect_and_call_once(a, lambda a_values: print(a))
+
+        MultiObject(range(5)).call(foo)
+
+    When MultiObject/concurrent_map/sync runs a function with a _sync=SYNC
+    argument, it will replace it with a proper SynchronizationCoordinator instance:
+
+        def foo(a, _sync=SYNC):
+            _sync.wait_for_everyone()
+            _sync.collect_and_call_once(a, lambda a_values: print(a))
+
+        MultiObject(range(5)).call(foo)
+    """
+
+    def __init__(self, num_participants):
+        self.num_participants = num_participants
+        self._reset_barrier()
+        self._lock = threading.Lock()
+        self._call_once_collected_param = []
+        self._call_once_function = None
+        self._call_once_result = None
+        self._call_once_raised_exception = False
+
+        self._wait_context = None
+
+    def _reset_barrier(self):
+        self.barrier = threading.Barrier(self.num_participants, action=self._post_barrier_action)
+
+    def _post_barrier_action(self):
+        if self.num_participants != self.barrier.parties:
+            self._reset_barrier()
+        self._wait_context = None
+
+        if self._call_once_function:
+            call_once_function, self._call_once_function = self._call_once_function, None
+            collected_param, self._call_once_collected_param = self._call_once_collected_param, []
+
+            try:
+                self._call_once_result = call_once_function(collected_param)
+                self._call_once_raised_exception = False
+            except BaseException as e:
+                self._call_once_result = e
+                self._call_once_raised_exception = True
+
+    def wait_for_everyone(self, timeout=HOUR):
+        """
+        Block until all threads that participate in the synchronization coordinator reach this point.
+
+        Fail if one of the threads is waiting at a different point
+
+            def foo(a, _sync=SYNC):
+                sleep(a)
+                # Each thread will reach this point at a different time
+                _sync.wait_for_everyone()
+                # All threads will reach this point together
+
+            MultiObject(range(5)).call(foo)
+        """
+        self._verify_waiting_on_same_line()
+        self.barrier.wait(timeout=timeout)
+
+    def abandon(self):
+        """
+        Stop participating in this synchronization coordinator.
+
+        Note: when using with MultiObject/concurrent_map/async and _sync=SYNC, this
+        is called automatically when a thread terminates on return or on exception.
+        """
+        with self._lock:
+            self.num_participants -= 1
+        self.barrier.wait()
+
+    def collect_and_call_once(self, param, func, *, timeout=HOUR):
+        """
+        Call a function from one thread, with parameters collected from all threads.
+
+            def foo(a, _sync=SYNC):
+                result = _sync.collect_and_call_once(a, lambda a_values: set(a_values))
+                assert result == {0, 1, 2, 3, 4}
+
+            MultiObject(range(5)).call(foo)
+        """
+        self._verify_waiting_on_same_line()
+
+        self._call_once_collected_param.append(param)
+        self._call_once_function = func  # this will be set multiple times - but there is no race so that's OK
+
+        self.barrier.wait(timeout=timeout)
+
+        if self._call_once_raised_exception:
+            raise self._call_once_result
+        else:
+            return self._call_once_result
+
+    def _verify_waiting_on_same_line(self):
+        frame = inspect.currentframe().f_back.f_back
+        wait_context = (frame.f_code, frame.f_lineno, frame.f_lasti)
+
+        existing_wait_context = self._wait_context
+        if existing_wait_context is None:
+            with self._lock:
+                # Check again inside the lock, in case it was changed
+                existing_wait_context = self._wait_context
+                if existing_wait_context is None:
+                    self._wait_context = wait_context
+        if existing_wait_context is not None:  # could have changed inside the lock
+            if wait_context != existing_wait_context:
+                self.barrier.abort()
+                raise SynchronizationCoordinatorWrongWait(
+                    this_file=wait_context[0].co_filename,
+                    this_line=wait_context[1],
+                    others_file=existing_wait_context[0].co_filename,
+                    others_line=existing_wait_context[1])
+
+    def _abandon_when_done(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            try:
+                result = func(*args, **kwargs)
+                if hasattr(result, '__enter__') and hasattr(result, '__exit__'):
+                    @contextmanager
+                    def wrapper_cm():
+                        try:
+                            with result as yielded_value:
+                                yield yielded_value
+                        finally:
+                            self.abandon()
+                    return wrapper_cm()
+                else:
+                    self.abandon()
+                    return result
+            except:
+                self.abandon()
+                raise
+        return wrapper
+
+
+class SYNC(SynchronizationCoordinator):
+    """Mimic SynchronizationCoordinator for running in single thread."""
+
+    def __init__(self):
+        pass
+
+    def wait_for_everyone(self):
+        pass
+    wait_for_everyone.__doc__ = SynchronizationCoordinator.wait_for_everyone.__doc__
+
+    def abandon(self):
+        pass
+    abandon.__doc__ = SynchronizationCoordinator.abandon.__doc__
+
+    def collect_and_call_once(self, param, func):
+        return func([param])
+    collect_and_call_once.__doc__ = SynchronizationCoordinator.collect_and_call_once.__doc__
+
+
+SYNC = SYNC()
