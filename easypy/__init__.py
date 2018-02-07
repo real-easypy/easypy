@@ -20,6 +20,28 @@ class TokensModule(ModuleType):
         setattr(self, attr, token)
         return token
 
+    @staticmethod
+    def if_auto(val, auto):
+        """
+        Convenience for `auto if val is AUTO else val`
+
+        Example:
+
+            config.foo_level = 100
+
+            def foo(level=AUTO):
+                level = if_auto(level, config.foo_level)
+                return level
+
+            assert foo() == 100
+            assert foo(AUTO) == 100
+            assert foo(1) == 1
+
+        """
+        from .misc import Token
+        AUTO = Token("AUTO")
+        return auto if val is AUTO else val
+
     __path__ = []
     __file__ = __file__
 
