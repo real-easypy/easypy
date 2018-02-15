@@ -44,6 +44,9 @@ class Token(str):
 
     def upper(self): return self
 
+    def __hash__(self):
+        return super().__hash__()
+
 
 def __LOCATION__():
     frame = inspect.getframeinfo(inspect.stack()[1][0])
