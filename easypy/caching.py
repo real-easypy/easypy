@@ -3,6 +3,7 @@ import sys
 import os
 import shelve
 import time
+import inspect
 from collections import defaultdict
 from functools import wraps, _make_key, partial, lru_cache
 from threading import RLock
@@ -171,29 +172,73 @@ def locking_lru_cache(maxsize=128, typed=False):  # can't implement ignored_keyw
 
     return deco
 
+if sys.version_info < (3, 5):
+    def _apply_defaults(bound_arguments):
+        """
+        Set default values for missing arguments. (from Python3.5)
+        """
+        from collections import OrderedDict
+        from inspect import _empty, _VAR_POSITIONAL, _VAR_KEYWORD
 
-def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None):
+        arguments = bound_arguments.arguments
+        new_arguments = []
+        for name, param in bound_arguments._signature.parameters.items():
+            try:
+                new_arguments.append((name, arguments[name]))
+            except KeyError:
+                if param.default is not _empty:
+                    val = param.default
+                elif param.kind is _VAR_POSITIONAL:
+                    val = ()
+                elif param.kind is _VAR_KEYWORD:
+                    val = {}
+                else:
+                    # This BoundArguments was likely produced by
+                    # Signature.bind_partial().
+                    continue
+                new_arguments.append((name, val))
+        bound_arguments.arguments = OrderedDict(new_arguments)
+else:
+    def _apply_defaults(bound_arguments):
+        return bound_arguments.apply_defaults()
+
+
+def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
     """
     An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
 
     If 'expiration'>0, set an expiration on the cache.
-    The 'get_ts_func' can be used to provide an alternative timestamp for measuring expiration
+    'get_ts_func' can be used to provide an alternative timestamp for measuring expiration
+    'ignored_keywords' can be used to ignore various arguments (positional or keyword) when generating the key for the cache
+    'key_func' can be used to fully control how the key is generated
     """
 
     NOT_FOUND = object()
     NOT_CACHED = NOT_FOUND, 0
-    ignored_keywords = set(ilistify(ignored_keywords)) if ignored_keywords else set()
+
+    if ignored_keywords:
+        assert not key_func, "can't specify both `ignored_keywords` AND `key_func`"
+        ignored_keywords = set(ilistify(ignored_keywords))
+
+        def key_func(**kw):
+            return tuple(v for k, v in sorted(kw.items()) if k not in ignored_keywords)
 
     def deco(func):
         cache = {}
         main_lock = RLock()
         keyed_locks = defaultdict(RLock)
         name = func.__name__
+        sig = inspect.signature(func)
 
         @wraps(func)
         def inner(*args, **kwargs):
-            key_kwargs = {k: v for k, v in kwargs.items() if k not in ignored_keywords}
-            key = _make_key(args, key_kwargs, typed=typed)
+            if key_func:
+                bound = sig.bind(*args, **kwargs)
+                _apply_defaults(bound)
+                key = kwargs_resilient(key_func)(**bound.arguments)
+            else:
+                key = _make_key(args, kwargs, typed=typed)
+
             with main_lock:
                 key_lock = keyed_locks[key]
             with key_lock:

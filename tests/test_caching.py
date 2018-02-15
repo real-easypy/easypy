@@ -20,26 +20,26 @@ def test_timecache():
     def get_ts():
         return ts
 
-    @timecache(expiration=1, get_ts_func=get_ts, ignored_keywords="x")
+    @timecache(expiration=1, get_ts_func=get_ts, key_func=lambda k: k)
     def inc(k, x):
         x += 1
         data[k] += 1
 
     assert data.a == data.b == 0
-    inc('a', x=random.random())
+    inc('a', random.random())
     assert (data.a, data.b) == (1, 0)
 
     inc('a', x=random.random())
     assert (data.a, data.b) == (1, 0)
 
     ts += 1
-    inc('a', x=random.random())
+    inc('a', random.random())
     assert (data.a, data.b) == (2, 0)
 
     inc('b', x=random.random())
     assert (data.a, data.b) == (2, 1)
 
-    inc('b', x=random.random())
+    inc('b', random.random())
     assert (data.a, data.b) == (2, 1)
 
     ts += 1
