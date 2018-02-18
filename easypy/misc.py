@@ -71,3 +71,13 @@ def stack_level_to_get_out_of_file():
         stack_levels += 1
         frame = frame.f_back
     return stack_levels
+
+
+def clamp(val, *, at_least=None, at_most=None):
+    "Clamp a value so it doesn't exceed specified limits"
+
+    if at_most is not None:
+        val = min(at_most, val)
+    if at_least is not None:
+        val = max(at_least, val)
+    return val
