@@ -235,6 +235,14 @@ def watch_threads(interval):
 
     last_threads = set()
 
+    @contextmanager
+    def no_exceptions():
+        try:
+            yield
+        except Exception:
+            pass
+
+    @no_exceptions()
     @resilient.warning
     def dump_threads():
         nonlocal last_threads
