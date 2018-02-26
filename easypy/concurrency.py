@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, wait as futures_wait
+from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, Future, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
 
 import re
@@ -439,19 +439,25 @@ def concurrent_find(func, params, **kw):
 
 
 def nonconcurrent_map(func, params, log_contexts=None, **kw):
-    futures, results, exceptions = [], [], []
+    futures = Futures()
     log_contexts = _to_log_contexts(params, log_contexts)
+    has_exceptions = False
     for args, ctx in zip(_to_args_list(params), log_contexts):
-        f = partial(_run_with_exception_logging, func, args, kw, ctx)
-        futures.append(f)
+        future = Future()
+        futures.append(future)
         try:
-            results.append(f())
+            result = _run_with_exception_logging(func, args, kw, ctx)
         except Exception as exc:
-            exceptions.append(exc)
+            has_exceptions = True
+            future.set_exception(exc)
         else:
-            exceptions.append(None)
-    if any(exceptions):
+            future.set_result(result)
+
+    if has_exceptions:
+        exceptions = [f.exception() for f in futures]
         raise MultiException(exceptions=exceptions, futures=futures)
+
+    results = [f.result() for f in futures]
     del futures[:]
     return results
 

@@ -12,6 +12,19 @@ from easypy.concurrency import TagAlongThread
 from easypy.concurrency import SynchronizedSingleton
 
 
+@pytest.yield_fixture(params=[True, False], ids=['concurrent', 'nonconcurrent'])
+def concurrency_enabled_and_disabled(request):
+    if request.param:  # concurrency enabled
+        yield
+    else:  # concurrency disabled
+        from easypy.concurrency import disable, enable
+        try:
+            disable()
+            yield
+        finally:
+            enable()
+
+
 def test_thread_stacks():
     with concurrent(sleep, .1, threadname='sleep'):
         print(get_thread_stacks().render())
@@ -207,3 +220,20 @@ def test_sync_singleton():
 
     a, b = MultiObject(range(2)).call(lambda _: S())
     assert a is b
+
+
+@pytest.mark.usefixtures('concurrency_enabled_and_disabled')
+def test_multiexception_api():
+    with pytest.raises(MultiException) as exc:
+        MultiObject([0, 5]).call(lambda i: 10 // i)
+
+    failed, sucsessful = exc.value.futures
+
+    assert failed.done()
+    with pytest.raises(ZeroDivisionError):
+        failed.result()
+    assert isinstance(failed.exception(), ZeroDivisionError)
+
+    assert sucsessful.done()
+    assert sucsessful.result() == 2
+    assert sucsessful.exception() is None
