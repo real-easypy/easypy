@@ -211,8 +211,10 @@ class MultiException(PException):
                         context = "(%s)" % ", ".join("%s=%s" % p for p in sorted(context.items()))
                     buff.write("{}: {}", exc, context)
                 if hasattr(exc, "__traceback__"):
-                    for line in format_tb(exc.__traceback__):
-                        buff.write(traceback_fmt, line.rstrip())
+                    show_traceback = getattr(exc, 'traceback', None)
+                    if show_traceback != False:
+                        for line in format_tb(exc.__traceback__):
+                            buff.write(traceback_fmt, line.rstrip())
         return buff
 
 
