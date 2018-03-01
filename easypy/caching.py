@@ -200,7 +200,7 @@ if sys.version_info < (3, 5):
         bound_arguments.arguments = OrderedDict(new_arguments)
 else:
     def _apply_defaults(bound_arguments):
-        return bound_arguments.apply_defaults()
+        bound_arguments.apply_defaults()
 
 
 def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
