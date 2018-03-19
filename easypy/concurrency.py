@@ -17,6 +17,7 @@ import os
 import signal
 import threading
 import time
+import warnings
 
 from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException, PException
@@ -473,6 +474,9 @@ def concurrent_map(func, params, workers=None, log_contexts=None, initial_log_in
         return futures.result()
 
 
+_LIST_DEPRECATION_MESSAGE = "MultiObject should not be used as a list"
+
+
 class MultiObject(object):
 
     def __init__(self, items=None, log_ctx=None, workers=None, initial_log_interval=None):
@@ -549,6 +553,7 @@ class MultiObject(object):
         return iter(self._items)
 
     def __getitem__(self, key):
+        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
         ret = self._items[key]
         if isinstance(key, slice):
             return self._new(ret, self._log_ctx[key])
@@ -558,6 +563,7 @@ class MultiObject(object):
     # === Mutation =====
     # TODO: ensure the relationship between items/workers/logctx
     def __delitem__(self, key):
+        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
         del self._log_ctx[key]
         del self._items[key]
 
@@ -578,14 +584,20 @@ class MultiObject(object):
         return ret
 
     def append(self, item, *, log_ctx=None):
+        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
+
         self._log_ctx.append(log_ctx)
         return self._items.append(item)
 
     def insert(self, pos, item, *, log_ctx=None):
+        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
+
         self._log_ctx.insert(pos, log_ctx)
         return self._items.insert(pos, item)
 
     def pop(self, *args):
+        warnings.warn(_LIST_DEPRECATION_MESSAGE, PendingDeprecationWarning, stacklevel=2)
+
         self._log_ctx.pop(*args)
         return self._items.pop(*args)
 
