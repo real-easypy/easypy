@@ -245,7 +245,8 @@ class Futures(list):
             return MultiException(exceptions=exceptions, futures=self)
 
     def cancel(self):
-        return all(f.cancel() for f in self)
+        cancelled = [f.cancel() for f in self]  # list-comp, to ensure we call cancel on all futures
+        return all(cancelled)
 
     def as_completed(self, timeout=None):
         return as_completed(self, timeout=timeout)

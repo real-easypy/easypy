@@ -124,6 +124,15 @@ def test_multiobject_concurrent_find_not_found():
     assert ret is 0
 
 
+def test_multiobject_concurrent_find_proper_shutdown():
+    executed = []
+    m = MultiObject(range(10), workers=1)
+    ret = m.concurrent_find(lambda n: [print(n) or executed.append(n) or sleep(.01)])
+    assert ret
+    sleep(1)  # wait for potential stragglers
+    assert max(executed) <= 2
+
+
 def test_multiobject_zip_with():
     m = MultiObject(range(4))
 
