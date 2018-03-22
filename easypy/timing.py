@@ -229,10 +229,11 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
             message = "Timed out after {duration:.1f} seconds"
 
     if pred:
+        pred_decorator = kwargs_resilient(negligible=['is_final_attempt'])
         if hasattr(pred, "__iter__"):
-            pred = make_multipred(map(kwargs_resilient, pred))
+            pred = make_multipred(map(pred_decorator, pred))
         else:
-            pred = kwargs_resilient(pred)
+            pred = pred_decorator(pred)
         if not caption:
             caption = "on predicate (%s)" % pred
     else:
