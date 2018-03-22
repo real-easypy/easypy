@@ -6,7 +6,7 @@ from types import MethodType
 import warnings
 from threading import RLock
 
-from easypy.collections import intersected_dict
+from easypy.collections import intersected_dict, ilistify
 
 
 def deprecated(func=None, message=None):
@@ -116,25 +116,37 @@ def singleton_contextmanager_method(func):
     return inner
 
 
-def kwargs_as_needed(func):
+@parametrizeable_decorator
+def kwargs_resilient(func, negligible=None):
     """
     If function does not specify **kwargs, pass only params which it can accept
+
+    negligible: If set, only be resilient to these specific parameters:
+                - Other parameters will be passed normally, even if they don't appear in the signature.
+                - If a specified parameter is not in the signature, don't pass it even if there are **kwargs.
     """
     spec = inspect.getfullargspec(inspect.unwrap(func))
     acceptable_args = set(spec.args or ())
     if isinstance(func, MethodType):
         acceptable_args -= {spec.args[0]}
 
-    @wraps(func)
-    def inner(*args, **kwargs):
-        if spec.varkw is None:
-            kwargs = intersected_dict(kwargs, acceptable_args)
-        return func(*args, **kwargs)
+    if negligible is None:
+        @wraps(func)
+        def inner(*args, **kwargs):
+            if spec.varkw is None:
+                kwargs = intersected_dict(kwargs, acceptable_args)
+            return func(*args, **kwargs)
+    else:
+        negligible = set(ilistify(negligible))
+
+        @wraps(func)
+        def inner(*args, **kwargs):
+            kwargs = {k: v for k, v in kwargs.items()
+                      if k in acceptable_args
+                      or k not in negligible}
+            return func(*args, **kwargs)
 
     return inner
-
-
-kwargs_resilient = kwargs_as_needed
 
 
 def reusable_contextmanager(context_manager):
