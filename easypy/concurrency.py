@@ -651,6 +651,15 @@ class MultiObject(object):
         assert len(mo) == len(self), "All collection must have at least %s items" % len(self)
         return mo
 
+    def zip_with_index(self):
+        """
+        Replaces this pattern, which loses the log contexts:
+            >> MultiObject(enumerate(items)).call(lambda idx, item: ...)
+        with this pattern, which retains log contexts:
+            >> MultiObject(items).zip_with_index().call(lambda item, idx: ...)
+        """
+        return self.zip_with(range(len(self)))
+
     def zip(self):
         "Concurrently iterate through the iterables contained by this MultiObject"
         iters = list(map(iter, self))
