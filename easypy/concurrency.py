@@ -647,7 +647,7 @@ class MultiObject(object):
         return self.__class__(chain(*self))
 
     def zip_with(self, *collections):
-        mo = self.__class__(zip(self, *collections))
+        mo = self._new(zip(self, *collections))
         assert len(mo) == len(self), "All collection must have at least %s items" % len(self)
         return mo
 
