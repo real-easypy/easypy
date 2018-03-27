@@ -145,6 +145,17 @@ def test_multiobject_zip_with():
     assert ret == [1, 3, 5, 7]
 
 
+def test_multiobject_enumerate():
+    m = MultiObject(range(5), log_ctx="abcd")
+
+    def check(i, j):
+        assert i == j + 1
+
+    e = m.enumerate(1)
+    assert e._log_ctx == list("abcd")
+    e.call(check)
+
+
 def test_logged_lock():
     lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
 
