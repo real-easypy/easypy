@@ -26,7 +26,7 @@ from easypy.humanize import IndentableTextBuffer, time_duration
 from easypy.misc import Hex
 from easypy.humanize import format_thread_stack
 from easypy.threadtree import iter_thread_frames
-from easypy.timing import Timer
+from easypy.timing import Timer, TimeoutException
 from easypy.units import NEVER, MINUTE, HOUR
 
 
@@ -1484,3 +1484,118 @@ class SYNC(SynchronizationCoordinator):
 
 
 SYNC = SYNC()
+
+
+class LoggedCondition():
+    """
+    Like Condition, but easier to use and more logging friendly
+
+        name: give it a name, so it's identifiable in the logs
+        log_interval: the interval between log messages
+
+    Unlike threading.condition, .acquire() and .release() are not needed here.
+    Just use .wait_for() to wait for a predicate and perform the
+    condition-changing statements inside a .notifying_all() context:
+
+        some_flag = False
+        cond = Condition('some flag cond')
+
+        # Wait for condition:
+        cond.wait_for(lambda: some_flag, 'some flag become True')
+
+        # Trigger the condition:
+        with cond.notifying_all('Setting some flag to true'):
+            some_flag = True
+    """
+
+    ConditionType = threading.Condition
+
+    __slots__ = ("_cond", "_name", "_log_interval")
+
+    def __init__(self, name=None, log_interval=15):
+        self._cond = self.__class__.ConditionType()
+        self._name = name or '{}-{:X}'.format(self.ConditionType.__name__, id(self))
+        self._log_interval = log_interval
+
+    def __repr__(self):
+        return '<{}>'.format(self._name)
+
+    @contextmanager
+    def _acquired_for(self, msg, *args):
+        while not self._cond.acquire(timeout=self._log_interval):
+            _logger.debug('%s - waiting to be acquired for ' + msg, self, *args)
+        try:
+            yield
+        finally:
+            self._cond.release()
+
+    @contextmanager
+    def notifying_all(self, msg, *args):
+        """
+        Acquire the condition lock for the context, and notify all waiters afterward.
+
+            msg: Message to print to the DEBUG log after performing the command
+            args: Format arguments for msg
+
+        Users should run the command that triggers the conditions inside this context manager.
+        """
+        with self._acquired_for('performing a %s notifying all waiters' % msg, *args):
+            yield
+            _logger.debug('%s - performed: ' + msg, self, *args)
+            self._cond.notifyAll()
+
+    @contextmanager
+    def __wait_for_impl(self, pred, msg, *args, timeout=None):
+        timer = Timer(expiration=timeout)
+
+        def timeout_for_condition():
+            remain = timer.remain
+            if remain:
+                return min(remain, self._log_interval)
+            else:
+                return self._log_interval
+
+        with self._acquired_for('checking ' + msg, *args):
+            while not self._cond.wait_for(pred, timeout=timeout_for_condition()):
+                if timer.expired:
+                    # NOTE: without a timeout we will never get here
+                    if pred():  # Try one last time, to make sure the last check was not (possibly too long) before the timeout
+                        return
+                    raise TimeoutException('{condition} timed out after {duration} waiting for {msg}',
+                                           condition=self, msg=msg % args, duration=timer.elapsed)
+                _logger.debug('%s - waiting for ' + msg, self, *args)
+            yield
+
+    def wait_for(self, pred, msg, *args, timeout=None):
+        """
+        Wait for a predicate. Only check it when notified.
+
+            msg: Message to print to the DEBUG log while waiting for the predicate
+            args: Format arguments for msg
+            timeout: Maximal time to wait
+        """
+        with self.__wait_for_impl(pred, msg, *args, timeout=timeout):
+            pass
+
+    @contextmanager
+    def waited_for(self, pred, msg, *args, timeout=None):
+        """
+        Wait for a predicate, keep the condition lock for the context, and notify all other waiters afterward.
+
+            msg: Message to print to the DEBUG log while waiting for the predicate
+            args: Format arguments for msg
+            timeout: Maximal time to wait
+
+        The code inside the context should be used for altering state other waiters are waiting for.
+        """
+        with self.__wait_for_impl(pred, msg, *args, timeout=timeout):
+            yield
+            self._cond.notifyAll()
+
+    @property
+    def lock(self):
+        """
+        Use the underlying lock without notifying the waiters.
+        """
+
+        return self._cond._lock

@@ -6,10 +6,12 @@ import random
 from contextlib import ExitStack
 
 from easypy.threadtree import get_thread_stacks, ThreadContexts
+from easypy.timing import TimeoutException
 from easypy.concurrency import concurrent, MultiObject, MultiException
 from easypy.concurrency import LoggedRLock, LockLeaseExpired
 from easypy.concurrency import TagAlongThread
 from easypy.concurrency import SynchronizedSingleton
+from easypy.concurrency import LoggedCondition
 
 
 @pytest.yield_fixture(params=[True, False], ids=['concurrent', 'nonconcurrent'])
@@ -257,3 +259,93 @@ def test_multiexception_api():
     assert sucsessful.done()
     assert sucsessful.result() == 2
     assert sucsessful.exception() is None
+
+
+def test_logged_condition():
+    cond = LoggedCondition('test', log_interval=.1)
+
+    progress = 0
+    executed = []
+
+    def wait_for_progress_to(progress_to):
+        cond.wait_for(lambda: progress_to <= progress, 'progress to %s', progress_to)
+        executed.append(progress_to)
+
+    with concurrent(wait_for_progress_to, 10), concurrent(wait_for_progress_to, 20), concurrent(wait_for_progress_to, 30):
+        with patch("easypy.concurrency._logger") as _logger:
+            sleep(0.3)
+
+        assert any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == []
+
+        with patch("easypy.concurrency._logger") as _logger:
+            with cond.notifying_all('setting progress to 10'):
+                progress = 10
+        assert [c for c in _logger.debug.call_args_list if 'performed' in c[0][0]] == [
+            call("%s - performed: setting progress to 10", cond)]
+
+        with patch("easypy.concurrency._logger") as _logger:
+            sleep(0.3)
+
+        assert not any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == [10]
+
+        with patch("easypy.concurrency._logger") as _logger:
+            with cond.notifying_all('setting progress to 30'):
+                progress = 30
+        assert [c for c in _logger.debug.call_args_list if 'performed' in c[0][0]] == [
+            call("%s - performed: setting progress to 30", cond)]
+
+        with patch("easypy.concurrency._logger") as _logger:
+            sleep(0.3)
+
+        assert not any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert not any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert not any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == [10, 20, 30] or executed == [10, 30, 20]
+
+        with patch("easypy.concurrency._logger") as _logger:
+            with pytest.raises(TimeoutException):
+                cond.wait_for(lambda: False, 'the impossible', timeout=1)
+
+        assert sum(c == call("%s - waiting for the impossible", cond) for c in _logger.debug.call_args_list) > 3
+
+
+def test_logged_condition_exception():
+    cond = LoggedCondition('test', log_interval=.2)
+
+    should_throw = False
+
+    class TestException(Exception):
+        pass
+
+    def waiter():
+        if should_throw:
+            raise TestException
+
+    with pytest.raises(TestException):
+        with concurrent(cond.wait_for, waiter, 'throw'):
+            sleep(0.5)
+            should_throw = True
+
+
+def test_logged_condition_waited_for():
+    cond = LoggedCondition('test', log_interval=15)
+    progress = 0
+    executed = []
+
+    def wait_then_set_to(wait_to, set_to):
+        nonlocal progress
+        with cond.waited_for(lambda: progress == wait_to, 'progress to be %s', wait_to):
+            executed.append('%s -> %s' % (progress, set_to))
+            progress = set_to
+
+    with concurrent(wait_then_set_to, 10, 20), concurrent(wait_then_set_to, 20, 30), concurrent(wait_then_set_to, 30, 40):
+        with cond.notifying_all('setting progress to 10'):
+            progress = 10
+
+    assert executed == ['10 -> 20', '20 -> 30', '30 -> 40']
