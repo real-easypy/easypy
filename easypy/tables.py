@@ -1,8 +1,12 @@
 from io import StringIO
+import os
 
 from easypy.collections import defaultlist
 from easypy.colors import colored, uncolorize
 from easypy.humanize import compact
+
+
+GRAPHICS = os.environ.get("EASYPY_GRAPHICS", "1").lower() in ("1", "yes", "true")
 
 
 class Column():
@@ -23,7 +27,7 @@ class Table():
     :param List[Column] columns: column descriptors
     :param List[Bunch] data: rows
     """
-    def __init__(self, *columns, data=None, max_col_width=None, align='left', header_align='center', padding=1):
+    def __init__(self, *columns, data=None, max_col_width=None, align='left', header_align='center', padding=1, graphical=GRAPHICS):
         self.data = data or []
         self.columns = []
 
@@ -31,11 +35,16 @@ class Table():
         self.align = align
         self.header_align = header_align
         self.padding = padding
+        self.__dict__.update(self._GRAPHICS[graphical])
 
         for column in columns:
             self.add_column(column)
 
     _ALIGN_MAP = dict(left='<', right='>', center='^')
+    _GRAPHICS = {
+        True: dict(header_sep="│", separators="┼│┊┊│", bar='═', bar_sep="╪"),
+        False: dict(header_sep="|", separators=":||||", bar='=', bar_sep=":"),
+    }
 
     def add_column(self, column: Column):
         self.columns.append(column)
@@ -85,25 +94,26 @@ class Table():
         for r_i, row in enumerate(rendered):
             r_parts = []
 
-            sep = "│" if r_i == 0 else "┼│┊┊│"[r_i % 5]
+            sep = self.header_sep if r_i == 0 else self.separators[r_i % 5]
 
             for col_i, col in enumerate(row):
                 column = columns[col_i]
                 padding = column.padding * " "
                 if column.max_width and r_i > 0:
-                    col = compact(col, column.max_width, suffix_length=column.max_width//10)
+                    col = compact(col, column.max_width, suffix_length=column.max_width // 10)
                 r_parts.append("{padding}{col}{padding}".format(col=col, padding=padding))
 
             output.write(sep.join(r_parts))
             output.write("\n")
 
             if r_i == 0:
-                r_parts = ['═' * len(uncolorize(part)) for part in r_parts]
-                output.write("╪".join(r_parts))
+                r_parts = [self.bar * len(uncolorize(part)) for part in r_parts]
+                output.write(self.bar_sep.join(r_parts))
                 output.write("\n")
 
         output.seek(0)
         return output.read()
+
 
 def _test():
     table = Table(Column("first", "GREEN<<First>>"))

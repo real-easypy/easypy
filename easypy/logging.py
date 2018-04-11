@@ -18,18 +18,45 @@ from easypy.timing import timing as timing_context, Timer
 from easypy.threadtree import ThreadContexts
 from easypy.contexts import contextmanager
 
-logging.INFO1 = logging.INFO+1
+logging.INFO1 = logging.INFO + 1
 logging.addLevelName(logging.INFO1, "INFO1")
 
 
 CLEAR_EOL = '\x1b[0K'
 IS_A_TTY = sys.stdout.isatty()
+LOG_WITH_GRAPHICS = os.environ.get("EASYPY_LOG_WITH_GRAPHICS", "1").lower() in ("1", "yes", "true")
+LOG_WITH_COLOR = os.environ.get("EASYPY_COLORS", "1").lower() in ("1", "yes", "true")
 
-LOG_WITH_COLOR=None
+
+class GRAPHICAL:
+    LINE = "─"
+    DOUBLE_LINE = "═"
+    INDENT_SEGMENT   = "  │ "  # noqa
+    INDENT_OPEN      = "  ├───┮ "  # noqa
+    INDENT_CLOSE         = "  ╰╼"  # noqa
+    INDENT_EXCEPTION     = "  ╘═"  # noqa
+
+
+class NON_GRAPHICAL:
+    LINE = "-"
+    DOUBLE_LINE = "="
+    INDENT_SEGMENT   = "..| "  # noqa
+    INDENT_OPEN      = "..|---+ "  # noqa
+    INDENT_CLOSE         = "  '-"  # noqa
+    INDENT_EXCEPTION     = "  '="  # noqa
+
+
+G = GRAPHICAL
+
+
 def compact(msg):
     raise NotImplementedError()
 
-def set_width(TERM_WIDTH):
+
+def set_width(width):
+    TERM_WIDTH = width
+    del width
+
     if TERM_WIDTH in (True, None):
         TERM_WIDTH, _ = os.get_terminal_size()
         TERM_WIDTH = max(TERM_WIDTH, 120)
@@ -42,50 +69,32 @@ def set_width(TERM_WIDTH):
 
 
 def set_coloring(enabled):
-    global LOG_WITH_COLOR
     LOG_WITH_COLOR = enabled
-    if enabled:
+    del enabled
+    if LOG_WITH_COLOR:
         from easypy.colors import RED, GREEN, BLUE, WHITE, DARK_GRAY
     else:
         RED = GREEN = BLUE = WHITE = DARK_GRAY = lambda txt, *_, **__: txt
     globals().update(locals())
 
 
-# All this expected to be set by set_graphics call
-LINE = None
-DOUBLE_LINE = None
-INDENT_SEGMENT = None
-INDENT_OPEN = None
-INDENT_CLOSE = None
-INDENT_EXCEPTION = None
-
-def set_graphics(GRAPHICAL):
-    if GRAPHICAL:
-        LINE = "─"
-        DOUBLE_LINE = "═"
-        INDENT_SEGMENT   = "  │ "
-        INDENT_OPEN      = "  ├───┮ "
-        INDENT_CLOSE         = "  ╰╼"
-        INDENT_EXCEPTION     = "  ╘═"
-    else:
-        LINE = "-"
-        DOUBLE_LINE = "="
-        INDENT_SEGMENT   = "..| "
-        INDENT_OPEN      = "..|---+ "
-        INDENT_CLOSE         = "  '-"
-        INDENT_EXCEPTION     = "  '="
+def set_graphics(enabled):
+    LOG_WITH_GRAPHICS = enabled
+    del enabled
+    G = GRAPHICAL if LOG_WITH_GRAPHICS else NON_GRAPHICAL
     globals().update(locals())
 
+
 set_width(IS_A_TTY)
-set_coloring(IS_A_TTY or os.environ.get('TERM_COLOR_SUPPORT'))
-set_graphics(IS_A_TTY or os.environ.get('TERM_COLOR_SUPPORT'))
+set_coloring(LOG_WITH_COLOR and (IS_A_TTY or os.environ.get('TERM_COLOR_SUPPORT')))
+set_graphics(LOG_WITH_GRAPHICS and (IS_A_TTY or os.environ.get('TERM_COLOR_SUPPORT')))
 
 
 LEVEL_COLORS = {
-    logging.DEBUG:   "DARK_GRAY",
-    logging.INFO:    "GRAY",
-    logging.WARNING: "YELLOW",
-    logging.ERROR:   "RED"
+    logging.DEBUG:   "DARK_GRAY",  # noqa
+    logging.INFO:    "GRAY",  # noqa
+    logging.WARNING: "YELLOW",  # noqa
+    logging.ERROR:   "RED",  # noqa
     }
 
 
@@ -100,16 +109,13 @@ def get_level_color(level):
         LEVEL_COLORS[level] = color
         return color
 
-INDENT_COLORS = [
-    ("DARK_%s<<{}>>" % color.upper()).format
-    for color in "GREEN BLUE MAGENTA CYAN YELLOW".split()]
-random.shuffle(INDENT_COLORS)
-
 
 class LogLevelClamp(logging.Filterer):
+
     def __init__(self, level=logging.DEBUG):
         self.level = level
         self.name = logging.getLevelName(level)
+
     def filter(self, record):
         if record.levelno > self.level:
             record.levelname, record.levelno = self.name, self.level
@@ -158,6 +164,11 @@ else:
 
 class ContextHandler(logging.NullHandler):
 
+    INDENT_COLORS = [
+        ("DARK_%s<<{}>>" % color.upper()).format
+        for color in "GREEN BLUE MAGENTA CYAN YELLOW".split()]
+    random.shuffle(INDENT_COLORS)
+
     def __init__(self, **kw):
         self._ctx = ExitStack()
         indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
@@ -170,9 +181,9 @@ class ContextHandler(logging.NullHandler):
         extra = THREAD_LOGGING_CONTEXT.flatten()
         extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
         record.__dict__.update(dict(extra, **record.__dict__))
-        drawing = getattr(record, "drawing", INDENT_SEGMENT)
-        indents = chain(repeat(INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
-        record.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+        drawing = getattr(record, "drawing", G.INDENT_SEGMENT)
+        indents = chain(repeat(G.INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
+        record.drawing = "".join(color(segment) for color, segment in zip(cycle(self.INDENT_COLORS), indents))
 
 
 THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context")
@@ -245,7 +256,7 @@ class ProgressBar:
         self._event.set()
 
     def set_message(self, msg):
-        msg = msg.replace("|..|", "|__PB__"+INDENT_SEGMENT[3])
+        msg = msg.replace("|..|", "|__PB__"+G.INDENT_SEGMENT[3])
         self._last_line = "|" + compact(msg)
         self._event.set()
 
@@ -323,7 +334,7 @@ class ContextLoggerMixin(object):
     @contextmanager
     def indented(self, header=None, *args, level=logging.INFO1, timing=True, footer=True):
         header = compact((header % args) if header else "")
-        self._log(level, "WHITE@{%s}@" % header, (), extra=dict(drawing=INDENT_OPEN))
+        self._log(level, "WHITE@{%s}@" % header, (), extra=dict(drawing=G.INDENT_OPEN))
         with ExitStack() as stack:
             stack.enter_context(THREAD_LOGGING_CONTEXT(indentation=1))
 
@@ -341,15 +352,15 @@ class ContextLoggerMixin(object):
             try:
                 yield
             except (KeyboardInterrupt, AbortedException):
-                footer_log("CYAN", "ABORTED", INDENT_EXCEPTION)
+                footer_log("CYAN", "ABORTED", G.INDENT_EXCEPTION)
                 raise
             except GeneratorExit:
-                footer_log("DARK_GRAY", "DONE", INDENT_CLOSE)
+                footer_log("DARK_GRAY", "DONE", G.INDENT_CLOSE)
             except:
-                footer_log("RED", "FAILED", INDENT_EXCEPTION)
+                footer_log("RED", "FAILED", G.INDENT_EXCEPTION)
                 raise
             else:
-                footer_log("DARK_GRAY", "DONE", INDENT_CLOSE)
+                footer_log("DARK_GRAY", "DONE", G.INDENT_CLOSE)
 
     def error_box(self, *exc, extra=None):
         if len(exc)==1:
@@ -359,8 +370,8 @@ class ContextLoggerMixin(object):
         else:
             typ, exc, tb = exc
         header = "%s.%s" % (typ.__module__, typ.__name__)
-        self.error("YELLOW@{%s}@ RED@{%s}@", header, LINE*(80-len(header)-1), extra=dict(drawing=RED(INDENT_OPEN)))
-        with THREAD_LOGGING_CONTEXT(indentation=1, drawing=RED(INDENT_SEGMENT)):
+        self.error("YELLOW@{%s}@ RED@{%s}@", header, G.LINE*(80-len(header)-1), extra=dict(drawing=RED(G.INDENT_OPEN)))
+        with THREAD_LOGGING_CONTEXT(indentation=1, drawing=RED(G.INDENT_SEGMENT)):
             if hasattr(exc, "render") and callable(exc.render):
                 exc_text = exc.render()
             elif tb:
@@ -374,7 +385,7 @@ class ContextLoggerMixin(object):
             if extra:
                 for line in extra.splitlines():
                     self.error(line)
-            self.error("RED@{%s}@", DOUBLE_LINE*80, extra=dict(drawing=RED(INDENT_EXCEPTION)))
+            self.error("RED@{%s}@", G.DOUBLE_LINE*80, extra=dict(drawing=RED(G.INDENT_EXCEPTION)))
 
     _progressing = False
     @contextmanager
@@ -496,6 +507,7 @@ class HeartbeatHandler(logging.Handler):
 def log_context(method=None, **ctx):
     if not method:
         return partial(log_context, **ctx)
+
     @wraps(method)
     def inner(*args, **kwargs):
         context = {k: fmt.format(*args, **kwargs) for k, fmt in ctx.items()}
@@ -504,19 +516,22 @@ def log_context(method=None, **ctx):
     return inner
 
 
-#=====================#=====================#=====================#
+# =====================#=====================#=====================#
 # This monkey-patch tricks logging's findCaller into skipping over
 # this module when looking for the caller of a logger.log function
 class _SrcFiles:
     _srcfiles = {logging._srcfile, __file__}
+
     def __eq__(self, fname):
         return fname in self.__class__._srcfiles
-logging._srcfile = _SrcFiles()
-#=====================#=====================#=====================#
 
+
+logging._srcfile = _SrcFiles()
+# =====================#=====================#=====================#
 
 
 _root = __file__[:__file__.find(os.sep.join(__name__.split(".")))]
+
 
 def _trim(pathname, modname, cache={}):
     try:
