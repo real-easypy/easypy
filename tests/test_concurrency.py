@@ -109,6 +109,43 @@ def test_multiobject_1():
     assert not info.value.complete
 
 
+def test_multiobject_exceptions():
+
+    assert MultiException[ValueError] is MultiException[ValueError]
+    assert issubclass(MultiException[UnicodeDecodeError], MultiException[UnicodeError])
+    assert issubclass(MultiException[UnicodeDecodeError], MultiException[ValueError])
+
+    with pytest.raises(AssertionError):
+        MultiException[0]
+
+    with pytest.raises(MultiException):
+        MultiObject(range(5)).call(lambda n: 1 / n)
+
+    with pytest.raises(MultiException[Exception]):
+        MultiObject(range(5)).call(lambda n: 1 / n)
+
+    with pytest.raises(MultiException[ZeroDivisionError]):
+        MultiObject(range(5)).call(lambda n: 1 / n)
+
+    try:
+        MultiObject(range(5)).call(lambda n: 1 / n)
+    except MultiException[ValueError] as exc:
+        assert False
+    except MultiException[ZeroDivisionError] as exc:
+        assert len(exc.actual) == 1
+        assert isinstance(exc.one, ZeroDivisionError)
+    else:
+        assert False
+
+    with pytest.raises(MultiException[ArithmeticError]):
+        try:
+            MultiObject(range(5)).call(lambda n: 1 / n)
+        except ZeroDivisionError:
+            assert False  # shouldn't be here
+        except MultiException[ValueError]:
+            assert False  # shouldn't be here
+
+
 def test_multiobject_concurrent_find_found():
     m = MultiObject(range(10))
     from time import sleep

@@ -138,9 +138,41 @@ def _check_exiting():
         raise ProcessExiting()
 
 
-class MultiException(PException):
+# This metalcass helps generate MultiException subtypes so that it's easier
+# to catch a MultiException with a specific common type
+class MultiExceptionMeta(type):
+    _SUBTYPES = {}
+    _SUBTYPES_LOCK = threading.RLock()
 
-    template = "Exceptions raised from concurrent invocation ({0.common_type.__qualname__} x{0.count}/{0.invocations_count})"
+    def __getitem__(cls, exception_type):
+        if exception_type is BaseException:
+            return MultiException
+
+        assert isinstance(exception_type, type), "Must use an Exception type"
+        assert issubclass(exception_type, BaseException), "Must inherit for BaseException"
+
+        try:
+            return cls._SUBTYPES[exception_type]
+        except KeyError:
+            with cls._SUBTYPES_LOCK:
+                if exception_type in cls._SUBTYPES:
+                    return cls._SUBTYPES[exception_type]
+                bases = tuple(cls[base] for base in exception_type.__bases__ if base)
+                subtype = type("MultiException[%s]" % exception_type.__qualname__, bases, {})
+                cls._SUBTYPES[exception_type] = subtype
+                return subtype
+
+    __iter__ = None
+
+    def __call__(cls, exceptions, futures):
+        common_type = concestor(*map(type, filter(None, exceptions)))
+        subtype = cls[common_type]
+        return type.__call__(subtype, exceptions, futures)
+
+
+class MultiException(PException, metaclass=MultiExceptionMeta):
+
+    template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
     def __init__(self, exceptions, futures):
         # we want to keep futures in parallel with exceptions,
