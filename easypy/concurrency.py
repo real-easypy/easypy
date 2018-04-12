@@ -18,9 +18,10 @@ import signal
 import threading
 import time
 import warnings
+from datetime import datetime
 
 from easypy.decorations import parametrizeable_decorator
-from easypy.exceptions import TException, PException
+from easypy.exceptions import TException, PException, make_block
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration
 from easypy.misc import Hex
@@ -28,6 +29,7 @@ from easypy.humanize import format_thread_stack
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer, TimeoutException
 from easypy.units import NEVER, MINUTE, HOUR
+from easypy.colors import colorize_by_patterns
 
 
 this_module = import_module(__name__)
@@ -194,7 +196,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         return "{0.__class__.__name__}(<{0.common_type.__qualname__} x{0.count}/{0.invocations_count}>)".format(self)
 
     def __str__(self):
-        return self.render(traceback=False, color=False)
+        return self.render(color=False)
 
     def walk(self, skip_multi_exceptions=True):
         if not skip_multi_exceptions:
@@ -205,17 +207,30 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
             else:
                 yield exc
 
-    def render(self, *, width=80, **kw):
-        buff = self._get_buffer(**kw)
-        return "\n"+buff.render(width=width)
+    def render(self, *, width=80, color=True, **kw):
+        buff = self._get_buffer(color=color, **kw)
+        text = buff.render(width=width, edges=not color)
+        return colorize_by_patterns("\n" + text)
 
     def _get_buffer(self, **kw):
-        color = kw.get("color", True)
+        if kw.get("color", True):
+            normalize_color = lambda x: x
+        else:
+            normalize_color = partial(colorize_by_patterns, no_color=True)
+
+        def _format_context(context):
+            if not isinstance(context, dict):
+                return repr(exc.context)  # when it comes from rpyc
+            context = context.copy()
+            context.pop("indentation", None)
+            breadcrumbs = ";".join(context.pop('context', []))
+            return ", ".join(filter(None, chain((breadcrumbs,), ("%s=%s" % p for p in sorted(context.items())))))
+
         buff = IndentableTextBuffer("{0.__class__.__qualname__}", self)
         if self.message:
-            buff.write(("WHITE<<%s>>" % self.message) if color else self.message)
+            buff.write(normalize_color("WHITE<<%s>>" % self.message))
 
-        traceback_fmt = "DARK_GRAY@{{{}}}@" if color else "{}"
+        traceback_fmt = normalize_color("DARK_GRAY<<{}>>")
 
         # workaround incompatibilty with rpyc, which serializes .actual into an str
         # instead of a list of exceptions. This makes the string flatten into a long
@@ -225,29 +240,31 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
                 buff.write(self._remote_tb)
             return buff
 
+        def add_details(exc):
+            if kw.get("timestamp", True) and exc.timestamp:
+                ts = datetime.fromtimestamp(exc.timestamp).isoformat()
+                buff.write(normalize_color("MAGENTA<<Timestamp: %s>>" % ts))
+            if kw.get("context", True) and exc.context:
+                buff.write("Context: %s" % _format_context(exc.context))
+
+        add_details(self)
+
         for exc in self.actual:
             with buff.indent("{.__class__.__qualname__}", exc):
-                if isinstance(exc, self.__class__):
+                if isinstance(exc, MultiException):
                     buff.extend(exc._get_buffer(**kw))
                 elif hasattr(exc, "render"):
                     buff.write(exc.render(**kw))
                 else:
-                    if not hasattr(exc, "context"):
-                        context = ""
-                    elif not isinstance(exc.context, dict):
-                        context = repr(exc)
-                    else:
-                        context = exc.context.copy()
-                        context.pop("indentation", None)
-                        if 'context' in context:  # 'context' should be renamed 'breadcrumbs'
-                            context['context'] = ";".join(context['context'])
-                        context = "(%s)" % ", ".join("%s=%s" % p for p in sorted(context.items()))
-                    buff.write("{}: {}", exc, context)
+                    buff.write("{}", exc)
+                    add_details(exc)
                 if hasattr(exc, "__traceback__"):
                     show_traceback = getattr(exc, 'traceback', None)
-                    if show_traceback != False:
+                    if show_traceback is not False:
+                        buff.write("Traceback:")
                         for line in format_tb(exc.__traceback__):
                             buff.write(traceback_fmt, line.rstrip())
+
         return buff
 
 
@@ -343,15 +360,16 @@ class Futures(list):
 
 
 def _run_with_exception_logging(func, args, kwargs, ctx):
+    ctx.update(threadname=threading.current_thread().name)
     with _logger.context(**ctx):
-        ctx['thread_ident'] = Hex(threading.current_thread().ident)
         try:
             return func(*args, **kwargs)
         except StopIteration:
             # no need to log this
             raise
-        except Exception:
+        except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback in debug logs)", func)
+            exc.timestamp = time.time()
             raise
 
 
@@ -936,6 +954,10 @@ class concurrent(object):
         except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback can be found in debug-level logs)", self.func)
             self.exc = exc
+            try:
+                exc.timestamp = time.time()
+            except Exception:
+                pass
         finally:
             self.timer.stop()
             self.stop()
