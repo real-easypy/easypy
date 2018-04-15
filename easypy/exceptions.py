@@ -59,7 +59,7 @@ class PException(Exception):
             text += indent("MAGENTA<<timestamp = %s>>\n" % ts, " "*4)
 
         if context and self.context:
-            text += "Context:\n" + indent("".join(make_block(self.context)), " "*4)
+            text += "Context:\n" + indent("".join(make_block(self.context, skip={"indentation"})), " "*4)
 
         if traceback and self.traceback:
             fmt = "DARK_GRAY@{{{}}}@"
@@ -89,9 +89,11 @@ class PException(Exception):
             raise cls(traceback=True, **kwargs) from None
 
 
-def make_block(d):
+def make_block(d, skip={}):
     for k in sorted(d):
         if k.startswith("_"):
+            continue
+        if k in skip:
             continue
         v = d[k]
         if not isinstance(v, str):
