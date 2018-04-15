@@ -26,13 +26,17 @@ class PException(Exception):
         if 'tip' not in params:
             # sometimes it's on the class
             params['tip'] = getattr(self, 'tip', None)
+        self._params = {}
+        self.add_params(**params)
+
+    def add_params(self, **params):
         for k, v in params.items():
             setattr(self, k, v)
-        self.params = params
+        self._params.update(params)
 
     def __repr__(self):
-        if self.params:
-            kw = sorted("%s=%r" % (k, v) for k, v in self.params.items())
+        if self._params:
+            kw = sorted("%s=%r" % (k, v) for k, v in self._params.items())
             return "%s(%r, %s)" % (self.__class__.__name__, self.message, ", ".join(kw))
         else:
             return "%s(%r)" % (self.__class__.__name__, self.message)
@@ -46,13 +50,13 @@ class PException(Exception):
         if self.message:
             text += ("WHITE<<%s>>\n" % self.message)
 
-        if params and self.params:
-            tip = self.params.pop('tip', None)
-            text += indent("".join(make_block(self.params)), " "*4)
+        if params and self._params:
+            tip = self._params.pop('tip', None)
+            text += indent("".join(make_block(self._params)), " "*4)
             if tip:
-                tip = tip.format(**self.params)
+                tip = tip.format(**self._params)
                 text += indent("GREEN(BLUE)@{tip = %s}@\n" % tip, " "*4)
-                self.params['tip'] = tip  # put it back in params, even though it might've been on the class
+                self._params['tip'] = tip  # put it back in params, even though it might've been on the class
 
         if timestamp and self.timestamp:
             ts = datetime.fromtimestamp(self.timestamp).isoformat()

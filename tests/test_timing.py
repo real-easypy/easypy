@@ -1,7 +1,7 @@
 import warnings
 import pytest
 
-from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException
+from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
 from easypy.bunch import Bunch
 
 
@@ -13,6 +13,28 @@ def test_wait_exception():
     wait(0.1, pred=lambda: True, message='message')
     wait(0.1, pred=lambda: True, message=False)
     repeat(0.1, callback=lambda: True)
+
+
+def test_wait_better_exception():
+
+    class TimedOut(PredicateNotSatisfied):
+        pass
+
+    i = 0
+
+    def check():
+        nonlocal i
+        i += 1
+        if i < 3:
+            raise TimedOut(a=1, b=2)
+        return True
+
+    with pytest.raises(TimedOut):
+        # due to the short timeout and long sleep, the pred would called exactly twice
+        wait(.1, pred=check, sleep=1, message=False)
+
+    assert i == 2
+    wait(.1, pred=check, message=False)
 
 
 def test_iter_wait_warning():
