@@ -1,7 +1,6 @@
 from contextlib import contextmanager, ExitStack
 import sys
 import time
-import warnings
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
@@ -11,13 +10,18 @@ from .decorations import parametrizeable_decorator
 from .units import Duration
 from .exceptions import PException
 from .humanize import time_duration  # due to interference with jrpc
-from .misc import stack_level_to_get_out_of_file
 from .decorations import kwargs_resilient
 
 IS_A_TTY = sys.stdout.isatty()
 
 
 class TimeoutException(PException, TimeoutError):
+    pass
+
+
+class PredicateNotSatisfied(TimeoutException):
+    # use this exception with 'wait', to indicate predicate is not satisfied
+    # and allow it to raise a more informative exception
     pass
 
 
@@ -278,13 +282,22 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
         while True:
             s_timer = Timer()
             expired = l_timer.expired
-            ret = pred(is_final_attempt=bool(expired))
-            if ret not in (None, False):
-                yield ret
-                return
+            last_exc = None
+            try:
+                ret = pred(is_final_attempt=bool(expired))
+            except PredicateNotSatisfied as _exc:
+                last_exc = _exc
+                ret = None
+            else:
+                if ret not in (None, False):
+                    yield ret
+                    return
             if expired:
                 duration = l_timer.stop()
                 if throw:
+                    if last_exc:
+                        last_exc.add_params(duration=duration)
+                        raise last_exc
                     if callable(message):
                         message = message()
                     raise TimeoutException(message, duration=duration)
@@ -304,7 +317,7 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
                     if timer.expired:
                         break
             else:
-                s_timeout = max(0, sleep_for-s_timer.elapsed)
+                s_timeout = max(0, sleep_for - s_timer.elapsed)
                 if l_timer.expiration:
                     s_timeout = min(l_timer.remain, s_timeout)
                 time.sleep(s_timeout)
