@@ -294,13 +294,14 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
                     return
             if expired:
                 duration = l_timer.stop()
+                start_time = l_timer.start_time
                 if throw:
                     if last_exc:
-                        last_exc.add_params(duration=duration)
+                        last_exc.add_params(duration=duration, start_time=start_time)
                         raise last_exc
                     if callable(message):
                         message = message()
-                    raise TimeoutException(message, duration=duration)
+                    raise TimeoutException(message, duration=duration, start_time=start_time)
                 yield None
                 return
             yield l_timer.remain

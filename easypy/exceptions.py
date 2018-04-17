@@ -100,7 +100,9 @@ def make_block(d, skip={}):
         if k in skip:
             continue
         v = d[k]
-        if not isinstance(v, str):
+        if isinstance(v, datetime):
+            v = v.isoformat()
+        elif not isinstance(v, str):
             v = repr(v)
         dark = False
         if k.startswith("~"):

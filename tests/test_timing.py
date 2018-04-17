@@ -1,7 +1,7 @@
 import warnings
 import pytest
 
-from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
+from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied, timing
 from easypy.bunch import Bunch
 
 
@@ -92,9 +92,9 @@ def test_iter_wait_progress_total_timeout():
 
 def test_wait_long_predicate():
     """
-    After the actual check the predicate is held for 3 seconds. Make sure
-    that we don't get a timeout after 2 seconds - because the actual
-    condition should be met in 1 second!
+    After the actual check the predicate is held for .3 seconds. Make sure
+    that we don't get a timeout after .2 seconds - because the actual
+    condition should be met in .1 second!
     """
 
     t = Timer()
@@ -106,6 +106,21 @@ def test_wait_long_predicate():
             wait(0.3)
 
     wait(0.2, pred, message=False)
+
+
+def test_timeout_exception():
+    exc = None
+
+    with timing() as t:
+        try:
+            wait(0.5, lambda: False, message=False)
+        except TimeoutException as e:
+            exc = e
+
+    assert exc.duration > 0.5
+    assert exc.start_time >= t.start_time
+    assert exc.start_time < t.stop_time
+    assert t.duration > exc.duration
 
 
 def test_wait_with_callable_message():
