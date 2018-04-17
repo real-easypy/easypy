@@ -20,7 +20,7 @@
 # -- Project information -----------------------------------------------------
 
 project = 'easypy'
-copyright = '2015, Weka.IO'
+copyright = '2017, Weka.IO'
 author = 'Weka.IO'
 
 # The short X.Y version

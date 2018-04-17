@@ -31,7 +31,7 @@ printables = set(map(ord, '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ
 
 def is_printable(char, include_space=True):
     """
-    Returns True if the character is printable and NOT a control character.
+    Returns ``True`` if the character is printable and NOT a control character.
     """
     if char == " " and not include_space:
         return False
@@ -420,7 +420,7 @@ class HexDumpCodec(codecs.Codec):
 
 # Register the codec search function
 def find_hexdump(encoding):
-    """Return the codec for 'HexDump'.
+    """Return the codec for ``HexDump``.
     """
     if encoding.startswith('hexdump'):
         args = list(map(int, encoding.split("_")[1:]))
@@ -449,14 +449,14 @@ class TrimmingTemplate(str):
     """
     Use new-style string formatting syntax with the old modulu string formatting operator:
 
-    >> TrimmingTemplate("{b}: {a}") % dict(a=1, b=2)
+    >>> TrimmingTemplate("{b}: {a}") % dict(a=1, b=2)
     '2: 1'
 
 
-    Use the '~' next to the field width specifier so that the content is trimmed to fit the specified field width.
-    Works with string data only
+    Use the ``~`` next to the field width specifier so that the content is
+    trimmed to fit the specified field width.  Works with string data only.
 
-    >> TrimmingTemplate("{id:5}:{header:10~} {footer:~11}") % dict(id=225, header='This is not the end', footer='This is not the end!')
+    >>> TrimmingTemplate("{id:5}:{header:10~} {footer:~11}") % dict(id=225, header='This is not the end', footer='This is not the end!')
     '  225:This is... ...the end!'
 
     """
@@ -558,8 +558,9 @@ def format_thread_stack(frame, skip_modules=[threading]):
 def format_table(table, titles=True):
     """
     Returns a multilined string representing the given table (2d list) as a table, with equal-width columns.
-    If 'titles' is true, the first row in the table is taken as headers for the table, adding a separator on the
-    second line
+
+    :param titles: if true, the first row in the table is taken as headers for
+    the table, adding a separator on the second line
     """
 
     fmt_simple = "{:{width}}"

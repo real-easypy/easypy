@@ -31,9 +31,9 @@ class PersistentCache(object):
 
     :param path: location of cache shelve file.
 
-    :param version: Increment this to force-clear the cache.
+    :param version: increment this to force-clear the cache.
 
-    :param expiration: Expiration in seconds for the entire cache.
+    :param expiration: expiration in seconds for the entire cache.
                     ``None`` to disable expiration
 
     Example::
@@ -207,10 +207,10 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
     """
     An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
 
-    If 'expiration'>0, set an expiration on the cache.
-    'get_ts_func' can be used to provide an alternative timestamp for measuring expiration
-    'ignored_keywords' can be used to ignore various arguments (positional or keyword) when generating the key for the cache
-    'key_func' can be used to fully control how the key is generated
+    :param expiration: if >0, set an expiration on the cache.
+    :param get_ts_func: can be used to provide an alternative timestamp for measuring expiration
+    :param ignored_keywords: can be used to ignore various arguments (positional or keyword) when generating the key for the cache
+    :param key_func: can be used to fully control how the key is generated
     """
 
     NOT_FOUND = object()

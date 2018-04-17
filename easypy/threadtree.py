@@ -279,8 +279,8 @@ def watch_threads(interval):
 class ThreadContexts():
     """
     A structure for storing arbitrary data per thread.
-    Unlike threading.local, data stored here will be inherited into
-    child-threads (threads spawned from threads).
+    Unlike ``threading.local``, data stored here will be inherited into
+    child-threads (threads spawned from threads)::
 
         TC = ThreadContexts()
 
@@ -297,29 +297,29 @@ class ThreadContexts():
         # (thread-c)
         assert TC.my_data == 'c'
 
-    'counters': attributes named here get incremented each time, instead of overwritten:
+    :param counters: attributes named here get incremented each time, instead of overwritten:
+        ::
+            TC = ThreadContexts(counters=('i', 'j'))
+            assert TC.i == TC.j == 0
 
-        TC = ThreadContexts(counters=('i', 'j'))
-        assert TC.i == TC.j == 0
+            with TC(i=1):
+                assert TC.i == 1
+                assert TC.j == 0
 
-        with TC(i=1):
-            assert TC.i == 1
-            assert TC.j == 0
-
-            with TC(i=1, j=1):
-                assert TC.i == 2
-                assert TC.j == 1
+                with TC(i=1, j=1):
+                    assert TC.i == 2
+                    assert TC.j == 1
 
 
-    'stacks': attributes named here get pushed into a list, instead of overwritten:
-
-        TC = ThreadContexts(stacks=('i', 'j'))
-        with TC(i='a'):
-            assert TC.i == ['a']
-            assert TC.j == []
-            with TC(i='i', j='j'):
-                assert TC.i == ['a', 'i']
-                assert TC.j == ['j']
+    :param stacks: attributes named here get pushed into a list, instead of overwritten:
+        ::
+            TC = ThreadContexts(stacks=('i', 'j'))
+            with TC(i='a'):
+                assert TC.i == ['a']
+                assert TC.j == []
+                with TC(i='i', j='j'):
+                    assert TC.i == ['a', 'i']
+                    assert TC.j == ['j']
 
     """
 

@@ -58,7 +58,7 @@ else:
 
 contextmanager.__doc__ = """@contextmanager decorator.
 
-    Typical usage:
+    Typical usage::
 
         @contextmanager
         def ctx(<arguments>):
@@ -68,25 +68,25 @@ contextmanager.__doc__ = """@contextmanager decorator.
             finally:
                 <cleanup>
 
-    In a 'with' statement:
+    In a ``with`` statement::
 
         with ctx(<arguments>) as <variable>:
             <body>
 
 
-    As a decorator for a function/method:
+    As a decorator for a function/method::
 
         @ctx(<arguments>)
         def simple_function():
             <do-something>
 
-    As a decorator for a generator:
+    As a decorator for a generator::
 
         @ctx(<arguments>)
         def generator():
             yield <something>
 
-    As a decorator for a context manager (only those created using the @contextmanager decorator):
+    As a decorator for a context manager (only those created using the @contextmanager decorator)::
 
         @ctx(<arguments>)
         @contextmanager

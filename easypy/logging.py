@@ -389,7 +389,7 @@ class ContextLoggerMixin(object):
             yield PROGRESS_BAR
 
     def silent_exception(self, message, *args, **kwargs):
-        "like exception(), only emits the traceback in debug level"
+        "like ``exception()``, only emits the traceback in debug level"
         self.error(message, *args, **kwargs)
         self.debug('Traceback:', exc_info=True)
 

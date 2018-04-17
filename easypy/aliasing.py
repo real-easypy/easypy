@@ -32,7 +32,7 @@ def aliases(name, static=True):
     A class decorator that makes objects of a class delegate to an object they contain.
     Inspired by D's "alias this".
 
-    Example:
+    Example::
 
         class B():
             def foo(self):

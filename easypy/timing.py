@@ -28,21 +28,21 @@ class PredicateNotSatisfied(TimeoutException):
 class Timer(object):
 
     """
-    Multi-purpose timer object:
+    Multi-purpose timer object::
 
-    t = Timer()
-    # do something ...
-    t.stop()
-    print(t.elapsed)
-
-    t = Timer(expiration=120)
-    while not t.expired:
-        print("Time remaining: %r" % t.remain)
+        t = Timer()
         # do something ...
+        t.stop()
+        print(t.elapsed)
 
-    for remain in Timer(expiration=120).iter(sleep=2):
-        print("Time remaining: %r" % remain)
-        # do something ...
+        t = Timer(expiration=120)
+        while not t.expired:
+            print("Time remaining: %r" % t.remain)
+            # do something ...
+
+        for remain in Timer(expiration=120).iter(sleep=2):
+            print("Time remaining: %r" % remain)
+            # do something ...
     """
 
     def __init__(self, now=None, expiration=None):

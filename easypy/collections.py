@@ -324,7 +324,7 @@ class SimpleObjectCollection(ObjectCollection):
 
     class Collectable():
         """
-        objects get assigned with a backpointer to the collection they were put in, via .collection
+        Objects get assigned with a backpointer to the collection they were put in, via ``.collection``
         """
         collection = None
 

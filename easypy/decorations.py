@@ -24,17 +24,17 @@ def deprecated(func=None, message=None):
 
 
 def deprecated_arguments(**argmap):
-    def wrapper(func):
-        """
-        Renames arguments while emitting deprecation warning
+    """
+    Renames arguments while emitting deprecation warning::
 
         @deprecated_arguments(old_name='new_name')
         def func(new_name):
             # ...
 
         func(old_name='value meant for new name')
-        """
+    """
 
+    def wrapper(func):
         @wraps(func)
         def inner(*args, **kwargs):
             deprecation_warnings = []
@@ -122,7 +122,8 @@ def kwargs_resilient(func, negligible=None):
     """
     If function does not specify **kwargs, pass only params which it can accept
 
-    negligible: If set, only be resilient to these specific parameters:
+    :param negligible: If set, only be resilient to these specific parameters:
+
                 - Other parameters will be passed normally, even if they don't appear in the signature.
                 - If a specified parameter is not in the signature, don't pass it even if there are **kwargs.
     """
@@ -169,13 +170,14 @@ def reusable_contextmanager(context_manager):
 def as_list(generator, sort_by=None):
     """
     Forces a generator to output a list.
-    When writing a generator is more convenient
 
-    @as_list(sort_by=lambda n: -n)
-    def g():
-        yield 1
-        yield 2
-        yield from range(2)
+    When writing a generator is more convenient::
+
+        @as_list(sort_by=lambda n: -n)
+        def g():
+            yield 1
+            yield 2
+            yield from range(2)
 
     >>> g()
     [2, 1, 1, 0]
@@ -206,7 +208,7 @@ class LazyDecoratorDescriptor:
 
 def lazy_decorator(decorator_factory):
     """
-    Create and apply a decorator only after the method is instantiated.
+    Create and apply a decorator only after the method is instantiated::
 
         class UsageWithLambda:
             @lazy_decorator(lambda self: some_decorator_that_needs_the_object(self))

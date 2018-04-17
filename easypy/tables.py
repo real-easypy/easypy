@@ -18,12 +18,11 @@ class Column():
 
 
 class Table():
+    """
+    :param List[Column] columns: column descriptors
+    :param List[Bunch] data: rows
+    """
     def __init__(self, *columns, data=None, max_col_width=None, align='left', header_align='center', padding=1):
-        """
-        :type columns: list of Column
-        :type data: list of Bunch
-        :return:
-        """
         self.data = data or []
         self.columns = []
 

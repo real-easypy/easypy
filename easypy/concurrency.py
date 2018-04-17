@@ -669,11 +669,11 @@ class MultiObject(object):
             self._initial_log_interval if initial_log_interval is None else initial_log_interval)
 
     def with_workers(self, workers):
-        "Return a new MultiObject based on current items with the specified number of workers"
+        "Return a new ``MultiObject`` based on current items with the specified number of workers"
         return self._new(workers=workers)
 
     def call(self, func, *args, **kw):
-        "Concurrently call a function on each of the object contained by this MultiObject (as first param)"
+        "Concurrently call a function on each of the object contained by this ``MultiObject`` (as first param)"
         initial_log_interval = kw.pop("initial_log_interval", self._initial_log_interval)
         if kw:
             func = wraps(func)(partial(func, **kw))
@@ -693,7 +693,7 @@ class MultiObject(object):
         return self._new(*(zip(*filtered) if filtered else ((),())))
 
     def chain(self):
-        "Chain the iterables contained by this MultiObject"
+        "Chain the iterables contained by this ``MultiObject``"
         return self.__class__(chain(*self))
 
     def zip_with(self, *collections):
@@ -703,15 +703,18 @@ class MultiObject(object):
 
     def enumerate(self, start=0):
         """
-        Replaces this pattern, which loses the log contexts:
-            >> MultiObject(enumerate(items)).call(lambda idx, item: ...)
-        with this pattern, which retains log contexts:
-            >> MultiObject(items).enumerate().call(lambda idx, item: ...)
+        Replaces this pattern, which loses the log contexts::
+
+            MultiObject(enumerate(items)).call(lambda idx, item: ...)
+
+        with this pattern, which retains log contexts::
+
+            MultiObject(items).enumerate().call(lambda idx, item: ...)
         """
         return self._new(zip(range(start, start + len(self)), self))
 
     def zip(self):
-        "Concurrently iterate through the iterables contained by this MultiObject"
+        "Concurrently iterate through the iterables contained by this ``MultiObject``"
         iters = list(map(iter, self))
         while True:
             try:
@@ -1077,11 +1080,11 @@ def _get_my_ident():
 
 class LoggedRLock():
     """
-    Like RLock, but more logging friendly.
+    Like ``RLock``, but more logging friendly.
 
-        name: give it a name, so it's identifiable in the logs
-        log_interval: the interval between log messages
-        lease_expiration: throw an exception if the lock is held for more than this duration
+    :param name: give it a name, so it's identifiable in the logs
+    :param log_interval: the interval between log messages
+    :param lease_expiration: throw an exception if the lock is held for more than this duration
     """
 
     # we could inherit from this and support other types, but that'll require changes in the repr
@@ -1174,7 +1177,7 @@ class LoggedRLock():
 
 class RWLock(object):
     """
-    Read-Write Lock: allows locking exclusively and non-exclusively:
+    Read-Write Lock: allows locking exclusively and non-exclusively::
 
         rwl = RWLock()
 
@@ -1327,9 +1330,11 @@ class TagAlongThread(object):
 
 def throttled(duration):
     """
-    Syntax sugar over timecache decorator
-    With accent on throttling calls and not actual caching of values
-    Concurrent callers will block if function is executing, since they might depend on side effect of function call
+    Syntax sugar over timecache decorator.
+
+    With accent on throttling calls and not actual caching of values Concurrent
+    callers will block if function is executing, since they might depend on
+    side effect of function call.
     """
     from easypy.caching import timecache
     return timecache(expiration=duration)
@@ -1375,7 +1380,7 @@ class SynchronizationCoordinatorWrongWait(TException):
 
 class SynchronizationCoordinator(object):
     """
-    Synchronization helper for functions that run concurrently.
+    Synchronization helper for functions that run concurrently::
 
         sync = SynchronizationCoordinator(5)
 
@@ -1385,8 +1390,8 @@ class SynchronizationCoordinator(object):
 
         MultiObject(range(5)).call(foo)
 
-    When MultiObject/concurrent_map/sync runs a function with a _sync=SYNC
-    argument, it will replace it with a proper SynchronizationCoordinator instance:
+    When MultiObject/concurrent_map/sync runs a function with a ``_sync=SYNC``
+    argument, it will replace it with a proper SynchronizationCoordinator instance::
 
         def foo(a, _sync=SYNC):
             _sync.wait_for_everyone()
@@ -1429,7 +1434,7 @@ class SynchronizationCoordinator(object):
         """
         Block until all threads that participate in the synchronization coordinator reach this point.
 
-        Fail if one of the threads is waiting at a different point
+        Fail if one of the threads is waiting at a different point::
 
             def foo(a, _sync=SYNC):
                 sleep(a)
@@ -1455,7 +1460,7 @@ class SynchronizationCoordinator(object):
 
     def collect_and_call_once(self, param, func, *, timeout=HOUR):
         """
-        Call a function from one thread, with parameters collected from all threads.
+        Call a function from one thread, with parameters collected from all threads::
 
             def foo(a, _sync=SYNC):
                 result = _sync.collect_and_call_once(a, lambda a_values: set(a_values))
@@ -1519,7 +1524,7 @@ class SynchronizationCoordinator(object):
 
 
 class SYNC(SynchronizationCoordinator):
-    """Mimic SynchronizationCoordinator for running in single thread."""
+    """Mimic ``SynchronizationCoordinator`` for running in single thread."""
 
     def __init__(self):
         pass
@@ -1544,12 +1549,12 @@ class LoggedCondition():
     """
     Like Condition, but easier to use and more logging friendly
 
-        name: give it a name, so it's identifiable in the logs
-        log_interval: the interval between log messages
+    :param name: give it a name, so it's identifiable in the logs
+    :param log_interval: the interval between log messages
 
     Unlike threading.condition, .acquire() and .release() are not needed here.
     Just use .wait_for() to wait for a predicate and perform the
-    condition-changing statements inside a .notifying_all() context:
+    condition-changing statements inside a .notifying_all() context::
 
         some_flag = False
         cond = Condition('some flag cond')
@@ -1588,8 +1593,8 @@ class LoggedCondition():
         """
         Acquire the condition lock for the context, and notify all waiters afterward.
 
-            msg: Message to print to the DEBUG log after performing the command
-            args: Format arguments for msg
+        :param msg: Message to print to the DEBUG log after performing the command
+        :param args: Format arguments for msg
 
         Users should run the command that triggers the conditions inside this context manager.
         """
@@ -1624,9 +1629,9 @@ class LoggedCondition():
         """
         Wait for a predicate. Only check it when notified.
 
-            msg: Message to print to the DEBUG log while waiting for the predicate
-            args: Format arguments for msg
-            timeout: Maximal time to wait
+        :param msg: Message to print to the DEBUG log while waiting for the predicate
+        :param args: Format arguments for msg
+        :param timeout: Maximal time to wait
         """
         with self.__wait_for_impl(pred, msg, *args, timeout=timeout):
             pass
@@ -1636,9 +1641,9 @@ class LoggedCondition():
         """
         Wait for a predicate, keep the condition lock for the context, and notify all other waiters afterward.
 
-            msg: Message to print to the DEBUG log while waiting for the predicate
-            args: Format arguments for msg
-            timeout: Maximal time to wait
+        :param msg: Message to print to the DEBUG log while waiting for the predicate
+        :param args: Format arguments for msg
+        :param timeout: Maximal time to wait
 
         The code inside the context should be used for altering state other waiters are waiting for.
         """

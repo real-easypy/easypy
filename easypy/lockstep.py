@@ -69,14 +69,14 @@ class lockstep(object):
     Decorate a generator that yields step names to create a context manager.
 
     * Use like a regular method(that returns `None`).
-    * Use `.lockstep(...)` on the method to get a context manager. The context
-      object has a `.step_next`/`.step_until` methods that must be called, in
+    * Use ``.lockstep(...)`` on the method to get a context manager. The context
+      object has a ``.step_next``/``.step_until`` methods that must be called, in
       order, with all expected step names, to make the generator progress to
       each step.
     * Yield from the context object to embed the lockstep inside a bigger
       lockstep function.
 
-    Example:
+    Example::
 
         @lockstep
         def my_process():

@@ -47,17 +47,18 @@ class XRandom(random.Random):
 
 def random_nice_name(max_length=64, entropy=2, sep='-'):
     """Generates a nice random name from the dictionaries in words
-    Args:
-        max_length (int, optional): Max length for the name.
-        entropy (int, optional): How unique th name will be, currently
-            entropy - 1 adjectives are joined with one noun.
-        sep (str, optional: Seperator between name parts.
 
-    Returns:
-        string: The generated name.
+    :param max_length: max length for the name.
+    :type max_length: int, optional
+    :param entropy: how unique th name will be, currently entropy - 1 adjectives are joined with one noun.
+    :type entropy: int, optional
+    :param sep: seperator between name parts.
+    :type sep: str, optional
 
-    Raises:
-        ValueError: If `param2` is equal to `param1`.
+    :return: the generated name
+    :rtype: str
+
+    :raises ValueError: if ``param2`` is equal to ``param1``.
     """
 
     from .words import (adjectives, creatures)

@@ -42,22 +42,22 @@ class Field(object):
     """
     Define a single field in a TypedStruct
 
-        type: The type of the field
-              * Use [<type>] for a typechecked list
-              * Use {<key_type>: <type>} for a typechecked dict
-              * Use {str: <type>} for a typechecked Bunch
-        default: Default value for the field
-        preprocess: A function for preprocessing the values assigned to the field:
-                    * If the field can be converted from different types,
-                      should do the conversion and return the converted value.
-                    * If there are validation checks, should perform them and
-                      raise an exception if they fail.
-                    * Use the field.add_validation() and field.add_conversion()
-                      helpers to modify the preprocess function without
-                      manually setting this parameter.
-                    * Must return a value of the field's type.
-        meta: Custom metadata. Can be queried by tools that use reflection on
-              the TypedStruct object.
+    :param type: The type of the field
+        * Use [<type>] for a typechecked list
+        * Use {<key_type>: <type>} for a typechecked dict
+        * Use {str: <type>} for a typechecked Bunch
+    :param default: Default value for the field
+    :param preprocess: A function for preprocessing the values assigned to the field:
+        * If the field can be converted from different types,
+          should do the conversion and return the converted value.
+        * If there are validation checks, should perform them and
+          raise an exception if they fail.
+        * Use the field.add_validation() and field.add_conversion()
+          helpers to modify the preprocess function without
+          manually setting this parameter.
+        * Must return a value of the field's type.
+    :param meta: Custom metadata. Can be queried by tools that use reflection
+                 on the TypedStruct object.
     """
 
     def __init__(self, type, *, default=MANDATORY, preprocess=None, meta=Bunch()):
@@ -116,9 +116,9 @@ class Field(object):
         """
         Add a validation on values assigned to the field
 
-            predicate: The validation function. Should return True if the value is OK.
-            ex_type: The exception to raise if the predicate returns False on a value.
-            ex_args, ex_kwargs: Arguments for the exception.
+        :param predicate: The validation function. Should return True if the value is OK.
+        :param ex_type: The exception to raise if the predicate returns False on a value.
+        :param ex_args,ex_kwargs: Arguments for the exception.
 
         Calling this method will modify the preprocess function.
         """
@@ -135,9 +135,9 @@ class Field(object):
         """
         Add a validation on values assigned to the field
 
-            predicate: Only perform the conversion if this returns True.
-            conversion: A conversion function. The returned value must be of
-                        the type of the field.
+        :param predicate: Only perform the conversion if this returns True.
+        :param conversion: A conversion function. The returned value must be of
+                           the type of the field.
 
         Calling this method will modify the preprocess function.
         """
@@ -335,7 +335,7 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
     * Nesting of TypedStructs.
     * Typechecked collections.
 
-    Example:
+    Example::
 
         import easypy.typed_struct as ts
 
