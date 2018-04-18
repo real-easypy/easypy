@@ -220,7 +220,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
         def _format_context(context):
             if not isinstance(context, dict):
-                return repr(exc.context)  # when it comes from rpyc
+                return repr(context)  # when it comes from rpyc
             context = context.copy()
             context.pop("indentation", None)
             breadcrumbs = ";".join(context.pop('context', []))
@@ -241,10 +241,10 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
             return buff
 
         def add_details(exc):
-            if kw.get("timestamp", True) and exc.timestamp:
+            if kw.get("timestamp", True) and getattr(exc, "timestamp"):
                 ts = datetime.fromtimestamp(exc.timestamp).isoformat()
                 buff.write(normalize_color("MAGENTA<<Timestamp: %s>>" % ts))
-            if kw.get("context", True) and exc.context:
+            if kw.get("context", True) and getattr(exc, "context"):
                 buff.write("Context: %s" % _format_context(exc.context))
 
         add_details(self)
