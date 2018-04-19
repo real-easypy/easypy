@@ -318,6 +318,9 @@ class ListCollection(list, ObjectCollection):
         sample_size = self._choose_sampling_size(minimum, maximum)
         return self._new([self.pop() for i in range(sample_size)])
 
+    def __getitem__(self, index):
+        return self._getitem(index)
+
 
 class SimpleObjectCollection(ObjectCollection):
     ID_ATTRIBUTE = 'uid'
