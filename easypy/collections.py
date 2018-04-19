@@ -134,6 +134,10 @@ class ObjectCollection(object):
             except StopIteration:
                 raise LookupError(index)
         elif isinstance(index, slice):
+            if any(i < 0 for i in (index.start, index.stop, index.step) if i is not None):
+                # can't use islice when indices are negative
+                items = list(self)
+                return self._new(items[slice(index.start, index.stop, index.step)])
             try:
                 return self._new(islice(self, index.start, index.stop, index.step))
             except StopIteration:

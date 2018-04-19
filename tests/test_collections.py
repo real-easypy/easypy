@@ -88,3 +88,13 @@ def test_collection_sample_unique5():
 def test_collection_sample_unique_diverse():
     x = Counter(repr(x) for _ in range(100) for x in L.sample(1, name=UNIQUE))
     assert len(x) == 10
+
+
+def test_collections_slicing():
+    L = ListCollection("abcdef")
+    assert L[0] == 'a'
+    assert L[-1] == 'f'
+    assert L[:2] == list('ab')
+    assert L[-2:] == list('ef')
+    assert L[::2] == list('ace')
+    assert L[::-2] == list('fdb')
