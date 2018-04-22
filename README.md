@@ -3,3 +3,5 @@
 
 # easypy
 easypy makes python even easier!
+
+Contributers please read [CONTRIBUTING.md](CONTRIBUTING.md).
