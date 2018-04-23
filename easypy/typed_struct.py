@@ -1,7 +1,7 @@
 from copy import deepcopy
 
 from .exceptions import TException
-from .tokens import MANDATORY
+from .tokens import AUTO, MANDATORY
 from .collections import ListCollection, PythonOrderedDict, iterable
 from .bunch import Bunch, bunchify
 
@@ -88,6 +88,18 @@ class Field(object):
         self.type = type
 
         self.default = default
+        """
+        A default value for the field
+
+        If not set, the field will be ``MANDATORY``.
+
+        >>> class Foo(TypedStruct):
+        >>>    a = int
+        >>>    a.default = 12
+        >>> Foo()
+        Foo(a=12)
+        """
+
         # NOTE: _validate_type() will be also be called in _process_new_value()
         # in case people implement their own preprocess function, but we still
         # want to call it before the validatiors added with add_validation() so
@@ -121,6 +133,14 @@ class Field(object):
         :param ex_args,ex_kwargs: Arguments for the exception.
 
         Calling this method will modify the preprocess function.
+
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.add_validation(lambda value: value < 10, ValueError, 'value for `a` is too big')
+        >>> Foo(a=5)
+        Foo(a=5)
+        >>> Foo(a=15)
+        ValueError: value for `a` is too big
         """
         orig_preprocess = self.preprocess
 
@@ -133,13 +153,26 @@ class Field(object):
 
     def add_conversion(self, predicate, conversion):
         """
-        Add a validation on values assigned to the field
+        Add a conversion of values assigned to the field
 
-        :param predicate: Only perform the conversion if this returns True.
+        :param predicate: Only perform the conversion if this returns True. If
+                          the predicate is a type, the conversion will be
+                          performed if the assigned value is of that type.
         :param conversion: A conversion function. The returned value must be of
                            the type of the field.
 
         Calling this method will modify the preprocess function.
+
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.add_conversion(str, int)
+        >>>     a.add_conversion(list, len)  # passing a list will set `a` to the number of items
+        >>> Foo(a=1)
+        Foo(a=1)
+        >>> Foo(a='2')
+        Foo(a=2)
+        >>> Foo(a=[10, 20, 30])  # the list has 3 items
+        Foo(a=3)
         """
         if isinstance(predicate, type):
             typ = predicate
@@ -156,6 +189,34 @@ class Field(object):
                     conversion, type(obj), self.type)
             return orig_preprocess(obj)
         self.preprocess = new_preprocess
+
+    def convertible_from(self, *predicates, conversion=AUTO):
+        """
+        Add similar conversions from multiple types
+
+        :param predicates: Only perform the conversion if any of them return true.
+                           If a predicate is a type, the conversion will be performed
+                           if the assigned value is of that type.
+        :param conversion: A conversion function. The returned value must be of
+                           the type of the field. Defaults to the field's type.
+
+        Calling this method will modify the preprocess function.
+
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.convertible_from(str, float)
+        >>> Foo(a=1)
+        Foo(a=1)
+        >>> Foo(a='2')
+        Foo(a=2)
+        >>> Foo(a=3.0)
+        Foo(a=3)
+        """
+        if conversion is AUTO:
+            conversion = self.type
+
+        for predicate in predicates:
+            self.add_conversion(predicate, conversion)
 
     def _validate_type(self, value):
         if not isinstance(value, self.type):
@@ -307,7 +368,7 @@ TypedBunch.__name__ = 'Bunch'  # make it look like a Bunch when formatted
 class TypedStructMeta(type):
     @classmethod
     def __prepare__(metacls, name, bases, **kwds):
-        return PythonOrderedDict()
+        return _TypedStructDslDict()
 
     def __new__(cls, name, bases, dct):
         def altered_dct_gen():
@@ -315,16 +376,21 @@ class TypedStructMeta(type):
             yield '_fields', fields
             for k, v in dct.items():
                 if isinstance(v, Field):
-                    v = v._named(k)
                     fields.append(v)
-                else:
-                    try:
-                        v = Field(v)._named(k)
-                        fields.append(v)
-                    except InvalidFieldType:
-                        pass
                 yield k, v
         return super().__new__(cls, name, bases, dict(altered_dct_gen()))
+
+
+class _TypedStructDslDict(PythonOrderedDict):
+    def __setitem__(self, name, value):
+        if isinstance(value, Field):
+            value = value._named(name)
+        else:
+            try:
+                value = Field(value)._named(name)
+            except InvalidFieldType:
+                pass
+        return super().__setitem__(name, value)
 
 
 class TypedStruct(dict, metaclass=TypedStructMeta):
@@ -343,9 +409,19 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
             a = ts.Field(int, default=14)
             b = ts.Field([str], default=['1', '2', '3'])  # list of strings
 
-            # Shorter style - less customizable but you get completions
+            # Shorter style
             c = bool
             d = [float]
+
+    After assignment, fields are automatically converted to ``Field`` - so you
+    can use the field definition helpers on them::
+
+        from easypy.typed_struct import TypedStruct
+
+        class Foo(TypedStruct):
+            a = int
+            a.default = 20
+            a.convertible_from(str, float)
     """
 
     @classmethod

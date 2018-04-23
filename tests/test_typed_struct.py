@@ -502,3 +502,13 @@ def test_typed_struct_collection_type_verification():
         Foo(c='13')
     with pytest.raises(ts.FieldCollectionTypeMismatch):
         Foo(c=['14'])
+
+
+def test_typed_struct_auto_field_wrapping_dsl():
+    class Foo(ts.TypedStruct):
+        a = int
+        a.default = 1
+        b = float
+        b.convertible_from(str)
+
+    assert Foo(b='2.3').to_dict() == dict(a=1, b=2.3)
