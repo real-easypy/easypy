@@ -241,10 +241,10 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
             return buff
 
         def add_details(exc):
-            if kw.get("timestamp", True) and getattr(exc, "timestamp"):
+            if kw.get("timestamp", True) and getattr(exc, "timestamp", None):
                 ts = datetime.fromtimestamp(exc.timestamp).isoformat()
                 buff.write(normalize_color("MAGENTA<<Timestamp: %s>>" % ts))
-            if kw.get("context", True) and getattr(exc, "context"):
+            if kw.get("context", True) and getattr(exc, "context", None):
                 buff.write("Context: %s" % _format_context(exc.context))
 
         add_details(self)
@@ -369,7 +369,10 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
             raise
         except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback in debug logs)", func)
-            exc.timestamp = time.time()
+            try:
+                exc.timestamp = time.time()
+            except:
+                pass
             raise
 
 
