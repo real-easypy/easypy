@@ -4,7 +4,7 @@ Contributing
 Docstring Format
 ----------------
 
-'The documentation style is [Sphinx' reStructuredText](http://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html). Here is an example demonstrating the most common syntax:
+The documentation style is [Sphinx' reStructuredText](http://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html). Here is an example demonstrating the most common syntax:
 
 ```python
 def foo(a, b):
