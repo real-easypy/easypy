@@ -195,6 +195,22 @@ def test_multiobject_enumerate():
     e.call(check)
 
 
+def test_multiobject_logging():
+    m = MultiObject(range(4), log_ctx="abcd", initial_log_interval=0.1)
+
+    def check(i):
+        sleep(.2)
+
+    # we'll mock the logger so we can ensure it logged
+    with patch("easypy.concurrency._logger") as _logger:
+        m.call(check)
+
+    args_list = (c[0] for c in _logger.info.call_args_list)
+    for args in args_list:
+        assert "test_multiobject_logging.<locals>.check" == args[2]
+        assert "easypy/tests/test_concurrency.py" in args[4]
+
+
 def test_logged_lock():
     lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
 
