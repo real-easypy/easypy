@@ -9,7 +9,7 @@ from contextlib import contextmanager, ExitStack
 from functools import partial, wraps
 from importlib import import_module
 from itertools import chain
-from traceback import format_tb, extract_stack
+from traceback import format_tb
 import atexit
 import inspect
 import logging
@@ -23,7 +23,7 @@ from datetime import datetime
 from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException, PException, make_block
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
-from easypy.humanize import IndentableTextBuffer, time_duration
+from easypy.humanize import IndentableTextBuffer, time_duration, compact
 from easypy.misc import Hex
 from easypy.humanize import format_thread_stack
 from easypy.threadtree import iter_thread_frames
@@ -36,6 +36,19 @@ this_module = import_module(__name__)
 
 
 MAX_THREAD_POOL_SIZE = 50
+
+
+try:
+    from traceback import _extract_stack_iter
+except ImportError:
+    from traceback import walk_stack
+
+    def _extract_stack_iter(frame):
+        for f, lineno in walk_stack(frame):
+            co = f.f_code
+            filename = co.co_filename
+            name = co.co_name
+            yield filename, lineno, name
 
 
 def async_raise_in_main_thread(exc, use_concurrent_loop=True):
@@ -67,9 +80,13 @@ def async_raise_in_main_thread(exc, use_concurrent_loop=True):
         do_signal(exc)
 
 
+THREADING_MODULE_PATHS = [threading.__file__]
+
+
 if is_module_patched("threading"):
     import gevent
     MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
+    THREADING_MODULE_PATHS.append(gevent.__path__[0])
 
     def _rimt(exc):
         _logger.info('YELLOW<<killing main thread greenlet>>')
@@ -138,6 +155,14 @@ def break_locks():
 def _check_exiting():
     if _exiting:
         raise ProcessExiting()
+
+
+def _find_interesting_frame(f):
+    default = next(_extract_stack_iter(f))
+    non_threading = (
+        p for p in _extract_stack_iter(f)
+        if all(not p[0].startswith(pth) for pth in THREADING_MODULE_PATHS))
+    return next(non_threading, default)
 
 
 # This metalcass helps generate MultiException subtypes so that it's easier
@@ -320,6 +345,7 @@ class Futures(list):
     def dump_stacks(self, futures=None, verbose=False):
         futures = futures or self
         frames = dict(iter_thread_frames())
+
         for i, future in enumerate(futures, 1):
             try:
                 frame = frames[future.ctx['thread_ident']]
@@ -327,7 +353,8 @@ class Futures(list):
                 frame = None  # this might happen in race-conditions with a new thread starting
             if not verbose or not frame:
                 if frame:
-                    location = " - %s:%s, in %s(..)" % tuple(extract_stack(frame)[-1][:3])
+                    frame_line = _find_interesting_frame(frame)[:3]
+                    location = " - %s:%s, in %s(..)" % tuple(frame_line)
                 else:
                     location = "..."
                 _logger.info("%3s - %s (DARK_YELLOW<<%s>>)%s",
@@ -360,7 +387,8 @@ class Futures(list):
 
 
 def _run_with_exception_logging(func, args, kwargs, ctx):
-    ctx.update(threadname=threading.current_thread().name)
+    thread = threading.current_thread()
+    ctx.update(threadname=thread.name, thread_ident=thread.ident)
     with _logger.context(**ctx):
         try:
             return func(*args, **kwargs)
@@ -402,11 +430,16 @@ def _to_log_contexts(params, log_contexts):
 
 
 def _get_context(future):
+    def compacted(s):
+        return compact(str(s).split("\n", 1)[0], 20, "....", 5).strip()
     ctx = dict(future.ctx)
-    context = "%X;" % ctx.pop("thread_ident", 0)
-    context += ctx.pop("context", "")
-    context += ";".join("%s=%s" % p for p in sorted(ctx.items()))
-    return context
+    context = []
+    threadname = ctx.pop("threadname", None)
+    thread_ident = ctx.pop("thread_ident", None)
+    context.append(threadname or thread_ident)
+    context.append(ctx.pop("context", None))
+    context.extend("%s=%s" % (k, compacted(v)) for k, v in sorted(ctx.items()))
+    return ";".join(filter(None, context))
 
 
 @contextmanager
