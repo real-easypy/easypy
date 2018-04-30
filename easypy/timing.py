@@ -286,6 +286,9 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
             try:
                 ret = pred(is_final_attempt=bool(expired))
             except PredicateNotSatisfied as _exc:
+                if getattr(_exc, "duration", 0):
+                    # this exception was raised by a nested 'wait' call - don't swallow it!
+                    raise
                 last_exc = _exc
                 ret = None
             else:
