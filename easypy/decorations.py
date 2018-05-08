@@ -234,3 +234,28 @@ def lazy_decorator(decorator_factory):
     def wrapper(func):
         return LazyDecoratorDescriptor(decorator_factory, func)
     return wrapper
+
+
+class RegistryDecorator(object):
+    """
+    A factory for simple decorators that register functions by name::
+
+        register = RegistryDecorator()
+
+        @register
+        def foo():
+            return 'I am foo'
+
+        @register
+        def bar():
+            return 'I am bar'
+
+        assert register.registry['foo']() == 'I am foo'
+        assert register.registry['bar']() == 'I am bar'
+    """
+    def __init__(self):
+        self.registry = {}
+
+    def __call__(self, fn):
+        self.registry[fn.__name__] = fn
+        return fn

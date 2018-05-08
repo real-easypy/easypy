@@ -1,8 +1,10 @@
 import pytest
 from easypy.collections import separate
 from easypy.collections import ListCollection, partial_dict, UNIQUE, ObjectNotFound
+from easypy.collections import ContextCollection
 from easypy.bunch import Bunch
 from collections import Counter
+from contextlib import ExitStack
 
 
 class O(Bunch):
@@ -98,3 +100,29 @@ def test_collections_slicing():
     assert L[-2:] == list('ef')
     assert L[::2] == list('ace')
     assert L[::-2] == list('fdb')
+
+
+def test_context_collection():
+    cc = ContextCollection()
+
+    assert list(cc) == []
+    with cc.added(10):
+        assert list(cc) == [10]
+        with cc.added(20):
+            assert list(cc) == [10, 20]
+        assert list(cc) == [10]
+    assert list(cc) == []
+
+    with ExitStack() as stack:
+        with cc.added(30):
+            assert list(cc) == [30]
+
+            stack.enter_context(cc.added(40))
+            assert list(cc) == [30, 40]
+
+        assert list(cc) == [40]
+
+        with cc.added(50):
+            assert list(cc) == [40, 50]
+        assert list(cc) == [40]
+    assert list(cc) == []

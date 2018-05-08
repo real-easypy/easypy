@@ -512,3 +512,62 @@ def test_typed_struct_auto_field_wrapping_dsl():
         b.convertible_from(str)
 
     assert Foo(b='2.3').to_dict() == dict(a=1, b=2.3)
+
+
+def test_typed_struct_context_managers_dsl():
+    class Foo(ts.TypedStruct):
+        a = int
+
+        with FIELD_SETTING(lambda f: f.convertible_from(str)):
+            b = int
+
+        c = int
+
+    assert Foo(a=1, b='2', c=3) == Foo(a=1, b=2, c=3)
+
+    # Not applied on fields before the CM
+    with pytest.raises(ts.FieldTypeMismatch):
+        Foo(a='1', b='2', c=3)
+
+    # Not applied on fields after the CM
+    with pytest.raises(ts.FieldTypeMismatch):
+        Foo(a=1, b='2', c='3')
+
+    class Bar(ts.TypedStruct):
+        with DEFAULT(10):
+            a = int
+            with DEFAULT(20):
+                b = int
+            c = int
+
+    assert Bar().to_dict() == dict(a=10, b=20, c=10)
+
+    class OutOfRangeError(Exception):
+        pass
+
+    class Baz(ts.TypedStruct):
+        with VALIDATION(lambda v: 0 <= v < 10, OutOfRangeError):
+            a = int
+
+    assert Baz(a=5).to_dict() == dict(a=5)
+    with pytest.raises(OutOfRangeError):
+        Baz(a=15)
+
+    class Qux(ts.TypedStruct):
+        with CONVERTIBLE_FROM(str), CONVERSION(list, len):
+            a = int
+
+    assert Qux(a='1') == Qux(a=1)
+    assert Qux(a=[1, 2, 3]) == Qux(a=3)
+
+    class Quux(ts.TypedStruct):
+        with META(x=1, y=2):
+            a = int
+            with META(x=3):
+                b = int
+            with META(y=4):
+                c = int
+
+    assert Quux.a.meta == dict(x=1, y=2)
+    assert Quux.b.meta == dict(x=3, y=2)
+    assert Quux.c.meta == dict(x=1, y=4)

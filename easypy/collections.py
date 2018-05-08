@@ -1,9 +1,10 @@
 from __future__ import absolute_import
 import collections
 from numbers import Integral
-from itertools import chain, islice
+from itertools import chain, islice, count
 from functools import partial
 import random
+from contextlib import contextmanager
 from .predicates import make_predicate
 from .tokens import UNIQUE
 
@@ -684,3 +685,34 @@ class SlidingWindow(list):
         super().append(item)
         if len(self) > self.size:
             self.pop(0)
+
+
+class ContextCollection(object):
+    """
+    A collection where you add and remove things using context managers::
+
+        cc = ContextCollection()
+
+        assert list(cc) == []
+        with cc.added(10):
+            assert list(cc) == [10]
+            with cc.added(20):
+                assert list(cc) == [10, 20]
+            assert list(cc) == [10]
+        assert list(cc) == []
+    """
+    def __init__(self):
+        self._items = PythonOrderedDict()
+        self._index_generator = count(1)
+
+    def __iter__(self):
+        return iter(self._items.values())
+
+    @contextmanager
+    def added(self, value):
+        index = next(self._index_generator)
+        try:
+            self._items[index] = value
+            yield index
+        finally:
+            del self._items[index]

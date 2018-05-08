@@ -3,6 +3,7 @@ import pytest
 from functools import wraps
 
 from easypy.decorations import deprecated_arguments, kwargs_resilient, lazy_decorator
+from easypy.decorations import RegistryDecorator
 
 
 def test_deprecated_arguments():
@@ -111,3 +112,18 @@ def test_lazy_decorator_attribute():
     foo.num = 20
     assert foo.foo() == 21
     assert foo.foo.__name__ == 'foo + 20'
+
+
+def test_registry_decorator():
+    register = RegistryDecorator()
+
+    @register
+    def foo():
+        return 'I am foo'
+
+    @register
+    def bar():
+        return 'I am bar'
+
+    assert register.registry['foo']() == 'I am foo'
+    assert register.registry['bar']() == 'I am bar'

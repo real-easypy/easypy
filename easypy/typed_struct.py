@@ -1,9 +1,12 @@
 from copy import deepcopy
+from contextlib import contextmanager
+from itertools import count
 
 from .exceptions import TException
 from .tokens import AUTO, MANDATORY
-from .collections import ListCollection, PythonOrderedDict, iterable
+from .collections import ListCollection, PythonOrderedDict, iterable, ContextCollection
 from .bunch import Bunch, bunchify
+from .decorations import RegistryDecorator
 
 
 class InvalidFieldType(TException):
@@ -98,6 +101,12 @@ class Field(object):
         >>>    a.default = 12
         >>> Foo()
         Foo(a=12)
+
+        Alternatively, use the ``DEFAULT`` context manager::
+
+            class Foo(TypedStruct):
+                with DEFAULT(12):
+                    a = int
         """
 
         # NOTE: _validate_type() will be also be called in _process_new_value()
@@ -107,6 +116,36 @@ class Field(object):
         # specific FieldTypeMismatch.
         self.preprocess = preprocess or self._validate_type
         self.meta = Bunch(meta)
+        """
+        Metadata for the field, to be used for reflection
+
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.meta.caption = 'Field A'
+        >>>
+        >>>     b = int
+        >>>     b.meta.caption = 'Field B'
+        >>>
+        >>> Foo.a.meta
+        Bunch(caption='Field A')
+        >>> Foo.b.meta
+        Bunch(caption='Field B')
+        >>> foo = Foo(a=1, b=2)
+        >>>
+        >>> for k, v in foo.items():
+        >>>     caption = getattr(type(foo), k).meta.caption
+        >>>     print('%s:\t%s' % (caption, v))
+        Field A:        1
+        Field B:        2
+
+        Alternatively, use the ``META`` context manager::
+
+            class Foo(TypedStruct):
+                with META(caption='Field A'):
+                    a = int
+                with META(caption='Field B'):
+                    b = int
+        """
         self.name = None
 
         if issubclass(self.type, TypedStruct):
@@ -141,6 +180,12 @@ class Field(object):
         Foo(a=5)
         >>> Foo(a=15)
         ValueError: value for `a` is too big
+
+        Alternatively, use the ``VALIDATION`` context manager::
+
+            class Foo(TypedStruct):
+                with VALIDATION(lambda value: value < 10, ValueError, 'value for `a` is too big'):
+                    a = int
         """
         orig_preprocess = self.preprocess
 
@@ -173,6 +218,13 @@ class Field(object):
         Foo(a=2)
         >>> Foo(a=[10, 20, 30])  # the list has 3 items
         Foo(a=3)
+
+
+        Alternatively, use the ``CONVERSION`` context manager::
+
+            class Foo(TypedStruct):
+                with CONVERSION(str, int), CONVERSION(list, len):
+                    a = int
         """
         if isinstance(predicate, type):
             typ = predicate
@@ -211,6 +263,12 @@ class Field(object):
         Foo(a=2)
         >>> Foo(a=3.0)
         Foo(a=3)
+
+        Alternatively, use the ``CONVERTIBLE_FROM`` context manager::
+
+            class Foo(TypedStruct):
+                CONVERTIBLE_FROM(str, float):
+                    a = int
         """
         if conversion is AUTO:
             conversion = self.type
@@ -382,15 +440,64 @@ class TypedStructMeta(type):
 
 
 class _TypedStructDslDict(PythonOrderedDict):
+    field_context = RegistryDecorator()
+
+    def __init__(self):
+        super().__init__()
+        self.active_field_contexts = ContextCollection()
+
+    def __getitem__(self, name):
+        try:
+            field_context = self.field_context.registry[name]
+        except KeyError:
+            return super().__getitem__(name)
+        else:
+            return field_context.__get__(self)
+
     def __setitem__(self, name, value):
         if isinstance(value, Field):
             value = value._named(name)
+            self.apply_field_contexts(value)
         else:
             try:
                 value = Field(value)._named(name)
             except InvalidFieldType:
                 pass
+            self.apply_field_contexts(value)
         return super().__setitem__(name, value)
+
+    def apply_field_contexts(self, field):
+        for field_context in self.active_field_contexts:
+            field_context(field)
+        pass
+
+    @field_context
+    @contextmanager
+    def FIELD_SETTING(self, dlg):
+        with self.active_field_contexts.added(dlg):
+            yield
+
+    @field_context
+    def DEFAULT(self, default):
+        def applier(field):
+            field.default = default
+        return self.FIELD_SETTING(applier)
+
+    @field_context
+    def VALIDATION(self, predicate, ex_type, *ex_args, **ex_kwargs):
+        return self.FIELD_SETTING(lambda field: field.add_validation(predicate, ex_type, *ex_args, **ex_kwargs))
+
+    @field_context
+    def CONVERSION(self, predicate, conversion):
+        return self.FIELD_SETTING(lambda field: field.add_conversion(predicate, conversion))
+
+    @field_context
+    def CONVERTIBLE_FROM(self, *predicates, conversion=AUTO):
+        return self.FIELD_SETTING(lambda field: field.convertible_from(*predicates, conversion=conversion))
+
+    @field_context
+    def META(self, **kwargs):
+        return self.FIELD_SETTING(lambda field: field.meta.update(kwargs))
 
 
 class TypedStruct(dict, metaclass=TypedStructMeta):
@@ -422,6 +529,33 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
             a = int
             a.default = 20
             a.convertible_from(str, float)
+
+    Alternatively, you can use the special context managers::
+
+        from easypy.typed_struct import TypedStruct
+
+        class Foo(TypedStruct):
+            with DEFAULT(20), CONVERTIBLE_FROM(str, float):
+                a = int
+
+    If you have a complex setting you need to apply to the fields you can use
+    the FIELD_SETTING context manager::
+
+        from easypy.typed_struct import TypedStruct
+
+        def my_field_setting(field):
+            field.default = 50
+            field.convertible_from(str, float)
+            field.add_validation(lambda n: 0 <= n <= 100, ValueError, 'number not in range')
+
+        class Foo(TypedStruct):
+            with FIELD_SETTING(my_field_setting):
+                a = int
+                b = int
+                c = int
+
+    You do not need to import these special context managers - they will
+    automatically be there when you define the typed struct.
     """
 
     @classmethod
