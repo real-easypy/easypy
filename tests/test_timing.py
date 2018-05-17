@@ -2,6 +2,7 @@ import warnings
 import pytest
 
 from easypy.timing import iter_wait, wait, repeat, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied, timing
+from easypy.timing import waiting
 from easypy.bunch import Bunch
 
 
@@ -179,3 +180,11 @@ def test_wait_do_something_on_final_attempt(multipred):
     assert all(iteration == 'regular' for iteration in data[:-2])
     assert data[-2] == 'final'
     assert data[-1] == 'regular'
+
+
+def test_waiting():
+    with timing() as t:
+        with waiting(.2):
+            wait(.1)
+    assert .2 <= t.duration, 'did not wait the reminder of the `waiting` timeout'
+    assert t.duration < .3, 'waited the entire `waiting` timeout without considering time spend inside context manager'

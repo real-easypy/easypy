@@ -334,6 +334,27 @@ def wait(*args, **kwargs):
     return ret
 
 
+@contextmanager
+@wraps(wait)
+def waiting(timeout, *args, **kwargs):
+    """
+    Wait the reminder of the timeout after exiting the context manager.
+
+    >>> with timing() as t:
+    >>>     with waiting(2):
+    >>>         print('Time after entering waiting():', t.duration)
+    >>>         wait(1)
+    >>>         print('Time after calling wait():', t.duration)
+    >>>     print('Time after exiting waiting():', t.duration)
+    Time after entering waiting(): 9e-06
+    Time after calling wait(): 1.000846
+    Time after exiting waiting(): 2.000853
+    """
+    timer = Timer(expiration=timeout)
+    yield
+    wait(timer.remain, *args, **kwargs)
+
+
 def repeat(timeout, callback, sleep=0.5, progressbar=True):
     pred = lambda: callback() and False  # prevent 'wait' from stopping when the callback returns a nonzero
     return wait(timeout, pred=pred, sleep=sleep, progressbar=progressbar, throw=False)
