@@ -123,6 +123,8 @@ class Bunch(dict):
 
     @classmethod
     def from_dict(cls, d):
+        if not isinstance(d, dict):
+            raise ValueError("input is not a dict")
         return _convert(d, cls)
 
     @classmethod
