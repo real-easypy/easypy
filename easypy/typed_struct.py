@@ -257,6 +257,26 @@ class Field(object):
         return value
 
 
+# NOTE: to trick the completion functionality of Editors/IDEs, we redefine
+# Field as a function that returns the first argument. We then use
+# locals() to restore the original field, with the assumption that
+# completion engines won't be able to follow  and will still treat this
+# function as the up-to-date implementation of Field.
+# To farther improve completion, we make this function return actual
+# instances instead of just the type. The completion engine should be able
+# to follow that, and provide completions for instances, which are better.
+# This is a hack, so I'm ignoring PEP8 in order to keep it a single block.
+__field_class = Field
+def Field(type, *args, **kwargs):
+    if isinstance(type, list):
+        return [type[0]()]
+    if isinstance(type, dict):
+        (k, v), = type.items()
+        return {k(): v()}
+    return type()
+locals()['Field'] = __field_class
+
+
 class TypedCollection(object):
     def __init__(self, owner, field):
         self._owner = owner
