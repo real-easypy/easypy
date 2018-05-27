@@ -17,8 +17,11 @@ _logger = getLogger(__name__)
 
 try:
     from _gdbm import error as GDBMException
-except:
-    from _dbm import error as GDBMException
+except:  # noqa
+    try:
+        from _dbm import error as GDBMException
+    except:  # noqa
+        from dbm import error as GDBMException
 
 
 _disable_persistance = bool(os.getenv("bamboo_planKey", os.getenv("WEKA_job_key", None)))  # disable this feature when running from bamboo
