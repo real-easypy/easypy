@@ -31,7 +31,7 @@ def test_wait_better_exception():
 
     with pytest.raises(TimedOut):
         # due to the short timeout and long sleep, the pred would called exactly twice
-        wait(.1, pred=check, sleep=1, message=False)
+        wait(.1, pred=check, sleep=10, message=False)
 
     assert i == 2
     wait(.1, pred=check, message=False)
@@ -55,7 +55,7 @@ def test_wait_better_exception_nested():
         # due to the short timeout and long sleep, the pred would called exactly twice
         # also, the external wait should call the inner one only once, due to the TimedOut exception,
         # which it knows not to swallow
-        wait(5, lambda: wait(.1, pred=check, sleep=1, message=False), sleep=1, message=False)
+        wait(5, lambda: wait(.1, pred=check, sleep=10, message=False), sleep=1, message=False)
 
     assert i == 2
     wait(.1, pred=check, message=False)
