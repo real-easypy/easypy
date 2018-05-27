@@ -405,7 +405,8 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
 
 
 def _to_args_list(params):
-    return [args if isinstance(args, tuple) else (args,) for args in params]
+    # We use type(args) == tuple because isinstance will return True for namedtuple
+    return [args if type(args) == tuple else (args,) for args in params]
 
 
 def _get_func_name(func):

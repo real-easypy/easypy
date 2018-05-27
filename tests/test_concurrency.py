@@ -211,6 +211,21 @@ def test_multiobject_logging():
         assert "easypy/tests/test_concurrency.py" in args[4]
 
 
+def test_multiobject_namedtuples():
+    from collections import namedtuple
+
+    class Something(namedtuple("Something", "a b")):
+        pass
+
+    def ensure_not_expanded(something):
+        # This will probably fail before these asserts
+        assert hasattr(something, 'a')
+        assert hasattr(something, 'b')
+
+    objects = [Something(1, 2), Something(2, 3), Something(3, 4)]
+    MultiObject(objects).call(ensure_not_expanded)
+
+
 def test_logged_lock():
     lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
 
