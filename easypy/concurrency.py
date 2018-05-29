@@ -396,10 +396,10 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
             # no need to log this
             raise
         except Exception as exc:
-            _logger.silent_exception("Exception in thread running %s (traceback in debug logs)", func)
+            _logger.silent_exception("Exception (%s) in thread running %s (traceback in debug logs)", exc.__class__.__qualname__, func)
             try:
                 exc.timestamp = time.time()
-            except:
+            except:  # noqa - sometimes exception objects are immutable
                 pass
             raise
 
