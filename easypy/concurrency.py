@@ -310,6 +310,9 @@ class Futures(list):
     def result(self, timeout=None):
         me = self.exception(timeout=timeout)
         if me:
+            if isinstance(me, MultiException[ProcessExiting]):
+                # we want these aborted MultiObject threads to consolidate this exception
+                raise ProcessExiting()
             raise me
         return [f.result() for f in self]
 
@@ -394,6 +397,9 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
             return func(*args, **kwargs)
         except StopIteration:
             # no need to log this
+            raise
+        except ProcessExiting as exc:
+            _logger.debug(exc)
             raise
         except Exception as exc:
             _logger.silent_exception("Exception (%s) in thread running %s (traceback in debug logs)", exc.__class__.__qualname__, func)
@@ -991,6 +997,9 @@ class concurrent(object):
                 if self.wait(self.sleep):
                     _logger.debug("%s - stopped", self)
                     return
+        except ProcessExiting as exc:
+            _logger.debug(exc)
+            raise
         except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback can be found in debug-level logs)", self.func)
             self.exc = exc
