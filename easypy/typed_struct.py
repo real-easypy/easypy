@@ -98,6 +98,15 @@ class Field(object):
         >>>    a.default = 12
         >>> Foo()
         Foo(a=12)
+
+        Inside a TypedStruct class definition, assigning a value to an
+        existing field's name will set the field's default:
+
+        >>> class Foo(TypedStruct):
+        >>>    a = int
+        >>>    a = 12
+        >>> Foo()
+        Foo(a=12)
         """
 
         # NOTE: _validate_type() will be also be called in _process_new_value()
@@ -123,6 +132,13 @@ class Field(object):
                     obj = self.type.from_dict(obj)
                 return orig_preprocess(obj)
             self.preprocess = preprocess
+
+    def copy(self):
+        return type(self)(
+            type=self.type,
+            default=self.default,
+            preprocess=self.preprocess,
+            meta=self.meta.copy())
 
     def add_validation(self, predicate, ex_type, *ex_args, **ex_kwargs):
         """
@@ -368,7 +384,12 @@ TypedBunch.__name__ = 'Bunch'  # make it look like a Bunch when formatted
 class TypedStructMeta(type):
     @classmethod
     def __prepare__(metacls, name, bases, **kwds):
-        return _TypedStructDslDict()
+        dsl = _TypedStructDslDict()
+        for base in bases:
+            if isinstance(base, metacls):
+                for field in base._fields:
+                    dsl._set_field_if_not_exists(field)
+        return dsl
 
     def __new__(cls, name, bases, dct):
         def altered_dct_gen():
@@ -382,14 +403,23 @@ class TypedStructMeta(type):
 
 
 class _TypedStructDslDict(PythonOrderedDict):
+    def _set_field_if_not_exists(self, field):
+        if field.name not in self:
+            super().__setitem__(field.name, field.copy())
+
     def __setitem__(self, name, value):
         if isinstance(value, Field):
             value = value._named(name)
         else:
-            try:
-                value = Field(value)._named(name)
-            except InvalidFieldType:
-                pass
+            existing_field = self.get(name)
+            if isinstance(existing_field, Field):
+                existing_field.default = existing_field.preprocess(value)
+                return
+            else:
+                try:
+                    value = Field(value)._named(name)
+                except InvalidFieldType:
+                    pass
         return super().__setitem__(name, value)
 
 
@@ -414,13 +444,14 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
             d = [float]
 
     After assignment, fields are automatically converted to ``Field`` - so you
-    can use the field definition helpers on them::
+    can use the field definition helpers on them - and if you assign a value to
+    an existing field's name it becomes the field's new default::
 
         from easypy.typed_struct import TypedStruct
 
         class Foo(TypedStruct):
             a = int
-            a.default = 20
+            a = 20  # Equivalent to `a.default = 20`
             a.convertible_from(str, float)
     """
 

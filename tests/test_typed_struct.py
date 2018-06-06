@@ -1,6 +1,7 @@
 import pytest
 
 from easypy.bunch import Bunch
+from easypy.decorations import singleton
 
 import easypy.typed_struct as ts
 
@@ -512,3 +513,51 @@ def test_typed_struct_auto_field_wrapping_dsl():
         b.convertible_from(str)
 
     assert Foo(b='2.3').to_dict() == dict(a=1, b=2.3)
+
+
+def test_typed_struct_singleton_subclasses_style():
+    class Foo(ts.TypedStruct):
+        a = int
+        a.convertible_from(str)
+
+    @singleton
+    class foo(Foo):
+        a = '5'
+
+    assert foo.a == 5
+
+    class bar(Foo):
+        a = '5'
+
+    assert isinstance(bar.a, ts.Field)  # bar is a type, not an instance
+
+
+def test_typed_struct_order_of_multiple_inheritance():
+    class Foo(ts.TypedStruct):
+        a = int
+        a = 0
+
+    class Foo1(Foo):
+        a = 1
+
+    class Foo2(Foo):
+        a = 2
+
+    @singleton
+    class foo(Foo1, Foo2):
+        pass
+
+    class Bar:
+        a = 0
+
+    class Bar1(Bar):
+        a = 1
+
+    class Bar2(Bar):
+        a = 2
+
+    @singleton
+    class bar(Bar1, Bar2):
+        pass
+
+    assert foo.a == bar.a, 'Order of multiple inheritance should be the same for TypedStruct and regular classes'

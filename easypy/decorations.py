@@ -234,3 +234,18 @@ def lazy_decorator(decorator_factory):
     def wrapper(func):
         return LazyDecoratorDescriptor(decorator_factory, func)
     return wrapper
+
+
+def singleton(cls):
+    """
+    Convert the class into an instance of it::
+
+    >>> @singleton
+    >>> class foo:
+    >>>     def __init__(self):
+    >>>         self.x = 10
+    >>> foo.x
+    10
+    """
+
+    return cls()

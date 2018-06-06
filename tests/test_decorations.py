@@ -2,7 +2,7 @@ import pytest
 
 from functools import wraps
 
-from easypy.decorations import deprecated_arguments, kwargs_resilient, lazy_decorator
+from easypy.decorations import deprecated_arguments, kwargs_resilient, lazy_decorator, singleton
 
 
 def test_deprecated_arguments():
@@ -111,3 +111,17 @@ def test_lazy_decorator_attribute():
     foo.num = 20
     assert foo.foo() == 21
     assert foo.foo.__name__ == 'foo + 20'
+
+
+def test_singleton():
+    @singleton
+    class foo:
+        a = 1
+
+        def __init__(self):
+            self.b = 2
+
+    assert foo.a == 1
+    assert foo.b == 2
+    assert type(foo).a == 1
+    assert not hasattr(type(foo), 'b')
