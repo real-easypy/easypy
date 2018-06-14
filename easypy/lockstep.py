@@ -106,19 +106,24 @@ class lockstep(object):
                 yield from process
 
             yield 'Y'
+
+    :note: When used class methods, put the ``@classmethod`` decorator **below**
+           the ``@lockstep`` decorator::
+
+            class Foo:
+                @lockstep
+                @classmethod
+                def process(cls):
+                    # ...
     """
 
-    def __init__(self, generator_func, _object=None):
+    def __init__(self, generator_func):
         self.generator_func = generator_func
-        self._object = _object
         update_wrapper(self, generator_func)
 
     @contextmanager
     def lockstep(self, *args, **kwargs):
-        if self._object is None:
-            generator = self.generator_func(*args, **kwargs)
-        else:
-            generator = self.generator_func(self._object, *args, **kwargs)
+        generator = self.generator_func(*args, **kwargs)
         invocation = _LockstepInvocation(self.generator_func.__name__, generator)
 
         yield invocation
@@ -137,8 +142,5 @@ class lockstep(object):
         with self.lockstep(*args, **kwargs) as process:
             process.step_all()
 
-    def __get__(self, obj, _=None):
-        if obj is None:
-            return self
-
-        return lockstep(self.generator_func, _object=obj)
+    def __get__(self, instance, owner=None):
+        return lockstep(self.generator_func.__get__(instance, owner))

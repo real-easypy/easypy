@@ -209,3 +209,50 @@ def test_lockstep_step_util_wrong_order():
 
     assert excinfo.value.expected_step == 'STEP_1'
     assert excinfo.value.actual_step == 'finished'
+
+
+def test_lockstep_as_static_and_class_methods():
+    class Foo:
+        @lockstep
+        def process1(self, out):
+            out.append(1)
+            yield 'STEP'
+            out.append(2)
+
+        @lockstep
+        @classmethod
+        def process2(cls, out):
+            out.append(1)
+            yield 'STEP'
+            out.append(2)
+
+        @lockstep
+        @staticmethod
+        def process3(out):
+            out.append(1)
+            yield 'STEP'
+            out.append(2)
+
+    print()
+
+    def check_method_call(method):
+        out = []
+        method(out)
+        assert out == [1, 2]
+
+    check_method_call(Foo().process1)
+    check_method_call(Foo().process2)
+    check_method_call(Foo().process3)
+
+    def check_method_lockstep(method):
+        method.lockstep
+        out = []
+        with method.lockstep(out) as process:
+            assert out == []
+            process.step_until('STEP')
+            assert out == [1]
+        assert out == [1, 2]
+
+    check_method_lockstep(Foo().process1)
+    check_method_lockstep(Foo.process2)
+    check_method_lockstep(Foo.process3)
