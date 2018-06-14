@@ -184,7 +184,7 @@ class MultiExceptionMeta(type):
             with cls._SUBTYPES_LOCK:
                 if exception_type in cls._SUBTYPES:
                     return cls._SUBTYPES[exception_type]
-                bases = tuple(cls[base] for base in exception_type.__bases__ if base)
+                bases = tuple(cls[base] for base in exception_type.__bases__ if base and issubclass(base, BaseException))
                 subtype = type("MultiException[%s]" % exception_type.__qualname__, bases, {})
                 cls._SUBTYPES[exception_type] = subtype
                 return subtype

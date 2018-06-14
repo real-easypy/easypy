@@ -329,6 +329,33 @@ def test_multiexception_api():
     assert sucsessful.exception() is None
 
 
+def test_multiexception_types():
+
+    class OK(Exception):
+        pass
+
+    class BAD(object):
+        pass
+
+    class OKBAD(OK, BAD):
+        pass
+
+    with pytest.raises(AssertionError):
+        MultiException[BAD]
+
+    def raise_it(typ):
+        raise typ()
+
+    with pytest.raises(MultiException[OK]):
+        MultiObject([OK]).call(raise_it)
+
+    with pytest.raises(MultiException[OKBAD]):
+        MultiObject([OKBAD]).call(raise_it)
+
+    with pytest.raises(MultiException[OK]):
+        MultiObject([OKBAD]).call(raise_it)
+
+
 def test_logged_condition():
     cond = LoggedCondition('test', log_interval=.1)
 
