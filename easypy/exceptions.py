@@ -48,14 +48,17 @@ class PException(Exception):
         text = ""
 
         if self.message:
-            text += ("WHITE<<%s>>\n" % self.message)
+            text += "".join("WHITE<<%s>>\n" % line for line in self.message.splitlines())
 
         if params and self._params:
             tip = self._params.pop('tip', None)
             text += indent("".join(make_block(self._params)), " "*4)
             if tip:
                 tip = tip.format(**self._params)
-                text += indent("GREEN(BLUE)@{tip = %s}@\n" % tip, " "*4)
+                lines = tip.splitlines()
+                text += indent("GREEN(BLUE)@{tip = %s}@\n" % lines[0], " "*4)
+                for line in lines[1:]:
+                    text += indent("GREEN(BLUE)@{      %s}@\n" % lines[0], " "*4)
                 self._params['tip'] = tip  # put it back in params, even though it might've been on the class
 
         if timestamp and self.timestamp:
