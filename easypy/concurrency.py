@@ -165,7 +165,7 @@ def _find_interesting_frame(f):
     return next(non_threading, default)
 
 
-# This metalcass helps generate MultiException subtypes so that it's easier
+# This metaclass helps generate MultiException subtypes so that it's easier
 # to catch a MultiException with a specific common type
 class MultiExceptionMeta(type):
     _SUBTYPES = {}
@@ -218,7 +218,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         super().__init__(self.template, self)
 
     def __repr__(self):
-        return "{0.__class__.__name__}(<{0.common_type.__qualname__} x{0.count}/{0.invocations_count}>)".format(self)
+        return "{0.__class__.__name__}(x{0.count}/{0.invocations_count})".format(self)
 
     def __str__(self):
         return self.render(color=False)
@@ -568,16 +568,44 @@ def concurrent_map(func, params, workers=None, log_contexts=None, initial_log_in
         return futures.result()
 
 
-_LIST_DEPRECATION_MESSAGE = "MultiObject should not be used as a list"
+# This metaclass helps generate MultiObject subtypes for specific object types
+
+class MultiObjectMeta(type):
+    _SUBTYPES = {}
+    _SUBTYPES_LOCK = threading.RLock()
+
+    def __getitem__(cls, typ):
+        try:
+            return cls._SUBTYPES[typ]
+        except KeyError:
+            with cls._SUBTYPES_LOCK:
+                if typ in cls._SUBTYPES:
+                    return cls._SUBTYPES[typ]
+                bases = tuple(cls[base] for base in typ.__bases__ if base) or (MultiObject, )
+                subtype = type("MultiObject[%s]" % typ.__qualname__, bases, dict(CONCESTOR=typ))
+                cls._SUBTYPES[typ] = subtype
+                return subtype
+
+    __iter__ = None
+
+    def __call__(cls, items=None, *args, **kwargs):
+        items = tuple(items if items else [])
+        common_type = concestor(*map(type, items))
+        if not issubclass(common_type, cls.CONCESTOR):
+            raise TypeError("%s is not a type of %s" % (common_type, cls.CONCESTOR))
+        subtype = cls[common_type]
+        return type.__call__(subtype, items, *args, **kwargs)
 
 
-class MultiObject(object):
+class MultiObject(object, metaclass=MultiObjectMeta):
+
+    CONCESTOR = object
 
     def __init__(self, items=None, log_ctx=None, workers=None, initial_log_interval=None):
         self._items = list(items) if items else []
         self._workers = workers
         self._initial_log_interval = initial_log_interval
-        cstr = concestor(*map(type, self))
+        cstr = self.CONCESTOR
         if hasattr(cstr, '_multiobject_log_ctx'):
             # override the given log_ctx if the new items have it
             # some objects (Plumbum Cmd) are expensive to just get the attribute, so we require it
@@ -598,6 +626,9 @@ class MultiObject(object):
                 self._workers = len(self._items) or None
             else:
                 self._workers = _workers
+
+    def __repr__(self):
+        return "<%s (x%s/%s)>" % (self.__class__.__name__, len(self), self._workers)
 
     @property
     def L(self):
@@ -697,15 +728,8 @@ class MultiObject(object):
 
     # ================
 
-    def __repr__(self):
-        common_typ = concestor(*map(type, self))
-        if common_typ:
-            return "<MultiObject '%s' (x%s/%s)>" % (common_typ.__name__, len(self), self._workers)
-        else:
-            return "<MultiObject (Empty)>"
-
     def _new(self, items=None, ctxs=None, workers=None, initial_log_interval=None):
-        return self.__class__(
+        return MultiObject(
             self._items if items is None else items,
             self._log_ctx if ctxs is None else ctxs,
             self._workers if workers is None else workers,
@@ -737,7 +761,7 @@ class MultiObject(object):
 
     def chain(self):
         "Chain the iterables contained by this ``MultiObject``"
-        return self.__class__(chain(*self))
+        return MultiObject(chain(*self))
 
     def zip_with(self, *collections):
         mo = self._new(zip(self, *collections))

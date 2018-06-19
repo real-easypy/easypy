@@ -211,6 +211,30 @@ def test_multiobject_logging():
         assert "easypy/tests/test_concurrency.py" in args[4]
 
 
+def test_multiobject_types():
+    assert isinstance(MultiObject(range(5)), MultiObject[int])
+    assert not isinstance(MultiObject(range(5)), MultiObject[str])
+
+    class A(): ...
+    class B(A): ...
+
+    assert issubclass(MultiObject[A], MultiObject)
+    assert not issubclass(MultiObject[A], A)
+    assert issubclass(MultiObject[B], MultiObject[A])
+    assert not issubclass(MultiObject[A], MultiObject[B])
+
+    assert isinstance(MultiObject([B()]), MultiObject[A])
+    assert not isinstance(MultiObject([A()]), MultiObject[B])
+    assert isinstance(MultiObject[A]([B()]), MultiObject[A])
+    assert isinstance(MultiObject[A]([B()]), MultiObject[B])
+    assert isinstance(MultiObject[int](range(5)), MultiObject[int])
+
+    with pytest.raises(TypeError):
+        assert MultiObject[str](range(5))
+
+    assert isinstance(MultiObject[str]("123").call(int), MultiObject[int])
+
+
 def test_multiobject_namedtuples():
     from collections import namedtuple
 
