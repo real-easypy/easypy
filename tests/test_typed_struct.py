@@ -530,3 +530,40 @@ def test_typed_struct_inheritance():
 
     assert Foo().to_dict() == dict(a=1, b=2)
     assert Bar().to_dict() == dict(a=3, b=2, c=4)
+
+
+def test_typed_struct_repr():
+    class Foo(ts.TypedStruct):
+        a = int
+        b = float
+        b.repr = False
+        c = str
+        c.repr = '`{}`'.format
+
+    assert repr(Foo(a=1, b=2.0, c='3')) == 'Foo(a=1, c=`3`)'
+
+
+def test_typed_struct_hash():
+    class Foo(ts.TypedStruct):
+        a = int
+        b = int
+        b.hash = False
+        c = int
+        c.hash = lambda n: n % 2
+
+
+    assert hash(Foo(a=1, b=2, c=3)) == hash(Foo(a=1, b=2, c=3))
+    assert hash(Foo(a=1, b=2, c=3)) != hash(Foo(a=2, b=2, c=3))
+    assert hash(Foo(a=1, b=2, c=3)) == hash(Foo(a=1, b=1, c=3)), 'b should not be part of the hash'
+    assert hash(Foo(a=1, b=2, c=3)) == hash(Foo(a=1, b=2, c=1)), 'Only the parity of c should be in the hash'
+    assert hash(Foo(a=1, b=2, c=3)) != hash(Foo(a=1, b=2, c=2)), 'c with different parity should generate different hash'
+
+    class Bar(ts.TypedStruct):
+        a = int
+        b = int
+        b.hash = False
+        c = int
+        c.hash = lambda n: n % 2
+
+    assert hash(Foo(a=1, b=2, c=3)) != hash(Bar(a=1, b=2, c=3)), \
+        'different classes with same fields should have different hahses'
