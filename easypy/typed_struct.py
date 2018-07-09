@@ -256,6 +256,18 @@ class Field(object):
         self._validate_type(value)
         return value
 
+    def to_parameter(self):
+        from inspect import Parameter
+
+        return Parameter(
+            name=self.name,
+            kind=Parameter.KEYWORD_ONLY,
+            default=Parameter.empty if self.default is MANDATORY else self.default,
+            annotation=self.type)
+
+    def __repr__(self):
+        return 'Field<%s>' % self.to_parameter()
+
 
 class TypedCollection(object):
     def __init__(self, owner, field):
@@ -370,15 +382,29 @@ class TypedStructMeta(type):
     def __prepare__(metacls, name, bases, **kwds):
         return _TypedStructDslDict()
 
-    def __new__(cls, name, bases, dct):
-        def altered_dct_gen():
-            fields = []
-            yield '_fields', fields
-            for k, v in dct.items():
-                if isinstance(v, Field):
-                    fields.append(v)
-                yield k, v
-        return super().__new__(cls, name, bases, dict(altered_dct_gen()))
+    def __new__(mcs, name, bases, dct):
+        fields = []
+        for k, v in dct.items():
+            if isinstance(v, Field):
+                fields.append(v)
+        dct['_fields'] = fields
+        if '__init__' not in dct:
+            from inspect import Signature
+
+            def __init__(self, **kwargs):
+                super(cls, self).__init__(**kwargs)
+            __init__.__signature__ = Signature(parameters=[field.to_parameter() for field in fields])
+            dct['__init__'] = __init__
+
+        try:
+            if TypedStruct in bases and '__doc__' not in dct:
+                # If we don't do this, IPython will display the TypedStruct docstring
+                dct['__doc__'] = ""
+        except NameError:  # TypedStruct itself is defined here
+            pass
+
+        cls = super().__new__(mcs, name, bases, dct)
+        return cls
 
 
 class _TypedStructDslDict(PythonOrderedDict):
