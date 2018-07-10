@@ -6,6 +6,7 @@ from datetime import datetime
 from contextlib import contextmanager
 from textwrap import indent
 from logging import getLogger
+import threading
 _logger = getLogger(__name__)
 
 
@@ -149,3 +150,74 @@ def convert_traceback_to_list(tb):
     traceback_list = [dict(file=file, line_no=line_no, function=function)
                       for file, line_no, function, _ in traceback.extract_tb(tb)]
     return traceback_list
+
+
+__annotated_exception_subtypes = {}
+__annotated_exception_subtypes_lock = threading.RLock()
+
+def __create_annotated_exception_type(exception_type):
+    try:
+        return __annotated_exception_subtypes[exception_type]
+    except KeyError:
+        pass
+
+    with __annotated_exception_subtypes_lock:
+        try:
+            return __annotated_exception_subtypes[exception_type]
+        except KeyError:
+            pass
+        annotated_type = type(exception_type.__name__, (PException, exception_type), dict(
+            __module__=exception_type.__module__,
+            __qualname__=exception_type.__qualname__,
+        ))
+        __annotated_exception_subtypes[exception_type] = annotated_type
+        return annotated_type
+
+
+@contextmanager
+def annotated_exceptions():
+    """
+    Add extra information to exceptions.
+
+    Yields a function that can be called to add fields that will be set on any
+    exception that will be thrown. If the exception is not a PException, it
+    will be wrapped in a new type.
+
+    >>> try:
+    ...     with annotated_exceptions() as annotate:
+    ...         numerator = 10
+    ...         annotate(numerator=numerator)
+    ...         numerator / 0
+    ... except Exception as e:
+    ...     print(repr(e))
+    ZeroDivisionError('division by zero', numerator=10, tip=None)
+    """
+
+    extra_params = {}
+
+    try:
+        yield extra_params.update
+    except Exception as e:
+        exception_object_changed = False
+        if not isinstance(e, PException):
+            new_type = __create_annotated_exception_type(type(e))
+            message = str(e)  # must be formatted before we switch the class
+            try:
+                e.__class__ = new_type
+            except TypeError:
+                e = new_type(*e.args)
+                exception_object_changed = True
+            else:
+                e.message = message
+                e.timestamp = time()
+                e.context = None
+                e._params = {}
+
+        if extra_params:
+            e.add_params(**extra_params)
+
+        if exception_object_changed:
+            raise e
+        else:
+            # If possible, prevent pollution of the exception dump
+            raise

@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bunch: Added `.render()` to render the data cleanly
 - exceptions: support pickling
 - CI: Add python 3.7 and 3.8
+- exceptions: `annotated_exceptions` context manager, for adding information to exceptions that may raise later in the context.
 
 ### Fixed
 - sync: prevent an import cycle
