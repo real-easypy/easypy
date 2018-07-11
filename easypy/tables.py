@@ -15,6 +15,7 @@ class Column():
         self.overflow = 'ellipsis'
         self.title = title or name
         self.drop_if_empty = drop_if_empty
+        self.visible = True
 
 
 class Table():
@@ -53,6 +54,8 @@ class Table():
             return ret
 
         for column in self.columns:
+            if not column.visible:
+                continue
             rows = [_get_value(data, column.name) for data in self.data]
             if not any(filter(lambda i: i != '', rows)) and column.drop_if_empty:
                 continue
