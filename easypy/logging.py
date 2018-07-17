@@ -9,11 +9,9 @@ import threading
 import time
 import traceback
 from contextlib import ExitStack
-from copy import deepcopy
 from functools import wraps, partial
 from itertools import cycle, chain, repeat
 
-from easypy.bunch import Bunch
 from easypy.colors import colorize_by_patterns as C, uncolorize
 from easypy.humanize import compact as _compact
 from easypy.timing import timing as timing_context, Timer
@@ -287,6 +285,13 @@ class ProgressHandler(logging.NullHandler):
 PROGRESS_BAR = ProgressBar()
 
 
+class AbortedException(BaseException):
+    """ Aborted base class
+
+    Exceptions that inherit from this class will show as ABORTED in logger.indented
+    """
+
+
 class ContextLoggerMixin(object):
 
     _debuggifier = LogLevelClamp()
@@ -335,7 +340,7 @@ class ContextLoggerMixin(object):
 
             try:
                 yield
-            except KeyboardInterrupt:
+            except (KeyboardInterrupt, AbortedException):
                 footer_log("CYAN", "ABORTED", INDENT_EXCEPTION)
                 raise
             except GeneratorExit:
