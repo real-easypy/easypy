@@ -10,6 +10,7 @@ from contextlib import contextmanager, ExitStack
 from easypy.concurrency import Futures, MultiObject
 from easypy.decorations import parametrizeable_decorator, kwargs_resilient
 from easypy.exceptions import TException
+from easypy.contexts import is_contextmanager
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
 _logger = logging.getLogger(__name__)
@@ -37,7 +38,10 @@ def get_original_func(func):
     while True:
         if isinstance(func, functools.partial):
             func = func.func
-        elif hasattr(func, "__wrapped__"):
+        elif hasattr(func, "__wrapped__") and not (
+            is_contextmanager(func) and not is_contextmanager(func.__wrapped__)
+            # This means func is the context manager itself (which wraps a non-context-manager function)
+        ):
             func = func.__wrapped__
         else:
             return func

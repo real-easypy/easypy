@@ -152,3 +152,32 @@ def test_async():
     on_test()
 
     on_test.async = False
+
+
+def test_ctx():
+    from contextlib import contextmanager
+    from easypy.signals import on_ctx_test
+
+    result = []
+
+    class Foo:
+        @contextmanager
+        def on_ctx_test(self, before, after):
+            result.append(before)
+            yield
+            result.append(after)
+
+    foo = Foo()
+
+    register_object(foo)
+
+    assert result == []
+    with on_ctx_test(before=1, after=2):
+        assert result == [1]
+    assert result == [1, 2]
+
+    unregister_object(foo)
+
+    with on_ctx_test(before=3, after=4):
+        assert result == [1, 2]
+    assert result == [1, 2]
