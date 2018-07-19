@@ -17,7 +17,7 @@ import os
 import signal
 import threading
 import time
-import warnings
+from collections import namedtuple
 from datetime import datetime
 
 from easypy.decorations import parametrizeable_decorator
@@ -185,7 +185,7 @@ class MultiExceptionMeta(type):
                 if exception_type in cls._SUBTYPES:
                     return cls._SUBTYPES[exception_type]
                 bases = tuple(cls[base] for base in exception_type.__bases__ if base and issubclass(base, BaseException))
-                subtype = type("MultiException[%s]" % exception_type.__qualname__, bases, {})
+                subtype = type("MultiException[%s]" % exception_type.__qualname__, bases, dict(COMMON_TYPE=exception_type))
                 cls._SUBTYPES[exception_type] = subtype
                 return subtype
 
@@ -197,9 +197,15 @@ class MultiExceptionMeta(type):
         return type.__call__(subtype, exceptions, futures)
 
 
+PickledFuture = namedtuple("PickledFuture", "ctx, funcname")
+
+
 class MultiException(PException, metaclass=MultiExceptionMeta):
 
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
+
+    def __reduce__(self):
+        return (MultiException, (self.exceptions, [PickledFuture(ctx=f.ctx, funcname=f.funcname) for f in self.futures]))
 
     def __init__(self, exceptions, futures):
         # we want to keep futures in parallel with exceptions,
@@ -208,7 +214,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         self.actual = list(filter(None, exceptions))
         self.count = len(self.actual)
         self.invocations_count = len(futures)
-        self.common_type = concestor(*map(type, self.actual))
+        self.common_type = self.COMMON_TYPE
         self.one = self.actual[0] if self.actual else None
         self.futures = futures
         self.exceptions = exceptions
