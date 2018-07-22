@@ -146,6 +146,38 @@ def test_multiobject_exceptions():
             assert False  # shouldn't be here
 
 
+class ExceptionForPicklingTest(ArithmeticError):
+    pass
+
+
+def test_multiexception_pickling():
+    import pickle
+    import multiprocessing
+
+    def throw(n):
+        if not n:
+            raise ExceptionForPicklingTest(n)
+
+    def fail_and_dump(queue):
+        try:
+            MultiObject(range(5)).call(throw)
+        except MultiException[ArithmeticError] as exc:
+            p = pickle.dumps(exc)
+            queue.put_nowait(p)
+
+    queue = multiprocessing.Queue(1)
+    process = multiprocessing.Process(target=fail_and_dump, args=(queue,))
+    process.start()
+    process.join()
+    p = queue.get_nowait()
+
+    exc = pickle.loads(p)
+    assert isinstance(exc, MultiException[ExceptionForPicklingTest])
+    assert exc.common_type is ExceptionForPicklingTest
+    assert exc.exceptions[0].args == (0,)
+    assert exc.exceptions[1:] == [None] * 4
+
+
 def test_multiobject_concurrent_find_found():
     m = MultiObject(range(10))
     from time import sleep
