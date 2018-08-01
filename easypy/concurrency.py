@@ -1319,11 +1319,12 @@ class TagAlongThread(object):
         self._last_exception = None
         self._last_result = None
 
+        self.__alive = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name=name)
         self._thread.start()
 
     def _loop(self):
-        while True:
+        while self.__alive:
             self._iteration_trigger.wait()
             self._iteration_trigger.clear()
 
@@ -1342,7 +1343,16 @@ class TagAlongThread(object):
 
             time.sleep(self.minimal_sleep)
 
+        # Set all events so nothing will get blocked
+        self._iteration_trigger.set()
+        self._iterating.set()
+        self._not_iterating.set()
+
+    def __repr__(self):
+        return 'TagAlongThread<%s>' % (self._thread.name,)
+
     def __call__(self):
+        assert self.__alive, '%s is dead' % self
         # We can't use an iteration that's already started - maybe it's already at a too advanced stage?
         if self._iterating.is_set():
             self._not_iterating.wait()
@@ -1364,6 +1374,11 @@ class TagAlongThread(object):
             raise last_exception
         else:
             return last_result
+
+    def _kill(self):
+        self.__alive = False
+        self._iteration_trigger.set()
+        self._thread.join()
 
 
 def throttled(duration):
