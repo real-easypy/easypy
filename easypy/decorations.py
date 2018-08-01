@@ -70,49 +70,36 @@ def parametrizeable_decorator(deco):
 
 
 def singleton_contextmanager(func):
-    class CtxManager():
-        def __init__(self, func):
-            self.count = 0
-            self.func_cm = contextmanager(func)
-            self._lock = RLock()
+    from .caching import locking_cache
 
-        def __enter__(self):
-            with self._lock:
-                if self.count == 0:
-                    self.ctm = self.func_cm()
-                    self.obj = self.ctm.__enter__()
-                self.count += 1
-
-        def __exit__(self, *args):
-            with self._lock:
-                self.count -= 1
-                if self.count > 0:
-                    return
-                self.ctm.__exit__(*sys.exc_info())
-                del self.ctm
-                del self.obj
-
-    return CtxManager(func)
-
-
-_singleton_contextmanager_method_attr_lock = RLock()
-
-
-def singleton_contextmanager_method(func):
-    cached_attr_name = '__singleton_contextmanager_method__' + func.__name__
-
-    # Wrap with a context manager to get proper IPython documentation
-    @contextmanager
     @wraps(func)
-    def inner(self):
-        with _singleton_contextmanager_method_attr_lock:
-            try:
-                cm = getattr(self, cached_attr_name)
-            except AttributeError:
-                cm = singleton_contextmanager(partial(func, self))
-                setattr(self, cached_attr_name, cm)
-        with cm as val:
-            yield val
+    @locking_cache
+    def inner(*args, **kwargs):
+
+        class CtxManager():
+            def __init__(self):
+                self.count = 0
+                self.func_cm = contextmanager(func)
+                self._lock = RLock()
+
+            def __enter__(self):
+                with self._lock:
+                    if self.count == 0:
+                        self.ctm = self.func_cm(*args, **kwargs)
+                        self.obj = self.ctm.__enter__()
+                    self.count += 1
+                return self.obj
+
+            def __exit__(self, *args):
+                with self._lock:
+                    self.count -= 1
+                    if self.count > 0:
+                        return
+                    self.ctm.__exit__(*sys.exc_info())
+                    del self.ctm
+                    del self.obj
+
+        return CtxManager()
 
     return inner
 
