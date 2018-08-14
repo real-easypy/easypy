@@ -127,11 +127,11 @@ retrying.error = partial(retrying, log_level=logging.ERROR)
 
 @parametrizeable_decorator
 def resilient(func=None, default=None, **kw):
-    msg = "ignoring error in %s ({type})" % func.__qualname__
+    kw.setdefault('msg', "ignoring error in %s ({type})" % func.__qualname__)
 
     @wraps(func)
     def inner(*args, **kwargs):
-        with resilience(msg, **kw):
+        with resilience(**kw):
             return func(*args, **kwargs)
         return default  # we reach here only if an exception was caught and handled by resilience
     return inner
