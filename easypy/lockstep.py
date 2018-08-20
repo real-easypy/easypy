@@ -143,4 +143,8 @@ class lockstep(object):
             process.step_all()
 
     def __get__(self, instance, owner=None):
-        return lockstep(self.generator_func.__get__(instance, owner))
+        func = self.generator_func.__get__(instance, owner)
+        if func is self.generator_func:
+            return self
+        else:
+            return lockstep(func)

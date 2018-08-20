@@ -181,3 +181,48 @@ def test_ctx():
     with on_ctx_test(before=3, after=4):
         assert result == [1, 2]
     assert result == [1, 2]
+
+
+def test_siganl_weakref():
+    """
+    Test that signals handlers of methods are deleted when their objects get collected
+    """
+    import gc
+    from easypy.signals import on_test
+
+    class Foo:
+        def on_test(self, a, b):
+            a / b
+
+    foo = Foo()
+    register_object(foo)
+
+    with pytest.raises(ZeroDivisionError):
+        on_test(a=5, b=0, c='c')
+
+    del foo
+    gc.collect()
+
+    on_test(a=5, b=0, c='c')
+
+
+def test_siganl_weakref_complex_descriptors():
+    import gc
+    from easypy.signals import on_test
+    from easypy.lockstep import lockstep
+
+    class Foo:
+        @lockstep
+        def on_test(self, a, b):
+            a / b
+
+    foo = Foo()
+    register_object(foo)
+
+    with pytest.raises(ZeroDivisionError):
+        on_test(a=5, b=0, c='c')
+
+    del foo
+    gc.collect()
+
+    on_test(a=5, b=0, c='c')
