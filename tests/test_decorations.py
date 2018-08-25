@@ -2,7 +2,7 @@ import pytest
 
 from functools import wraps
 
-from easypy.decorations import deprecated_arguments, kwargs_resilient, lazy_decorator
+from easypy.decorations import deprecated_arguments, kwargs_resilient, lazy_decorator, singleton_contextmanager
 
 
 def test_deprecated_arguments():
@@ -111,3 +111,108 @@ def test_lazy_decorator_attribute():
     foo.num = 20
     assert foo.foo() == 21
     assert foo.foo.__name__ == 'foo + 20'
+
+
+def test_singleton_contextmanager():
+
+    data = []
+
+    @singleton_contextmanager
+    def foo(a):
+        data.append(a)
+        yield a
+        data.append(-a)
+
+    with foo(1):
+        assert data == [1]
+
+        with foo(2):
+            assert data == [1, 2]
+
+            with foo(2):
+                assert data == [1, 2]
+
+                with foo(1):
+                    assert data == [1, 2]
+
+            assert data == [1, 2]
+        assert data == [1, 2, -2]
+    assert data == [1, 2, -2, -1]
+
+    data.clear()
+
+    with foo(1):
+        assert data == [1]
+        with foo(2):
+            assert data == [1, 2]
+            with foo(2):
+                assert data == [1, 2]
+            assert data == [1, 2]
+        assert data == [1, 2, -2]
+    assert data == [1, 2, -2, -1]
+
+
+def test_singleton_contextmanager_method():
+
+    class Foo(object):
+
+        def __init__(self):
+            self.data = []
+
+        @singleton_contextmanager
+        def foo(self, a):
+            self.data.append(a)
+            yield a
+            self.data.append(-a)
+
+    f = Foo()
+    g = Foo()
+
+    with f.foo(1), g.foo(5):
+        assert f.data == [1]
+        assert g.data == [5]
+
+        with f.foo(2), g.foo(6):
+            assert f.data == [1, 2]
+            assert g.data == [5, 6]
+
+            with f.foo(2), g.foo(6):
+                assert f.data == [1, 2]
+                assert g.data == [5, 6]
+
+                with f.foo(1), g.foo(5):
+                    assert f.data == [1, 2]
+                    assert g.data == [5, 6]
+
+            assert f.data == [1, 2]
+            assert g.data == [5, 6]
+        assert f.data == [1, 2, -2]
+        assert g.data == [5, 6, -6]
+    assert f.data == [1, 2, -2, -1]
+    assert g.data == [5, 6, -6, -5]
+
+    f.data.clear()
+    g.data.clear()
+
+    with f.foo(1), g.foo(5):
+        assert f.data == [1]
+        assert g.data == [5]
+
+        with f.foo(2), g.foo(6):
+            assert f.data == [1, 2]
+            assert g.data == [5, 6]
+
+            with f.foo(2), g.foo(6):
+                assert f.data == [1, 2]
+                assert g.data == [5, 6]
+
+                with f.foo(1), g.foo(5):
+                    assert f.data == [1, 2]
+                    assert g.data == [5, 6]
+
+            assert f.data == [1, 2]
+            assert g.data == [5, 6]
+        assert f.data == [1, 2, -2]
+        assert g.data == [5, 6, -6]
+    assert f.data == [1, 2, -2, -1]
+    assert g.data == [5, 6, -6, -5]
