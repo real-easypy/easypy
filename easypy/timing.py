@@ -10,7 +10,7 @@ from .decorations import parametrizeable_decorator
 from .units import Duration
 from .exceptions import PException
 from .humanize import time_duration  # due to interference with jrpc
-from .decorations import kwargs_resilient
+from .misc import kwargs_resilient
 
 IS_A_TTY = sys.stdout.isatty()
 

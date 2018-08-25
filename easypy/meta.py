@@ -2,7 +2,7 @@ from abc import ABCMeta
 from functools import wraps
 from collections import OrderedDict
 
-from .decorations import kwargs_resilient
+from .misc import kwargs_resilient
 
 
 class EasyMeta(ABCMeta):

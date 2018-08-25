@@ -1,62 +1,9 @@
-import inspect
-import sys
-from contextlib import contextmanager
+"""
+This module is about making it easier to create decorators
+"""
+
 from functools import wraps, partial
-from types import MethodType
-import warnings
-from threading import RLock
 from operator import attrgetter
-
-from easypy.collections import intersected_dict, ilistify
-
-
-def deprecated(func=None, message=None):
-    if not callable(func):
-        return partial(deprecated, message=func)
-    message = (" "+message) if message else ""
-    message = "Hey! '%s' is deprecated!%s" % (func.__name__, message)
-
-    @wraps(func)
-    def inner(*args, **kwargs):
-        warnings.warn(message, DeprecationWarning, stacklevel=2)
-        return func(*args, **kwargs)
-    return inner
-
-
-def deprecated_arguments(**argmap):
-    """
-    Renames arguments while emitting deprecation warning::
-
-        @deprecated_arguments(old_name='new_name')
-        def func(new_name):
-            # ...
-
-        func(old_name='value meant for new name')
-    """
-
-    def wrapper(func):
-        @wraps(func)
-        def inner(*args, **kwargs):
-            deprecation_warnings = []
-            for name, map_to in argmap.items():
-                try:
-                    value = kwargs.pop(name)
-                except KeyError:
-                    pass  # deprecated argument was not used
-                else:
-                    if map_to in kwargs:
-                        raise TypeError("%s is deprecated for %s - can't use both in %s()" % (
-                                        name, map_to, func.__name__))
-                    deprecation_warnings.append('%s is deprecated - use %s instead' % (name, map_to))
-                    kwargs[map_to] = value
-
-            if deprecation_warnings:
-                message = 'Hey! In %s, %s' % (func.__name__, ', '.join(deprecation_warnings))
-                warnings.warn(message, DeprecationWarning, stacklevel=2)
-
-            return func(*args, **kwargs)
-        return inner
-    return wrapper
 
 
 def parametrizeable_decorator(deco):
@@ -69,76 +16,18 @@ def parametrizeable_decorator(deco):
     return inner
 
 
-def singleton_contextmanager(func):
-    from .caching import locking_cache
-
-    @wraps(func)
-    @locking_cache
-    def inner(*args, **kwargs):
-
-        class CtxManager():
-            def __init__(self):
-                self.count = 0
-                self.func_cm = contextmanager(func)
-                self._lock = RLock()
-
-            def __enter__(self):
-                with self._lock:
-                    if self.count == 0:
-                        self.ctm = self.func_cm(*args, **kwargs)
-                        self.obj = self.ctm.__enter__()
-                    self.count += 1
-                return self.obj
-
-            def __exit__(self, *args):
-                with self._lock:
-                    self.count -= 1
-                    if self.count > 0:
-                        return
-                    self.ctm.__exit__(*sys.exc_info())
-                    del self.ctm
-                    del self.obj
-
-        return CtxManager()
-
-    return inner
-
-
-@parametrizeable_decorator
-def kwargs_resilient(func, negligible=None):
-    """
-    If function does not specify **kwargs, pass only params which it can accept
-
-    :param negligible: If set, only be resilient to these specific parameters:
-
-                - Other parameters will be passed normally, even if they don't appear in the signature.
-                - If a specified parameter is not in the signature, don't pass it even if there are **kwargs.
-    """
-    spec = inspect.getfullargspec(inspect.unwrap(func))
-    acceptable_args = set(spec.args or ())
-    if isinstance(func, MethodType):
-        acceptable_args -= {spec.args[0]}
-
-    if negligible is None:
-        @wraps(func)
-        def inner(*args, **kwargs):
-            if spec.varkw is None:
-                kwargs = intersected_dict(kwargs, acceptable_args)
-            return func(*args, **kwargs)
-    else:
-        negligible = set(ilistify(negligible))
-
-        @wraps(func)
-        def inner(*args, **kwargs):
-            kwargs = {k: v for k, v in kwargs.items()
-                      if k in acceptable_args
-                      or k not in negligible}
-            return func(*args, **kwargs)
-
+def wrapper_decorator(deco):
+    @wraps(deco)
+    def inner(func):
+        return wraps(func)(deco(func))
     return inner
 
 
 def reusable_contextmanager(context_manager):
+    """
+    Allows the generator-based context manager to be used more than once
+    """
+
     if not hasattr(context_manager, '_recreate_cm'):
         return context_manager  # context manager is already reusable (was not created usin yield funcion
 
@@ -151,32 +40,6 @@ def reusable_contextmanager(context_manager):
             self.cm.__exit__(*args)
 
     return ReusableCtx()
-
-
-@parametrizeable_decorator
-def as_list(generator, sort_by=None):
-    """
-    Forces a generator to output a list.
-
-    When writing a generator is more convenient::
-
-        @as_list(sort_by=lambda n: -n)
-        def g():
-            yield 1
-            yield 2
-            yield from range(2)
-
-    >>> g()
-    [2, 1, 1, 0]
-
-    """
-    @wraps(generator)
-    def inner(*args, **kwargs):
-        l = list(generator(*args, **kwargs))
-        if sort_by:
-            l.sort(key=sort_by)
-        return l
-    return inner
 
 
 class LazyDecoratorDescriptor:

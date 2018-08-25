@@ -1,6 +1,11 @@
+"""
+This module is all about its 'aliases' (v.) class decorator
+"""
+
 from itertools import chain
 
 
+# TODO - remove this, we don't need the python2 compatibility anymore
 def super_dir(obj):
     """
     A python2/3 compatible way of getting the default ('super') behavior of __dir__

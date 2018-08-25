@@ -8,9 +8,10 @@ from enum import Enum
 from contextlib import contextmanager, ExitStack
 
 from easypy.concurrency import Futures, MultiObject
-from easypy.decorations import parametrizeable_decorator, kwargs_resilient
+from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
+from easypy.misc import kwargs_resilient
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
 _logger = logging.getLogger(__name__)

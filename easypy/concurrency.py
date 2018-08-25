@@ -1,5 +1,9 @@
 # encoding: utf-8
 
+"""
+This module helps you run things concurrently
+"""
+
 from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, Future, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
 

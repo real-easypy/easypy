@@ -6,6 +6,7 @@ from functools import partial
 import random
 from .predicates import make_predicate
 from .tokens import UNIQUE
+from .decorations import parametrizeable_decorator
 
 import sys
 if sys.version_info[:2] >= (3, 5):
@@ -684,3 +685,29 @@ class SlidingWindow(list):
         super().append(item)
         if len(self) > self.size:
             self.pop(0)
+
+
+@parametrizeable_decorator
+def as_list(generator, sort_by=None):
+    """
+    Forces a generator to output a list.
+
+    When writing a generator is more convenient::
+
+        @as_list(sort_by=lambda n: -n)
+        def g():
+            yield 1
+            yield 2
+            yield from range(2)
+
+    >>> g()
+    [2, 1, 1, 0]
+
+    """
+
+    def inner(*args, **kwargs):
+        l = list(generator(*args, **kwargs))
+        if sort_by:
+            l.sort(key=sort_by)
+        return l
+    return inner

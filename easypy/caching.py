@@ -8,9 +8,11 @@ from collections import defaultdict
 from functools import wraps, _make_key, partial, lru_cache
 from threading import RLock
 from logging import getLogger
+
 from .resilience import retrying
-from .decorations import kwargs_resilient, parametrizeable_decorator
+from .decorations import parametrizeable_decorator, wrapper_decorator
 from .collections import ilistify
+from .misc import kwargs_resilient
 
 
 _logger = getLogger(__name__)
@@ -175,6 +177,7 @@ def locking_lru_cache(maxsize=128, typed=False):  # can't implement ignored_keyw
 
     return deco
 
+
 if sys.version_info < (3, 5):
     def _apply_defaults(bound_arguments):
         """
@@ -326,3 +329,37 @@ class cached_property(object):
     def __call__(self, func):
         self._function = func
         return self
+
+
+@wrapper_decorator
+def shared_contextmanager(func):
+
+    @locking_cache
+    def inner(*args, **kwargs):
+
+        class CtxManager():
+            def __init__(self):
+                self.count = 0
+                self.func_cm = contextmanager(func)
+                self._lock = RLock()
+
+            def __enter__(self):
+                with self._lock:
+                    if self.count == 0:
+                        self.ctm = self.func_cm(*args, **kwargs)
+                        self.obj = self.ctm.__enter__()
+                    self.count += 1
+                return self.obj
+
+            def __exit__(self, *args):
+                with self._lock:
+                    self.count -= 1
+                    if self.count > 0:
+                        return
+                    self.ctm.__exit__(*sys.exc_info())
+                    del self.ctm
+                    del self.obj
+
+        return CtxManager()
+
+    return inner
