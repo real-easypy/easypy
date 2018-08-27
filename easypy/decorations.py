@@ -1,11 +1,12 @@
 import inspect
 import sys
 from contextlib import contextmanager
-from functools import wraps, partial
+from functools import wraps, partial, update_wrapper
 from types import MethodType
 import warnings
 from threading import RLock
 from operator import attrgetter
+import weakref
 
 from easypy.collections import intersected_dict, ilistify
 
@@ -104,6 +105,25 @@ def singleton_contextmanager(func):
     return inner
 
 
+class WeakMethodDead(Exception):
+    pass
+
+
+class WeakMethodWrapper:
+    def __init__(self, weak_method):
+        if isinstance(weak_method, MethodType):
+            weak_method = weakref.WeakMethod(weak_method)
+        self.weak_method = weak_method
+        update_wrapper(self, weak_method(), updated=())
+        self.__wrapped__ = weak_method
+
+    def __call__(self, *args, **kwargs):
+        method = self.weak_method()
+        if method is None:
+            raise WeakMethodDead
+        return method(*args, **kwargs)
+
+
 @parametrizeable_decorator
 def kwargs_resilient(func, negligible=None):
     """
@@ -114,7 +134,11 @@ def kwargs_resilient(func, negligible=None):
                 - Other parameters will be passed normally, even if they don't appear in the signature.
                 - If a specified parameter is not in the signature, don't pass it even if there are **kwargs.
     """
-    spec = inspect.getfullargspec(inspect.unwrap(func))
+    if isinstance(func, weakref.WeakMethod):
+        spec = inspect.getfullargspec(inspect.unwrap(func()))
+        func = WeakMethodWrapper(func)
+    else:
+        spec = inspect.getfullargspec(inspect.unwrap(func))
     acceptable_args = set(spec.args or ())
     if isinstance(func, MethodType):
         acceptable_args -= {spec.args[0]}
