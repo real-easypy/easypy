@@ -30,6 +30,7 @@ from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer, TimeoutException
 from easypy.units import NEVER, MINUTE, HOUR
 from easypy.colors import colorize_by_patterns
+from easypy.logging import AbortedException, get_current_context
 
 
 this_module = import_module(__name__)
@@ -130,7 +131,7 @@ class ThreadTimeoutException(TException):
     template = "Thread timeout during execution {func}"
 
 
-class ProcessExiting(TException):
+class ProcessExiting(TException, AbortedException):
     template = "Aborting thread - process is exiting"
 
 
@@ -148,13 +149,25 @@ _exiting = False  # we use this to break out of lock-acquisition loops
 
 @atexit.register
 def break_locks():
+    print("And now - We exit.")
     global _exiting
-    _exiting = True
+    if not _exiting:
+        _exiting = ProcessExiting
+
+
+def handle_sigint(sig, stack):
+    global _exiting
+    _exiting = KeyboardInterrupt
+    signal.signal(signal.SIGINT, orig_sigint_handler)
+    return orig_sigint_handler(sig, stack)
+
+
+orig_sigint_handler = signal.signal(signal.SIGINT, handle_sigint)
 
 
 def _check_exiting():
     if _exiting:
-        raise ProcessExiting()
+        raise _exiting()
 
 
 def _find_interesting_frame(f):
@@ -201,6 +214,8 @@ PickledFuture = namedtuple("PickledFuture", "ctx, funcname")
 
 
 class MultiException(PException, metaclass=MultiExceptionMeta):
+
+    COMMON_TYPE = BaseException
 
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
@@ -319,6 +334,9 @@ class Futures(list):
             if isinstance(me, MultiException[ProcessExiting]):
                 # we want these aborted MultiObject threads to consolidate this exception
                 raise ProcessExiting()
+            if isinstance(me, MultiException[KeyboardInterrupt]):
+                # we want these aborted MultiObject threads to consolidate this exception
+                raise KeyboardInterrupt()
             raise me
         return [f.result() for f in self]
 
@@ -773,6 +791,7 @@ class MultiObject(object, metaclass=MultiObjectMeta):
 
 def concestor(*cls_list):
     "Closest common ancestor class"
+    cls_list = set(cls_list)
     mros = [list(inspect.getmro(cls)) for cls in cls_list]
     track = defaultdict(int)
     while mros:
@@ -1711,3 +1730,21 @@ class LoggedCondition():
         """
 
         return self._cond._lock
+
+
+class HaltHandler(logging.NullHandler):
+    SKIP = {threading.main_thread()}
+
+    def handle(self, record):
+        if not _exiting:
+            return
+
+        if threading.current_thread() in self.SKIP:
+            return
+
+        if get_current_context().get("no_halt"):
+            self.SKIP.add(threading.current_thread())
+            return
+
+        self.SKIP.add(threading.current_thread())
+        _check_exiting()
