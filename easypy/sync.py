@@ -26,6 +26,8 @@ from .misc import Hex
 from .timing import Timer
 from .humanize import time_duration  # due to interference with jrpc
 from .misc import kwargs_resilient
+from .logging import AbortedException, get_current_context
+
 
 _logger = logging.getLogger(__name__)
 _verbose_logger = logging.getLogger('%s.locks' % __name__)  # logger for less important logs of RWLock.
@@ -47,7 +49,7 @@ class LockLeaseExpired(TException):
     template = "Lock Lease Expired - thread is holding this lock for too long"
 
 
-class ProcessExiting(TException):
+class ProcessExiting(TException, AbortedException):
     template = "Aborting thread - process is exiting"
 
 
@@ -61,13 +63,48 @@ _exiting = False  # we use this to break out of lock-acquisition loops
 
 @atexit.register
 def break_locks():
+    print("And now - We exit.")
+    # suppress unnecessary tracebacks
+    sys.excepthook = lambda *args, **kwargs: None
     global _exiting
-    _exiting = True
+    if not _exiting:
+        _exiting = ProcessExiting
+
+
+def handle_sigint(sig, stack):
+    global _exiting
+    import sys
+    # suppress unnecessary tracebacks
+    sys.excepthook = lambda *args, **kwargs: None
+    _exiting = KeyboardInterrupt
+    signal.signal(signal.SIGINT, orig_sigint_handler)
+    return orig_sigint_handler(sig, stack)
+
+
+orig_sigint_handler = signal.signal(signal.SIGINT, handle_sigint)
 
 
 def _check_exiting():
     if _exiting:
-        raise ProcessExiting()
+        raise _exiting()
+
+
+class HaltHandler(logging.NullHandler):
+    SKIP = {threading.main_thread()}
+
+    def handle(self, record):
+        if not _exiting:
+            return
+
+        if threading.current_thread() in self.SKIP:
+            return
+
+        if get_current_context().get("no_halt"):
+            self.SKIP.add(threading.current_thread())
+            return
+
+        self.SKIP.add(threading.current_thread())
+        _check_exiting()
 
 
 class TerminationSignal(TException):

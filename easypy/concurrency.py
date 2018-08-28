@@ -112,6 +112,8 @@ PickledFuture = namedtuple("PickledFuture", "ctx, funcname")
 
 class MultiException(PException, metaclass=MultiExceptionMeta):
 
+    COMMON_TYPE = BaseException
+
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
     def __reduce__(self):
@@ -229,6 +231,9 @@ class Futures(list):
             if isinstance(me, MultiException[ProcessExiting]):
                 # we want these aborted MultiObject threads to consolidate this exception
                 raise ProcessExiting()
+            if isinstance(me, MultiException[KeyboardInterrupt]):
+                # we want these aborted MultiObject threads to consolidate this exception
+                raise KeyboardInterrupt()
             raise me
         return [f.result() for f in self]
 
@@ -313,6 +318,8 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
             return func(*args, **kwargs)
         except StopIteration:
             # no need to log this
+            raise
+        except KeyboardInterrupt:
             raise
         except ProcessExiting as exc:
             _logger.debug(exc)
@@ -685,6 +692,7 @@ class MultiObject(object, metaclass=MultiObjectMeta):
 
 def concestor(*cls_list):
     "Closest common ancestor class"
+    cls_list = set(cls_list)
     mros = [list(inspect.getmro(cls)) for cls in cls_list]
     track = defaultdict(int)
     while mros:
@@ -753,9 +761,9 @@ class concurrent(object):
                 if self.wait(self.sleep):
                     _logger.debug("%s - stopped", self)
                     return
-        except ProcessExiting as exc:
+        except (KeyboardInterrupt, ProcessExiting) as exc:
             _logger.debug(exc)
-            raise
+            return  # don't re-raise, so that python's threading module doesn't write this to stderr
         except Exception as exc:
             _logger.silent_exception("Exception in thread running %s (traceback can be found in debug-level logs)", self.func)
             self.exc = exc
