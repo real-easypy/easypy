@@ -233,14 +233,18 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
         name = func.__name__
         sig = inspect.signature(func)
 
-        @wraps(func)
-        def inner(*args, **kwargs):
-            if key_func:
+        if key_func:
+            def make_key(args, kwargs):
                 bound = sig.bind(*args, **kwargs)
                 _apply_defaults(bound)
-                key = kwargs_resilient(key_func)(**bound.arguments)
-            else:
-                key = _make_key(args, kwargs, typed=typed)
+                return kwargs_resilient(key_func)(**bound.arguments)
+        else:
+            def make_key(args, kwargs):
+                return _make_key(args, kwargs, typed=typed)
+
+        @wraps(func)
+        def inner(*args, **kwargs):
+            key = make_key(args, kwargs)
 
             with main_lock:
                 key_lock = keyed_locks[key]
@@ -271,7 +275,14 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
                     with lock:
                         cache.pop(key, None)
 
+        @wraps(func)
+        def pop(*args, **kwargs):
+            key = make_key(args, kwargs)
+            keyed_locks.pop(key, None)
+            return cache.pop(key, None)
+
         inner.cache_clear = clear
+        inner.cache_pop = pop
         return inner
 
     return deco
