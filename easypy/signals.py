@@ -261,18 +261,32 @@ class ContextManagerSignal(Signal):
         with ExitStack() as handlers_stack:
             async_handlers = MultiObject()
             handlers = []
+
+            handlers_to_remove = []
+
+            @contextmanager
+            def run_handler(handler):
+                already_yielded = False
+                try:
+                    with _logger.context(self.id), _logger.context("%02d" % index):
+                        with handler(**kwargs):
+                            yield
+                            already_yielded = True
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    if not already_yielded:
+                        yield
+
             for index, handler in enumerate(self.iter_handlers()):
                 # allow handler to use our async context
-                handler = _logger.context("%02d" % index)(handler)
-                handler = _logger.context(self.id)(handler)
                 if handler.async:
                     async_handlers.append(handler)
                 else:
                     handlers.append(handler)
             if async_handlers:
-                handlers_stack.enter_context(async_handlers(**kwargs))
+                handlers_stack.enter_context(async_handlers.call(run_handler))
             for handler in handlers:
-                res = handler(**kwargs)
+                res = run_handler(handler)
                 if res:
                     handlers_stack.enter_context(res)
             yield

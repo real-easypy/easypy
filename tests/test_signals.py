@@ -1,4 +1,7 @@
 import pytest
+
+from contextlib import contextmanager
+
 from easypy.signals import register_object, unregister_object, MissingIdentifier, PRIORITIES
 from easypy.signals import on_test
 from easypy.signals import on_test_identifier
@@ -155,7 +158,6 @@ def test_async():
 
 
 def test_ctx():
-    from contextlib import contextmanager
     from easypy.signals import on_ctx_test
 
     result = []
@@ -183,7 +185,7 @@ def test_ctx():
     assert result == [1, 2]
 
 
-def test_siganl_weakref():
+def test_signal_weakref():
     """
     Test that signals handlers of methods are deleted when their objects get collected
     """
@@ -206,7 +208,7 @@ def test_siganl_weakref():
     on_test(a=5, b=0, c='c')
 
 
-def test_siganl_weakref_complex_descriptors():
+def test_signal_weakref_complex_descriptors():
     import gc
     from easypy.signals import on_test
     from easypy.lockstep import lockstep
@@ -226,3 +228,59 @@ def test_siganl_weakref_complex_descriptors():
     gc.collect()
 
     on_test(a=5, b=0, c='c')
+
+
+def test_signal_weakref_context_manager_delete_before():
+    import gc
+    from easypy.signals import on_ctx_test
+
+    result = []
+
+    class Foo:
+        @contextmanager
+        def on_ctx_test(self, before, after):
+            result.append(before)
+            yield
+            result.append(after)
+
+    foo = Foo()
+    register_object(foo)
+
+    with on_ctx_test(before=1, after=2):
+        assert result == [1]
+    assert result == [1, 2]
+
+    del foo
+    gc.collect()
+
+    with on_ctx_test(before=3, after=4):
+        assert result == [1, 2]
+    assert result == [1, 2]
+
+
+def test_signal_weakref_context_manager_delete_during():
+    import gc
+    from easypy.signals import on_ctx_test
+
+    result = []
+
+    class Foo:
+        @contextmanager
+        def on_ctx_test(self, before, after):
+            result.append(before)
+            yield
+            result.append(after)
+
+    foo = Foo()
+    register_object(foo)
+
+    with on_ctx_test(before=1, after=2):
+        assert result == [1]
+    assert result == [1, 2]
+
+    with on_ctx_test(before=3, after=4):
+        assert result == [1, 2, 3]
+        del foo
+        gc.collect()
+    # The context manager should keep the signal handler alive
+    assert result == [1, 2, 3, 4]
