@@ -269,7 +269,12 @@ class ContextManagerSignal(Signal):
                 already_yielded = False
                 try:
                     with _logger.context(self.id), _logger.context("%02d" % index):
-                        with handler(**kwargs):
+                        cm = handler(**kwargs)
+                        if cm is None:
+                            _logger.warning('%s returned None instead of a context manager. Skipping it', handler)
+                            yield
+                            return
+                        with cm:
                             yield
                             already_yielded = True
                 except WeakMethodDead:
