@@ -81,7 +81,10 @@ class SignalHandler(object):
             return
 
         if self.identifier:
-            handler_object = self._func().__self__
+            try:
+                handler_object = self._func.__self__
+            except AttributeError:
+                handler_object = self._func().__self__
             target_object = kwargs[self.identifier]
 
             if hasattr(self._func, 'identifier_path'):
@@ -269,7 +272,12 @@ class ContextManagerSignal(Signal):
                 already_yielded = False
                 try:
                     with _logger.context(self.id), _logger.context("%02d" % index):
-                        with handler(**kwargs):
+                        cm = handler(**kwargs)
+                        if cm is None:
+                            _logger.warning('%s returned None instead of a context manager. Skipping it', handler)
+                            yield
+                            return
+                        with cm:
                             yield
                             already_yielded = True
                 except WeakMethodDead:
