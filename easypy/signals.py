@@ -81,7 +81,10 @@ class SignalHandler(object):
             return
 
         if self.identifier:
-            handler_object = self._func().__self__
+            try:
+                handler_object = self._func.__self__
+            except AttributeError:
+                handler_object = self._func().__self__
             target_object = kwargs[self.identifier]
 
             if hasattr(self._func, 'identifier_path'):

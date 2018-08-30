@@ -63,6 +63,10 @@ def test_simple_signal_object_identifier():
     unregister_object(f1)
     unregister_object(f2)
 
+    with on_test_identifier.registered(f2.on_test_identifier):
+        with pytest.raises(ZeroDivisionError):
+            on_test_identifier(a=5, b=0, obj=f2)
+
 
 def test_simple_signal_object_wo_identifier():
 
