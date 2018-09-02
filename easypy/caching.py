@@ -141,12 +141,17 @@ class PersistentCache(object):
             ret = func(*args, **kwargs)
             self.set(key, ret)
             return ret
+
+        inner = timecache(expiration=self.expiration)(inner)
+        self._timecache_clear = inner.cache_clear
+
         inner.clear_cache = self.clear
         return inner
 
     def clear(self):
         with self.db_opened() as db:
             db.clear()
+        self._timecache_clear()
 
 
 def locking_lru_cache(maxsize=128, typed=False):  # can't implement ignored_keywords because we use python's lru_cache...
@@ -247,7 +252,7 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
             with key_lock:
                 result, ts = cache.get(key, NOT_CACHED)
 
-                if expiration <= 0:
+                if expiration is None or expiration <= 0:
                     pass  # nothing to fuss with, cache does not expire
                 elif result is NOT_FOUND:
                     pass  # cache is empty
