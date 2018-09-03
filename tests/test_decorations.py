@@ -216,3 +216,22 @@ def test_singleton_contextmanager_method():
         assert g.data == [5, 6, -6]
     assert f.data == [1, 2, -2, -1]
     assert g.data == [5, 6, -6, -5]
+
+
+def test_singleton_contextmanager_method_does_not_keep_object_alive_after_done():
+    import weakref
+    import gc
+
+    class Foo:
+        @singleton_contextmanager
+        def foo(self):
+            yield
+
+    foo = Foo()
+    weak_foo = weakref.ref(foo)
+    with foo.foo():
+        del foo
+        gc.collect()
+        assert weak_foo() is not None, 'Object collected but contextmanager is active'
+    gc.collect()
+    assert weak_foo() is None, 'Object not collected but contextmanager has exited'

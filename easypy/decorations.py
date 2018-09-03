@@ -73,34 +73,34 @@ def parametrizeable_decorator(deco):
 def singleton_contextmanager(func):
     from .caching import locking_cache
 
+    class CtxManager():
+        def __init__(self, *args, **kwargs):
+            self.args = args
+            self.kwargs = kwargs
+            self.count = 0
+            self.func_cm = contextmanager(func)
+            self._lock = RLock()
+
+        def __enter__(self):
+            with self._lock:
+                if self.count == 0:
+                    self.ctm = self.func_cm(*self.args, **self.kwargs)
+                    self.obj = self.ctm.__enter__()
+                self.count += 1
+            return self.obj
+
+        def __exit__(self, *args):
+            with self._lock:
+                self.count -= 1
+                if self.count > 0:
+                    return
+                self.ctm.__exit__(*sys.exc_info())
+                inner.cache_pop(*self.args, **self.kwargs)
+
     @wraps(func)
     @locking_cache
     def inner(*args, **kwargs):
-
-        class CtxManager():
-            def __init__(self):
-                self.count = 0
-                self.func_cm = contextmanager(func)
-                self._lock = RLock()
-
-            def __enter__(self):
-                with self._lock:
-                    if self.count == 0:
-                        self.ctm = self.func_cm(*args, **kwargs)
-                        self.obj = self.ctm.__enter__()
-                    self.count += 1
-                return self.obj
-
-            def __exit__(self, *args):
-                with self._lock:
-                    self.count -= 1
-                    if self.count > 0:
-                        return
-                    self.ctm.__exit__(*sys.exc_info())
-                    del self.ctm
-                    del self.obj
-
-        return CtxManager()
+        return CtxManager(*args, **kwargs)
 
     return inner
 
