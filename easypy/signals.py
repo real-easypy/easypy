@@ -76,15 +76,18 @@ class SignalHandler(object):
     def __repr__(self):
         return "<handler #{0.idx} '{0.name}' ({0.filename}:{0.lineno})>".format(self)
 
-    def __call__(self, *, swallow_exceptions, **kwargs):
+    def should_run(self, **kwargs):
         if self.times == 0:
-            return
+            return False
 
         if self.identifier:
             try:
                 handler_object = self._func.__self__
             except AttributeError:
-                handler_object = self._func().__self__
+                func = self._func()
+                if func is None:
+                    raise WeakMethodDead
+                handler_object = func.__self__
             target_object = kwargs[self.identifier]
 
             if hasattr(self._func, 'identifier_path'):
@@ -102,8 +105,10 @@ class SignalHandler(object):
                 handler_object = None
 
             if handler_object is not None and handler_object != target_object:
-                return
+                return False
+        return True
 
+    def __call__(self, *, swallow_exceptions, **kwargs):
         if self.times is not None:
             self.times -= 1
 
@@ -219,6 +224,12 @@ class Signal:
                     handlers_to_remove.append(handler)
 
             for handler in self.iter_handlers():
+                try:
+                    if not handler.should_run(**kwargs):
+                        continue
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    continue
                 # allow handler to use our async context
                 if handler.async:
                     futures.submit(run_handler, handler)
@@ -272,12 +283,7 @@ class ContextManagerSignal(Signal):
                 already_yielded = False
                 try:
                     with _logger.context(self.id), _logger.context("%02d" % index):
-                        cm = handler(**kwargs)
-                        if cm is None:
-                            _logger.warning('%s returned None instead of a context manager. Skipping it', handler)
-                            yield
-                            return
-                        with cm:
+                        with handler(**kwargs):
                             yield
                             already_yielded = True
                 except WeakMethodDead:
@@ -286,6 +292,12 @@ class ContextManagerSignal(Signal):
                         yield
 
             for index, handler in enumerate(self.iter_handlers()):
+                try:
+                    if not handler.should_run(**kwargs):
+                        continue
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    continue
                 # allow handler to use our async context
                 if handler.async:
                     async_handlers.append(handler)
@@ -298,6 +310,9 @@ class ContextManagerSignal(Signal):
                 if res:
                     handlers_stack.enter_context(res)
             yield
+
+            for handler in handlers_to_remove:
+                self.remove_handler(handler)
 
 
 ####################################
