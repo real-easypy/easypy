@@ -5,8 +5,11 @@ from contextlib import contextmanager
 from easypy.signals import register_object, unregister_object, MissingIdentifier, PRIORITIES
 from easypy.signals import on_test
 from easypy.signals import on_test_identifier
+from easypy.signals import on_ctx_test
+from easypy.signals import on_ctx_test_identifier
 
 on_test_identifier.identifier = 'obj'
+on_ctx_test_identifier.identifier = 'obj'
 
 
 def test_simple_signal_registration():
@@ -162,8 +165,6 @@ def test_async():
 
 
 def test_ctx():
-    from easypy.signals import on_ctx_test
-
     result = []
 
     class Foo:
@@ -189,12 +190,42 @@ def test_ctx():
     assert result == [1, 2]
 
 
+def test_ctx_with_identifier():
+    class Foo():
+        @contextmanager
+        def on_ctx_test_identifier(self, before, after):
+            self.result.append(before)
+            yield
+            self.result.append(after)
+
+    f1 = Foo()
+    f1.obj = 'obj1'
+    f1.result = []
+    f2 = Foo()
+    f2.obj = 'obj2'
+    f2.result = []
+
+    register_object(f1)
+    register_object(f2)
+
+    with on_ctx_test_identifier(before=1, after=2, obj='obj1'):
+        assert f1.result == [1]
+        assert f2.result == []
+    assert f1.result == [1, 2]
+    assert f2.result == []
+
+    with on_ctx_test_identifier(before=3, after=4, obj='obj2'):
+        assert f1.result == [1, 2]
+        assert f2.result == [3]
+    assert f1.result == [1, 2]
+    assert f2.result == [3, 4]
+
+
 def test_signal_weakref():
     """
     Test that signals handlers of methods are deleted when their objects get collected
     """
     import gc
-    from easypy.signals import on_test
 
     class Foo:
         def on_test(self, a, b):
@@ -214,7 +245,6 @@ def test_signal_weakref():
 
 def test_signal_weakref_complex_descriptors():
     import gc
-    from easypy.signals import on_test
     from easypy.lockstep import lockstep
 
     class Foo:
@@ -234,9 +264,8 @@ def test_signal_weakref_complex_descriptors():
     on_test(a=5, b=0, c='c')
 
 
-def test_signal_weakref_context_manager_delete_before():
+def test_signal_weakref_context_manager_delete_after():
     import gc
-    from easypy.signals import on_ctx_test
 
     result = []
 
@@ -264,7 +293,6 @@ def test_signal_weakref_context_manager_delete_before():
 
 def test_signal_weakref_context_manager_delete_during():
     import gc
-    from easypy.signals import on_ctx_test
 
     result = []
 
@@ -285,6 +313,94 @@ def test_signal_weakref_context_manager_delete_during():
     with on_ctx_test(before=3, after=4):
         assert result == [1, 2, 3]
         del foo
+        gc.collect()
+    # The context manager should keep the signal handler alive
+    assert result == [1, 2, 3, 4]
+
+
+def test_signal_weakref_with_identifier():
+    import gc
+
+    class Foo:
+        def on_test_identifier(self, a, b):
+            a / b
+
+    foo = Foo()
+    foo.obj = 'obj'
+    register_object(foo)
+
+    with pytest.raises(ZeroDivisionError):
+        on_test_identifier(a=5, b=0, obj='obj')
+    on_test_identifier(a=5, b=0, obj='noobj')
+
+    del foo
+    gc.collect()
+
+    on_test_identifier(a=5, b=0, obj='obj')
+    on_test_identifier(a=5, b=0, obj='noobj')
+
+
+def test_signal_weakref_context_manager_delete_after_with_identifier():
+    import gc
+
+    result = []
+
+    class Foo:
+        @contextmanager
+        def on_ctx_test_identifier(self, before, after):
+            result.append(before)
+            yield
+            result.append(after)
+
+    foo = Foo()
+    foo.obj = 'obj'
+    register_object(foo)
+
+    foo2 = Foo()
+    foo2.obj = 'otherobj'
+    register_object(foo2)
+
+    with on_ctx_test_identifier(before=1, after=2, obj='obj'):
+        assert result == [1]
+    assert result == [1, 2]
+
+    del foo
+    del foo2
+    gc.collect()
+
+    with on_ctx_test_identifier(before=3, after=4, obj='obj'):
+        assert result == [1, 2]
+    assert result == [1, 2]
+
+
+def test_signal_weakref_context_manager_delete_during_with_identifier():
+    import gc
+
+    result = []
+
+    class Foo:
+        @contextmanager
+        def on_ctx_test_identifier(self, before, after):
+            result.append(before)
+            yield
+            result.append(after)
+
+    foo = Foo()
+    foo.obj = 'obj'
+    register_object(foo)
+
+    foo2 = Foo()
+    foo2.obj = 'otherobj'
+    register_object(foo2)
+
+    with on_ctx_test_identifier(before=1, after=2, obj='obj'):
+        assert result == [1]
+    assert result == [1, 2]
+
+    with on_ctx_test_identifier(before=3, after=4, obj='obj'):
+        assert result == [1, 2, 3]
+        del foo
+        del foo2
         gc.collect()
     # The context manager should keep the signal handler alive
     assert result == [1, 2, 3, 4]
