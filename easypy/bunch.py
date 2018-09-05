@@ -1,58 +1,10 @@
 from easypy.exceptions import TException
 
-
-class MissingRequiredKeys(TException):
-    template = 'Bunch is missing required key(s) {_required}'
-
-
-class KeyNotAllowed(TException):
-    template = 'Bunch does not allow key(s) {_disallowed}'
-
-
-class CannotDeleteRequiredKey(TException):
-    template = 'Bunch cannot delete required key {_required}'
-
-
+# TODO: some methods like fromkeys/update can insert keys which are not strings - and that causes problems.
+#       need to either convert keys to strings (like in _convert), or raise ValueError.
 class Bunch(dict):
 
     __slots__ = ("__stop_recursing__",)
-    KEYS = frozenset()  # if set, Bunch will ensure it consists of those keys, and those keys only
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._verify_keys()
-
-    def _verify_keys(self):
-        if not self.KEYS:
-            return
-        missing = self.KEYS - set(self.keys())
-        if missing:
-            raise MissingRequiredKeys(_required=missing)
-        disallowed = set(self.keys()) - self.KEYS
-        if disallowed:
-            raise KeyNotAllowed(_disallowed=disallowed)
-
-    @classmethod
-    def fromkeys(cls, *args):
-        self = super().__new__(cls)
-        self.update(dict.fromkeys(*args))
-        self._verify_keys()
-        return self
-
-    def __delitem__(self, key):
-        if self.KEYS and key in self.KEYS:
-            raise CannotDeleteRequiredKey(_required=key)
-        super().__delitem__(key)
-
-    def __setitem__(self, key, value):
-        if self.KEYS and key not in self.KEYS:
-            raise KeyNotAllowed(_disallowed=key)
-        super().__setitem__(key, value)
-
-    def pop(self, key, *args):
-        if self.KEYS and key in self.KEYS:
-            raise CannotDeleteRequiredKey(_required=key)
-        return super().pop(key, *args)
 
     def __getattr__(self, name):
         try:
@@ -164,10 +116,14 @@ def _convert(d, typ):
 
 
 def unbunchify(d):
+    """Recursively convert Bunches in `d` to a regular dicts."""
     return _convert(d, dict)
 
 
 def bunchify(d=None, **kw):
+    """Recursively convert dicts in `d` to Bunches.
+    If `kw` given, recursively convert dicts in it to Bunches and update `d` with it.
+    If `d` is None, an empty Bunch is made."""
     d = _convert(d, Bunch) if d is not None else Bunch()
     if kw:
         d.update(bunchify(kw))
