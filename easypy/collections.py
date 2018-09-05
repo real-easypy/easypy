@@ -1,3 +1,8 @@
+"""
+This module helps you with handling and generating collections of items.
+"""
+
+
 from __future__ import absolute_import
 import collections
 from numbers import Integral
@@ -24,14 +29,23 @@ class ObjectNotFound(LookupError):
 
 
 class defaultlist(list):
+    """
+    Like defaultdict, but for a list.
+    Any access to an index that isn't populated will fill it with the value returned by the default factory:
 
-    def __init__(self, fx):
-        self._fx = fx
+    >>> d = defaultlist(int)
+    >>> d[3] += 1
+    >>> d
+    [0, 0, 0, 1]
+    """
+
+    def __init__(self, default_factory):
+        self.default_factory = default_factory
         super().__init__()
 
     def _fill(self, index):
         while len(self) <= index or (len(self) == 0 and index == -1):
-            self.append(self._fx())
+            self.append(self.default_factory())
 
     def __setitem__(self, index, value):
         self._fill(index)
@@ -56,11 +70,36 @@ def _validate(obj, key, value):
 
 
 def filters_to_predicates(filters):
+    """
+    Converts the given dict to a list of predicate callables.
+    Used by the various *Collection classes in this module.
+
+    >>> from .bunch import Bunch
+    >>> [pred] = filters_to_predicates(dict(foo='bar'))
+
+    >>> obj1 = Bunch(foo='bar')
+    >>> pred(obj1)  # checks!
+    True
+
+    >>> obj2 = Bunch(bar='foo', foo='bad')
+    >>> pred(obj2)  # checks!
+    False
+    """
     return [make_predicate(partial(_validate, key=key, value=value))
             for key, value in filters.items()]
 
 
 def filtered(objects, preds, filters):
+    """
+    Yields the object that pass the predicates (callables), and filters (dict).
+    Used by the various *Collection classes in this module.
+
+    >>> from .bunch import Bunch
+    >>> l = [Bunch(a=a, b=b) for a in range(3) for b in range(3)]
+    >>> f = list(filtered(l, [lambda o: o.a==o.b], dict(a=1)))
+    >>> f
+    [Bunch(a=1, b=1)]
+    """
     preds = [make_predicate(p) for p in preds]
     preds += filters_to_predicates(filters)
 
@@ -73,15 +112,40 @@ def filtered(objects, preds, filters):
             yield obj
 
 
-def uniquify(items, num, attrs):
-    item_map = {}
+def uniquify(objects, num, attrs):
+    """
+    Find ``num`` objects (in random order) that are unique in their `attrs` attributes.
+    Returns empty list if no objects are found to satisfy the uniqueness condition.
+
+    >>> from .bunch import Bunch
+
+    >>> l = [
+    ...     Bunch(first='Adam', last='Brody', age='n/a'),
+    ...     Bunch(first='Adam', last='Levine', age='n/a'),
+    ...     Bunch(first='Adam', last='Sandler', age='n/a'),
+    ...     Bunch(first='Amy', last='Adams', age='n/a'),
+    ...     Bunch(first='Amy', last='Poehler', age='n/a'),
+    ...     Bunch(first='Amy', last='Winehouse', age='n/a')]
+
+    >>> o1, o2 = uniquify(l, 2, ["first", "last"])
+    >>> (o1.first != o2.first) and (o1.last != o2.last)
+    True
+
+    >>> list(uniquify(l, 3, ["first", "last"]))
+    []
+
+    >>> list(uniquify(l, 2, ["first", "age"]))
+    []
+    """
+
+    object_map = {}
     partitions = collections.defaultdict(lambda: collections.defaultdict(set))
 
-    for item in items:
-        k = id(item)
-        item_map[k] = item
+    for object in objects:
+        k = id(object)
+        object_map[k] = object
         for attr in attrs:
-            value = _get_value(item, attr)
+            value = _get_value(object, attr)
             partitions[attr][value].add(k)
 
     if not all(len(group.values()) >= num for group in partitions.values()):
@@ -89,23 +153,23 @@ def uniquify(items, num, attrs):
 
     def gen(available, collected=[]):
         if len(collected) == num:
-            yield [item_map[k] for k in collected]
+            yield [object_map[k] for k in collected]
             return
 
         for k in shuffled(available):
-            excluded = {i for attr in attrs for i in partitions[attr][_get_value(item_map[k], attr)]}
+            excluded = {i for attr in attrs for i in partitions[attr][_get_value(object_map[k], attr)]}
             remain = available - {k} - excluded
             yield from gen(remain, collected=collected + [k])
 
     try:
-        return next(gen(set(item_map.keys())))
+        return next(gen(set(object_map.keys())))
     except StopIteration:
         return []
 
 
 # Inspired by code written by Rotem Yaari
 
-class ObjectCollection(object):
+class ObjectCollectionBase(object):
     def __init__(self):
         super().__init__()
 
@@ -237,8 +301,12 @@ class ObjectCollection(object):
         """
         If 'num' is negative, leaves 'num' out of the sample:
 
-            >>> ListCollection([1, 2, 3]).sample(-1)
-            [1, 3]
+            >>> collection = ListCollection([1, 2, 3])
+            >>> sample = collection.sample(-1)
+            >>> len(sample)
+            2
+            >>> all(i in collection for i in sample)
+            True
         """
         if num < 0:
             num += len(self)
@@ -302,7 +370,11 @@ class ObjectCollection(object):
         return AggregateCollection([self, collection])
 
 
-class AggregateCollection(ObjectCollection):
+class AggregateCollection(ObjectCollectionBase):
+    """
+    Dynamically aggregate other collections into one chained collection
+    """
+
     def __init__(self, collections):
         super().__init__()
         self._collections = collections
@@ -317,7 +389,10 @@ class AggregateCollection(ObjectCollection):
         return ListCollection(items)
 
 
-class ListCollection(list, ObjectCollection):
+class ListCollection(list, ObjectCollectionBase):
+    """
+    A simple list-based implementation of the ObjectCollection protocol
+    """
 
     def pop_some(self, minimum=0, maximum=None):
         sample_size = self._choose_sampling_size(minimum, maximum)
@@ -327,12 +402,18 @@ class ListCollection(list, ObjectCollection):
         return self._getitem(index)
 
 
-class SimpleObjectCollection(ObjectCollection):
+class SimpleObjectCollection(ObjectCollectionBase):
+    """
+    A dict-based implementation of the ObjectCollection protocol, supporting
+    fast lookup based on an ID attribute found on the objects.
+    """
+
     ID_ATTRIBUTE = 'uid'
 
     class Collectable():
         """
-        Objects get assigned with a backpointer to the collection they were put in, via ``.collection``
+        Objects can inherit this mixin class and will then get a ``.collection`` attribute
+        that points back to the collection they were added to
         """
         collection = None
 
@@ -433,7 +514,12 @@ class SimpleObjectCollection(ObjectCollection):
         return MultiObject(self, list(self._objects.keys()))
 
 
-class FilterCollection(ObjectCollection):
+class FilterCollection(ObjectCollectionBase):
+    """
+    A dynamic collection that filters another ``base`` collection according to the
+    given predicates and filters.
+    """
+
     def __init__(self, base, preds, filters, parent=None):
         super().__init__()
         self.base = base
@@ -493,10 +579,17 @@ class FilterCollection(ObjectCollection):
 
 
 def TypeFilterCollection(base, type):
+    """
+    A collection that filters another collection according to the specified type (class)
+    """
     return base.filtered(lambda obj: isinstance(obj, type))
 
 
-class IteratorBasedCollection(ObjectCollection):
+class IteratorBasedCollection(ObjectCollectionBase):
+    """
+    An iterator-based collection. Each time the collection is read, the iterator function is called again,
+    to provide a fresh iterator object.
+    """
 
     def __init__(self, iterator_func):
         super().__init__()
@@ -507,6 +600,11 @@ class IteratorBasedCollection(ObjectCollection):
 
 
 class IndexedObjectCollection(SimpleObjectCollection):
+    """
+    Work-in-progress
+
+    An indexed collection, allowing fast lookup of object by using multiple key indices.
+    """
 
     def __init__(self, objs=(), keys=(), **kwargs):
         self._indices = {key: collections.defaultdict(set) for key in keys}
@@ -584,10 +682,10 @@ def separate(sequence, key=None):
         >>> above_three, three_or_less = separate(range(10), lambda n: n > 3)
 
         >>> print(three_or_less)
-            [0, 1, 2, 3]
+        [0, 1, 2, 3]
 
         >>> print(above_three)
-            [4, 5, 6, 7, 8, 9]
+        [4, 5, 6, 7, 8, 9]
     """
     if not key:
         key = lambda x: x
@@ -601,11 +699,11 @@ def iterable(obj):
 
 def ilistify(obj):
     """
-    Conform input into an iterable:
+    Normalize input into an iterable:
 
         >>> list(ilistify(1))
         [1]
-        list(ilistify([1, 2, 3]))
+        >>> list(ilistify([1, 2, 3]))
         [1, 2, 3]
     """
     if not iterable(obj):
@@ -614,12 +712,20 @@ def ilistify(obj):
         yield from obj
 
 
-listify = lambda obj: list(ilistify(obj))
+def listify(obj):
+    """
+    Normalize input into a list:
+        >>> listify(1)
+        [1]
+        >>> listify([1, 2])
+        [1, 2]
+    """
+    return list(ilistify(obj))
 
 
 def chunkify(sequence, size):
     """
-    Chunk a sequence into equal-size chunks:
+    Chunk a sequence into equal-size chunks (except for the last chunk):
 
         >>> ["".join(p) for p in chunkify('abcdefghijklmnopqrstuvwxyz', 7)]
         ['abcdefg', 'hijklmn', 'opqrstu', 'vwxyz']
@@ -634,10 +740,11 @@ def chunkify(sequence, size):
 
 def partial_dict(d, keys):
     """
-    Returns a new dict with a subset of the original items
+    Returns a new dict with a subset of the original items.
 
-    >>> partial_dict({'a': 1, 'b': 2, 'c': 3}, ['a', 'b'])
-    {'a': 1, 'b': 2}
+    >>> d = partial_dict({'a': 1, 'b': 2, 'c': 3}, ['a', 'b'])
+    >>> d == {'a': 1, 'b': 2}
+    True
     """
     return {k: d[k] for k in keys}
 
@@ -647,13 +754,38 @@ def intersected_dict(d, keys):
     Returns a new dict with a subset of the original items.
     Items that are specified in keys but not in the original dict are discarded
 
-    >>> intersected_dict({'a': 1, 'b': 2, 'c': 3}, ['a', 'b', 'z'])
-    {'a': 1, 'b': 2}
+    >>> d = intersected_dict({'a': 1, 'b': 2, 'c': 3}, ['a', 'b', 'z'])
+    >>> d == {'a': 1, 'b': 2}
+    True
     """
     return {k: d[k] for k in keys if k in d}
 
 
 def dicts_to_table(dicts, index_header="idx"):
+    """
+    Convert a sequence of homogenuous dicts into a table (2D list),
+    with the dict keys present in the first row:
+
+    >>> dict_list = [
+    ...     dict(a=1, b=2, c=3),
+    ...     dict(a=7, b=8, c=9)]
+    >>> for row in dicts_to_table(dict_list, index_header='R'):
+    ...     print(*row, sep="|")
+    R|a|b|c
+    0|1|2|3
+    1|7|8|9
+
+    >>> dicts_dict = dict(
+    ...     X=dict(a=1, b=2, c=3),
+    ...     Y=dict(a=7, b=8, c=9))
+    >>> for row in dicts_to_table(dicts_dict, index_header='R'):
+    ...     print(*row, sep="|")
+    R|a|b|c
+    X|1|2|3
+    Y|7|8|9
+
+    """
+
     if isinstance(dicts, dict):
         _, sample_row = next(iter(dicts.items()))
         rows = ((key, dicts[key]) for key in sorted(dicts))
@@ -667,10 +799,13 @@ def dicts_to_table(dicts, index_header="idx"):
     return table
 
 
-def shuffled(l):
-    l = list(l)
-    random.shuffle(l)
-    return l
+def shuffled(items):
+    """
+    Return a shuffled version of the input sequence
+    """
+    items = list(items)
+    random.shuffle(items)
+    return items
 
 
 class SlidingWindow(list):
@@ -692,14 +827,13 @@ def as_list(generator, sort_by=None):
     """
     Forces a generator to output a list.
 
-    When writing a generator is more convenient::
+    For when writing a generator is more elegant::
 
-        @as_list(sort_by=lambda n: -n)
-        def g():
-            yield 1
-            yield 2
-            yield from range(2)
-
+    >>> @as_list(sort_by=lambda n: -n)
+    ... def g():
+    ...     yield 2
+    ...     yield 1
+    ...     yield from range(2)
     >>> g()
     [2, 1, 1, 0]
 
@@ -711,3 +845,8 @@ def as_list(generator, sort_by=None):
             l.sort(key=sort_by)
         return l
     return inner
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
