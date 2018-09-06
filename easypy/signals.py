@@ -155,6 +155,13 @@ class Signal:
         self.handlers[handler.priority].remove(handler)
         _logger.debug("handler removed from '%s' (%s): %s", self.name, handler.priority.name, handler)
 
+    def remove_handlers_if_exist(self, handlers):
+        if not handlers:
+            return
+        handlers = set(handlers)
+        for priority in {h.priority for h in handlers}:
+            self.handlers[priority][:] = (handler for handler in self.handlers[priority] if handler not in handlers)
+
     def register(self, func=None, async=None, priority=PRIORITIES.NONE, times=None):
         if not func:
             return functools.partial(self.register, async=async, priority=priority)
@@ -240,8 +247,7 @@ class Signal:
                 for future in futures.as_completed():
                     future.result()        # bubble up exceptions
 
-        for handler in handlers_to_remove:
-            self.remove_handler(handler)
+        self.remove_handlers_if_exist(handlers_to_remove)
 
     def __str__(self):
         return "<Signal %s (%s)>" % (self.name, self.id)
@@ -311,8 +317,7 @@ class ContextManagerSignal(Signal):
                     handlers_stack.enter_context(res)
             yield
 
-            for handler in handlers_to_remove:
-                self.remove_handler(handler)
+        self.remove_handlers_if_exist(handlers_to_remove)
 
 
 ####################################
