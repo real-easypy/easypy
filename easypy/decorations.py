@@ -2,8 +2,10 @@
 This module is about making it easier to create decorators
 """
 
-from functools import wraps, partial
+from functools import wraps, partial, update_wrapper
+from types import MethodType
 from operator import attrgetter
+import weakref
 
 
 def parametrizeable_decorator(deco):
@@ -40,6 +42,25 @@ def reusable_contextmanager(context_manager):
             self.cm.__exit__(*args)
 
     return ReusableCtx()
+
+
+class WeakMethodDead(Exception):
+    pass
+
+
+class WeakMethodWrapper:
+    def __init__(self, weak_method):
+        if isinstance(weak_method, MethodType):
+            weak_method = weakref.WeakMethod(weak_method)
+        self.weak_method = weak_method
+        update_wrapper(self, weak_method(), updated=())
+        self.__wrapped__ = weak_method
+
+    def __call__(self, *args, **kwargs):
+        method = self.weak_method()
+        if method is None:
+            raise WeakMethodDead
+        return method(*args, **kwargs)
 
 
 class LazyDecoratorDescriptor:

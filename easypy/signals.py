@@ -6,9 +6,10 @@ from itertools import chain, count
 import logging
 from enum import Enum
 from contextlib import contextmanager, ExitStack
+import weakref
 
 from easypy.concurrency import Futures, MultiObject
-from easypy.decorations import parametrizeable_decorator
+from easypy.decorations import parametrizeable_decorator, WeakMethodDead
 from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
 from easypy.misc import kwargs_resilient
@@ -55,24 +56,39 @@ class SignalHandler(object):
     def __init__(self, func, async=False, priority=PRIORITIES.NONE, times=None, identifier=None):
         self.func = kwargs_resilient(func)
         self._func = get_original_func(func)  # save the original funtion so we can unregister based on the function
-        self.identifier = identifier if inspect.ismethod(self._func) else None  # identifier only applicable to methods
-        self.filename = func.__code__.co_filename
-        self.lineno = func.__code__.co_firstlineno
-        self.name = self.__name__ = func.__name__
+
+        # identifier only applicable to methods
+        if inspect.ismethod(self._func) or isinstance(self._func, weakref.WeakMethod):
+            self.identifier = identifier
+        else:
+            self.identifier = None
+
         self.async = async
         self.priority = priority
         self.times = times
         self.idx = next(self._idx_gen)
 
+        if isinstance(func, weakref.WeakMethod):
+            func = func()  # to allow accessing it's __code__ and __name__
+        self.filename = func.__code__.co_filename
+        self.lineno = func.__code__.co_firstlineno
+        self.name = self.__name__ = func.__name__
+
     def __repr__(self):
         return "<handler #{0.idx} '{0.name}' ({0.filename}:{0.lineno})>".format(self)
 
-    def __call__(self, *, swallow_exceptions, **kwargs):
+    def should_run(self, **kwargs):
         if self.times == 0:
-            return
+            return False
 
         if self.identifier:
-            handler_object = self._func.__self__
+            try:
+                handler_object = self._func.__self__
+            except AttributeError:
+                func = self._func()
+                if func is None:
+                    raise WeakMethodDead
+                handler_object = func.__self__
             target_object = kwargs[self.identifier]
 
             if hasattr(self._func, 'identifier_path'):
@@ -90,8 +106,10 @@ class SignalHandler(object):
                 handler_object = None
 
             if handler_object is not None and handler_object != target_object:
-                return
+                return False
+        return True
 
+    def __call__(self, *, swallow_exceptions, **kwargs):
         if self.times is not None:
             self.times -= 1
 
@@ -101,6 +119,13 @@ class SignalHandler(object):
             if not swallow_exceptions:
                 raise
             _logger.silent_exception("Exception in (%s) ignored", self)
+
+    @property
+    def bound_object(self):
+        if isinstance(self._func, weakref.WeakMethod):
+            return weakref.ref.__call__(self._func)
+        else:
+            return None
 
 
 class Signal:
@@ -131,6 +156,13 @@ class Signal:
         self.handlers[handler.priority].remove(handler)
         _logger.debug("handler removed from '%s' (%s): %s", self.name, handler.priority.name, handler)
 
+    def remove_handlers_if_exist(self, handlers):
+        if not handlers:
+            return
+        handlers = set(handlers)
+        for priority in {h.priority for h in handlers}:
+            self.handlers[priority][:] = (handler for handler in self.handlers[priority] if handler not in handlers)
+
     def register(self, func=None, async=None, priority=PRIORITIES.NONE, times=None):
         if not func:
             return functools.partial(self.register, async=async, priority=priority)
@@ -149,6 +181,7 @@ class Signal:
                     handler._func,  # simple case
                     getattr(handler._func, "__wrapped__", None),  # wrapped with @wraps
                     getattr(handler._func, "func", None),  # wrapped with 'partial'
+                    handler._func() if isinstance(handler._func, weakref.WeakMethod) else None,
                     ):
                 self.remove_handler(handler)
 
@@ -189,17 +222,33 @@ class Signal:
             else:
                 futures = None
 
+            handlers_to_remove = []
+
+            def run_handler(handler):
+                try:
+                    with _logger.context("#%03d" % handler.idx):
+                        handler(**kwargs)
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+
             for handler in self.iter_handlers():
+                try:
+                    if not handler.should_run(**kwargs):
+                        continue
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    continue
                 # allow handler to use our async context
-                handler = _logger.context("#%03d" % handler.idx)(handler)
                 if handler.async:
-                    futures.submit(handler, **kwargs)
+                    futures.submit(run_handler, handler)
                 else:
-                    handler(**kwargs)
+                    run_handler(handler)
 
             if futures:
                 for future in futures.as_completed():
                     future.result()        # bubble up exceptions
+
+        self.remove_handlers_if_exist(handlers_to_remove)
 
     def __str__(self):
         return "<Signal %s (%s)>" % (self.name, self.id)
@@ -233,21 +282,43 @@ class ContextManagerSignal(Signal):
         with ExitStack() as handlers_stack:
             async_handlers = MultiObject()
             handlers = []
+
+            handlers_to_remove = []
+
+            @contextmanager
+            def run_handler(handler):
+                already_yielded = False
+                try:
+                    with _logger.context(self.id), _logger.context("%02d" % index):
+                        with handler(**kwargs):
+                            yield
+                            already_yielded = True
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    if not already_yielded:
+                        yield
+
             for index, handler in enumerate(self.iter_handlers()):
+                try:
+                    if not handler.should_run(**kwargs):
+                        continue
+                except WeakMethodDead:
+                    handlers_to_remove.append(handler)
+                    continue
                 # allow handler to use our async context
-                handler = _logger.context("%02d" % index)(handler)
-                handler = _logger.context(self.id)(handler)
                 if handler.async:
                     async_handlers.append(handler)
                 else:
                     handlers.append(handler)
             if async_handlers:
-                handlers_stack.enter_context(async_handlers(**kwargs))
+                handlers_stack.enter_context(async_handlers.call(run_handler))
             for handler in handlers:
-                res = handler(**kwargs)
+                res = run_handler(handler)
                 if res:
                     handlers_stack.enter_context(res)
             yield
+
+        self.remove_handlers_if_exist(handlers_to_remove)
 
 
 ####################################
@@ -296,6 +367,19 @@ def get_signals_for_type(typ):
             for n in dir(typ) if n.startswith("on_")}
 
 
+class __FakeCode:
+    def __init__(self, fake_filename, fake_firstlineno):
+        self.co_filename = fake_filename
+        self.co_firstlineno = fake_firstlineno
+
+
+def __fake_meth_type(func, obj, name, code):
+    method = func.__get__(obj, type(obj))
+    method.__name__ = name
+    method.__code__ = code
+    return method
+
+
 def register_object(obj, **kwargs):
     for method_name in get_signals_for_type(type(obj)):
         method = getattr(obj, method_name)
@@ -313,16 +397,32 @@ def register_object(obj, **kwargs):
         params.update(kwargs)
 
         method_name, *_ = method_name.partition("__")  # allows multiple methods for the same signal
+
+        if not inspect.ismethod(method):
+            # Fake method attributes for WeakMethod
+            method.__self__ = obj
+            method.__func__ = getattr(type(obj), method_name)
+            if not hasattr(method, '__code__'):
+                method.__code__ = __FakeCode('', '')
+            fake_meth_type = functools.partial(
+                __fake_meth_type,
+                # Best effort: fake name and code for SignalHandler. We don't know the line number.
+                name=method_name,
+                code=__FakeCode(type(obj).__module__, '?'))
+
+        method = weakref.WeakMethod(method)
+        try:
+            method._meth_type = fake_meth_type
+        except UnboundLocalError:
+            pass
+
         register_signal(method_name, method, **params)
 
 
 def unregister_object(obj):
-    for method_name in get_signals_for_type(type(obj)):
-        method = getattr(obj, method_name)
-        if not callable(method):
-            continue
-        method_name, *_ = method_name.partition("__")
-        unregister_signal(method_name, method)
+    for signal_name in {method_name.split('__', 1)[0] for method_name in get_signals_for_type(type(obj))}:
+        for handlers in Signal.ALL[signal_name].handlers.values():
+            handlers[:] = (handler for handler in handlers if handler.bound_object is not obj)
 
 
 def call_signal(name, **kwargs):
