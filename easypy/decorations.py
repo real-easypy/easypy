@@ -7,6 +7,7 @@ import warnings
 from threading import RLock
 from operator import attrgetter
 import weakref
+from abc import ABCMeta, abstractmethod
 
 from easypy.collections import intersected_dict, ilistify
 
@@ -203,23 +204,70 @@ def as_list(generator, sort_by=None):
     return inner
 
 
-class LazyDecoratorDescriptor:
-    def __init__(self, decorator_factory, func):
-        self.decorator_factory = decorator_factory
-        self.func = func
+class DecoratingDescriptor(metaclass=ABCMeta):
+    """
+    Base class for descriptors that decorate a function
+
+    :param func: The function to be decorated.
+    :param bool cached: If ``True``, the decoration will only be done once per instance.
+
+    Use this as a base class for other descriptors. When used on class objects,
+    this will return itself. When used on instances, it this will call ``_decorate``
+    on the method created by binding ``func``.
+    """
+
+    def __init__(self, *, func, cached: bool):
+        self._func = func
+        self._cached = cached
+        self.__property_name = '__property_%s' % id(self)
+        update_wrapper(self, func, updated=())
+
+    @abstractmethod
+    def _decorate(self, method, instance, owner):
+        """
+        Override to perform the actual decoration.
+
+        :param method: The method from binding ``func``.
+        :params instance: The binding instance (same as in ``__get__``)
+        :params owner: The owner class (same as in ``__get__``)
+        """
+        pass
 
     def __get__(self, instance, owner):
-        method = self.func.__get__(instance, owner)
+        method = self._func.__get__(instance, owner)
         if instance is None:
             return method
         else:
-            decorator = self.decorator_factory(instance)
-            return decorator(method)
+            if self._cached:
+                try:
+                    return getattr(instance, self.__property_name)
+                except AttributeError:
+                    bound = self._decorate(method, instance, owner)
+                    setattr(instance, self.__property_name, bound)
+                    return bound
+            else:
+                return self._decorate(method, instance, owner)
 
 
-def lazy_decorator(decorator_factory):
+class LazyDecoratorDescriptor(DecoratingDescriptor):
+    def __init__(self, decorator_factory, func, cached):
+        super().__init__(func=func, cached=cached)
+        self.decorator_factory = decorator_factory
+
+    def _decorate(self, method, instance, owner):
+        decorator = self.decorator_factory(instance)
+        return decorator(method)
+
+
+def lazy_decorator(decorator_factory, cached=False):
     """
     Create and apply a decorator only after the method is instantiated::
+
+    :param decorator_factory: A function that will be called with the ``self`` argument.
+                              Should return a decorator for the method.
+                              If ``string``, use an attribute of ``self`` with that name
+                              as the decorator.
+    :param bool cached: If ``True``, the decoration will only be done once per instance.
 
         class UsageWithLambda:
             @lazy_decorator(lambda self: some_decorator_that_needs_the_object(self))
@@ -233,6 +281,12 @@ def lazy_decorator(decorator_factory):
             @lazy_decorator('decorator_method')
             def foo(self):
                 # ...
+
+        class UsageCached:
+            # Without ``cached=True``, this will create a new ``timecache`` on every invocation.
+            @lazy_decorator(lambda self: timecache(expiration=1, get_ts_func=lambda: self.ts), cached=True)
+            def foo(self):
+                # ...
     """
 
     if callable(decorator_factory):
@@ -243,5 +297,5 @@ def lazy_decorator(decorator_factory):
         raise TypeError('decorator_factory must be callable or string, not %s' % type(decorator_factory))
 
     def wrapper(func):
-        return LazyDecoratorDescriptor(decorator_factory, func)
+        return LazyDecoratorDescriptor(decorator_factory, func, cached)
     return wrapper

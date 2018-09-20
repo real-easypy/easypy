@@ -113,6 +113,44 @@ def test_lazy_decorator_attribute():
     assert foo.foo.__name__ == 'foo + 20'
 
 
+def test_lazy_decorator_with_timecache():
+    from easypy.caching import timecache
+
+    class Foo:
+        def __init__(self):
+            self.ts = 0
+            self._counter = 0
+
+        @property
+        def timecache(self):
+            return timecache(expiration=1, get_ts_func=lambda: self.ts)
+
+        @lazy_decorator('timecache', cached=True)
+        def inc(self):
+            self._counter += 1
+            return self._counter
+
+        @lazy_decorator(lambda self: lambda method: method())
+        @lazy_decorator('timecache', cached=True)
+        def counter(self):
+            return self._counter
+
+    foo1 = Foo()
+    foo2 = Foo()
+
+    assert [foo1.inc(), foo2.inc()] == [1, 1]
+    assert [foo1.inc(), foo2.inc()] == [1, 1]
+    assert [foo1.counter, foo2.counter] == [1, 1]
+
+    foo1.ts += 1
+    assert [foo1.counter, foo2.counter] == [1, 1]
+    assert [foo1.inc(), foo2.inc()] == [2, 1]
+    assert [foo1.counter, foo2.counter] == [1, 1]
+    foo2.ts += 1
+    assert [foo1.inc(), foo2.inc()] == [2, 2]
+    assert [foo1.counter, foo2.counter] == [1, 2]  # foo1 was not updated since last sync - only foo2
+
+
 def test_singleton_contextmanager():
 
     data = []

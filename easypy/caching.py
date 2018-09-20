@@ -9,7 +9,7 @@ from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 from threading import RLock
 from logging import getLogger
 from .resilience import retrying
-from .decorations import kwargs_resilient, parametrizeable_decorator
+from .decorations import kwargs_resilient, parametrizeable_decorator, DecoratingDescriptor
 from .collections import ilistify
 
 
@@ -206,8 +206,9 @@ else:
         bound_arguments.apply_defaults()
 
 
-class _TimeCache(object):
+class _TimeCache(DecoratingDescriptor):
     def __init__(self, func, **kwargs):
+        super().__init__(func=func, cached=True)
         self.func = func
         self.kwargs = kwargs
         self.expiration = kwargs['expiration']
@@ -282,15 +283,8 @@ class _TimeCache(object):
         self.keyed_locks.pop(key, None)
         return self.cache.pop(key, None)
 
-    def __get__(self, instance, owner):
-        func = self.func.__get__(instance, owner)
-        if func is self.func:
-            return self
-        else:
-            bound = type(self)(func, **self.kwargs)
-            assert getattr(owner, self.__name__) is self
-            setattr(instance, self.__name__, bound)
-            return bound
+    def _decorate(self, method, instance, owner):
+        return type(self)(method, **self.kwargs)
 
 
 def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
