@@ -5,11 +5,11 @@ import shelve
 import time
 import inspect
 from collections import defaultdict
-from functools import wraps, _make_key, partial, lru_cache
+from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 from threading import RLock
 from logging import getLogger
 from .resilience import retrying
-from .decorations import kwargs_resilient, parametrizeable_decorator
+from .decorations import kwargs_resilient, parametrizeable_decorator, DecoratingDescriptor
 from .collections import ilistify
 
 
@@ -206,6 +206,87 @@ else:
         bound_arguments.apply_defaults()
 
 
+class _TimeCache(DecoratingDescriptor):
+    def __init__(self, func, **kwargs):
+        super().__init__(func=func, cached=True)
+        self.func = func
+        self.kwargs = kwargs
+        self.expiration = kwargs['expiration']
+        self.typed = kwargs['typed']
+        self.get_ts_func = kwargs['get_ts_func']
+        self.log_recalculation = kwargs['log_recalculation']
+        self.ignored_keywords = kwargs['ignored_keywords']
+
+        if self.ignored_keywords:
+            assert not kwargs['key_func'], "can't specify both `ignored_keywords` AND `key_func`"
+            self.ignored_keywords = set(ilistify(self.ignored_keywords))
+
+            def key_func(**kw):
+                return tuple(v for k, v in sorted(kw.items()) if k not in self.ignored_keywords)
+        else:
+            key_func = kwargs['key_func']
+
+        self.NOT_FOUND = object()
+        self.NOT_CACHED = self.NOT_FOUND, 0
+
+        self.cache = {}
+        self.main_lock = RLock()
+        self.keyed_locks = defaultdict(RLock)
+
+        if key_func:
+            sig = inspect.signature(func)
+
+            def make_key(args, kwargs):
+                bound = sig.bind(*args, **kwargs)
+                _apply_defaults(bound)
+                return kwargs_resilient(key_func)(**bound.arguments)
+        else:
+            def make_key(args, kwargs):
+                return _make_key(args, kwargs, typed=self.typed)
+        self.make_key = make_key
+
+        update_wrapper(self, self.func)
+
+    def __call__(self, *args, **kwargs):
+        key = self.make_key(args, kwargs)
+
+        with self.main_lock:
+            key_lock = self.keyed_locks[key]
+        with key_lock:
+            result, ts = self.cache.get(key, self.NOT_CACHED)
+
+            if self.expiration <= 0:
+                pass  # nothing to fuss with, cache does not expire
+            elif result is self.NOT_FOUND:
+                pass  # cache is empty
+            elif self.get_ts_func() - ts >= self.expiration:
+                # cache expired
+                result = self.NOT_FOUND
+                del self.cache[key]
+
+            if result is self.NOT_FOUND:
+                if self.log_recalculation:
+                    _logger.debug('time cache expired, calculating new value for %s', self.__name__)
+                result = self.func(*args, **kwargs)
+                self.cache[key] = result, self.get_ts_func()
+
+            return result
+
+    def cache_clear(self):
+        with self.main_lock:
+            for key, lock in dict(self.keyed_locks).items():
+                with lock:
+                    self.cache.pop(key, None)
+
+    def cache_pop(self, *args, **kwargs):
+        key = self.make_key(args, kwargs)
+        self.keyed_locks.pop(key, None)
+        return self.cache.pop(key, None)
+
+    def _decorate(self, method, instance, owner):
+        return type(self)(method, **self.kwargs)
+
+
 def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
     """
     An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
@@ -216,75 +297,15 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
     :param key_func: can be used to fully control how the key is generated
     """
 
-    NOT_FOUND = object()
-    NOT_CACHED = NOT_FOUND, 0
-
-    if ignored_keywords:
-        assert not key_func, "can't specify both `ignored_keywords` AND `key_func`"
-        ignored_keywords = set(ilistify(ignored_keywords))
-
-        def key_func(**kw):
-            return tuple(v for k, v in sorted(kw.items()) if k not in ignored_keywords)
-
     def deco(func):
-        cache = {}
-        main_lock = RLock()
-        keyed_locks = defaultdict(RLock)
-        name = func.__name__
-        sig = inspect.signature(func)
-
-        if key_func:
-            def make_key(args, kwargs):
-                bound = sig.bind(*args, **kwargs)
-                _apply_defaults(bound)
-                return kwargs_resilient(key_func)(**bound.arguments)
-        else:
-            def make_key(args, kwargs):
-                return _make_key(args, kwargs, typed=typed)
-
-        @wraps(func)
-        def inner(*args, **kwargs):
-            key = make_key(args, kwargs)
-
-            with main_lock:
-                key_lock = keyed_locks[key]
-            with key_lock:
-                result, ts = cache.get(key, NOT_CACHED)
-
-                if expiration <= 0:
-                    pass  # nothing to fuss with, cache does not expire
-                elif result is NOT_FOUND:
-                    pass  # cache is empty
-                elif get_ts_func() - ts >= expiration:
-                    # cache expired
-                    result = NOT_FOUND
-                    del cache[key]
-
-                if result is NOT_FOUND:
-                    if log_recalculation:
-                        _logger.debug('time cache expired, calculating new value for %s', name)
-                    result = func(*args, **kwargs)
-                    cache[key] = result, get_ts_func()
-
-                return result
-
-        @wraps(func)
-        def clear():
-            with main_lock:
-                for key, lock in dict(keyed_locks).items():
-                    with lock:
-                        cache.pop(key, None)
-
-        @wraps(func)
-        def pop(*args, **kwargs):
-            key = make_key(args, kwargs)
-            keyed_locks.pop(key, None)
-            return cache.pop(key, None)
-
-        inner.cache_clear = clear
-        inner.cache_pop = pop
-        return inner
-
+        return _TimeCache(
+            func=func,
+            expiration=expiration,
+            typed=typed,
+            get_ts_func=get_ts_func,
+            log_recalculation=log_recalculation,
+            ignored_keywords=ignored_keywords,
+            key_func=key_func)
     return deco
 
 
