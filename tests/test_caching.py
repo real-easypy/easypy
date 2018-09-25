@@ -9,7 +9,7 @@ import gc
 import pytest
 
 from easypy.bunch import Bunch
-from easypy.caching import timecache, PersistentCache, cached_property
+from easypy.caching import timecache, PersistentCache, cached_property, locking_cache
 from easypy.units import DAY
 
 _logger = getLogger(__name__)
@@ -113,6 +113,33 @@ def test_timecache_method():
     assert foo1_2 is not foo1.foo(2)
     assert foo2_1 is not foo2.foo(1)
     assert foo2_2 is foo2.foo(2)
+
+
+def test_timecache_getattr():
+    ts = 0
+
+    def get_ts():
+        return ts
+
+    class Foo:
+        def __init__(self):
+            self.count = 0
+
+        @timecache(expiration=1, get_ts_func=get_ts)
+        def __getattr__(self, name):
+            self.count += 1
+            return [self.count, name]
+
+    foo = Foo()
+
+    assert foo.bar == [1, 'bar']
+    assert foo.bar == [1, 'bar']
+    assert foo.baz == [2, 'baz']
+
+    ts += 1
+
+    assert foo.baz == [3, 'baz']
+    assert foo.bar == [4, 'bar']
 
 
 @pytest.yield_fixture()

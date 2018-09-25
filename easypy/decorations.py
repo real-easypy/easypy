@@ -240,10 +240,10 @@ class DecoratingDescriptor(metaclass=ABCMeta):
         else:
             if self._cached:
                 try:
-                    return getattr(instance, self.__property_name)
-                except AttributeError:
+                    return instance.__dict__[self.__property_name]
+                except KeyError:
                     bound = self._decorate(method, instance, owner)
-                    setattr(instance, self.__property_name, bound)
+                    instance.__dict__[self.__property_name] = bound
                     return bound
             else:
                 return self._decorate(method, instance, owner)
