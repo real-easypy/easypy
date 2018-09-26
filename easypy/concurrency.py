@@ -1375,10 +1375,11 @@ class TagAlongThread(object):
         else:
             return last_result
 
-    def _kill(self):
+    def _kill(self, wait=True):
         self.__alive = False
         self._iteration_trigger.set()
-        self._thread.join()
+        if wait:
+            self._thread.join()
 
 
 def throttled(duration):
