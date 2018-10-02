@@ -2,7 +2,7 @@ from abc import ABCMeta
 from functools import wraps
 from collections import OrderedDict
 
-from .decorations import kwargs_resilient
+from .decorations import kwargs_resilient, as_list
 
 
 class EasyMeta(ABCMeta):
@@ -102,3 +102,19 @@ class EasyMetaDslDict(OrderedDict):
             self.hooks.add(value.dlg)
         else:
             return super().__setitem__(name, value)
+
+
+class GetAllSubclasses(metaclass=EasyMeta):
+    @EasyMeta.Hook
+    def after_subclass_init(cls):
+        cls.__direct_subclasses = []
+        for base in cls.__bases__:
+            if base is not GetAllSubclasses and issubclass(base, GetAllSubclasses):
+                base.__direct_subclasses.append(cls)
+
+    @classmethod
+    @as_list
+    def get_all_subclasses(cls):
+        for subclass in cls.__direct_subclasses:
+            yield subclass
+            yield from subclass.__direct_subclasses
