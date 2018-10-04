@@ -139,6 +139,15 @@ def resilient(func=None, default=None, **kw):
 
 @contextmanager
 def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(), log_level=logging.DEBUG, pred=None):
+    """Suppress exceptions raised from the wrapped scope.
+
+    msg          - format of log to print when an exception is suppressed.
+    acceptable   - exception or tuple of exceptions which to suppress.
+    unacceptable - exception or tuple of exception which to not suppress, even if they are in `acceptable`.
+                   the exceptions in UNACCEPTABLE_EXCEPTIONS are always unacceptable, unless `unacceptable` is None.
+    log_level    - level of the log to emit when suppressing an exception.
+    pred         - if given, then an exception is suppressed only if pred(exception) is True.
+    """
     if unacceptable is None:
         unacceptable = ()
     elif isinstance(unacceptable, tuple):
