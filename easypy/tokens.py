@@ -1,11 +1,34 @@
-# ===================================================================================================
-# Module hack: ``from easypy.tokens import AUTO``
-# ===================================================================================================
 import sys
 from types import ModuleType
 
 
 class Token(str):
+    """
+    When ``None`` is not enough, and ``Enum`` is too much.
+    Use to indicate a desired behavior, instead of some specific value:
+
+        from easypy.tokens import AUTO, MAX
+
+        def create_file(fname=AUTO, size=AUTO):
+
+            if size is AUTO:
+                size = get_capacity() / 2
+            elif size is MAX:
+                size = get_capacity()
+
+            if fname is AUTO:
+                from .randutils import random_nice_name
+                fname = random_nice_name()
+            os.truncate(fname, size)
+
+    Also, to support use as cli options, a token can be compared with an str:
+
+        AUTO == '<AUTO>'
+        AUTO == 'AUTO'
+        AUTO == '<auto>'
+        AUTO == 'auto'
+
+    """
 
     _all = {}
 
@@ -25,6 +48,7 @@ class Token(str):
         if isinstance(other, self.__class__):
             return self is other
         elif isinstance(other, str):
+            # we allows this so that cli flags can be easily transformed into tokens (AUTO == 'auto')
             return self.strip("<>").lower() == other.strip("<>").lower()
         return False
 
@@ -41,7 +65,7 @@ class Token(str):
 
 def if_auto(val, auto):
     """
-    Convenience for `auto if val is AUTO else val`
+    Convenience for the popular ``auto if val is AUTO else val``
 
     Example:
 
@@ -61,7 +85,10 @@ def if_auto(val, auto):
 
 
 class TokensModule(ModuleType):
-    """The module-hack that allows us to use ``from easypy.tokens import AUTO``"""
+    """
+    The module-hack that allows us to use ``from easypy.tokens import AUTO``
+    """
+
     __all__ = ()  # to make help() happy
     __package__ = __name__
     _orig_module = sys.modules[__name__]
