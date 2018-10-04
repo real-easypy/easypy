@@ -10,7 +10,8 @@ import time
 import traceback
 from contextlib import ExitStack
 from functools import wraps, partial
-from itertools import cycle, chain, repeat
+from itertools import cycle, chain, repeat, count
+from collections import OrderedDict
 
 from easypy.colors import colorize_by_patterns as C, uncolorize
 from easypy.humanize import compact as _compact
@@ -124,6 +125,59 @@ def get_console_handler():
             if not isinstance(handler, logging.StreamHandler):
                 continue
             return handler
+
+
+class ThreadControl(logging.Filter):
+    """
+    Used by ContextLoggerMixin .solo and .suppressed methods to control logging to console
+    To use, add it to the logging configuration as a filter in the console handler
+
+        ...
+        'filters': {
+            'thread_control': {
+                '()': 'easypy.logging.ThreadControl'
+            }
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'filters': ['thread_control'],
+            },
+
+    """
+
+    CONTEXT = ThreadContexts(counters='silenced')
+
+    # we use this ordered-dict to track which thread is currently 'solo-ed'
+    # we populate it with some initial values to make the 'filter' method
+    # implementation more convenient
+    SELECTED = OrderedDict()
+    IDX_GEN = count()
+    LOCK = threading.RLock()
+
+    @classmethod
+    @contextmanager
+    def solo(cls):
+        try:
+            with cls.LOCK:
+                idx = next(cls.IDX_GEN)
+                cls.SELECTED[idx] = threading.current_thread()
+            yield
+        finally:
+            cls.SELECTED.pop(idx)
+
+    def filter(self, record):
+        selected = False
+        while selected is False:
+            idx = next(reversed(self.SELECTED), None)
+            if idx is None:
+                selected = None
+                break
+            selected = self.SELECTED.get(idx, False)
+
+        if selected:
+            return selected == threading.current_thread()
+        return not self.CONTEXT.silenced
 
 
 class ConsoleFormatter(logging.Formatter):
@@ -310,15 +364,17 @@ class ContextLoggerMixin(object):
                 stack.enter_context(self.progress_bar())
             yield
 
-    @contextmanager
-    def suppressed(self, threshold=logging.ERROR):
-        handler = get_console_handler()
-        orig_level = handler.level
-        handler.setLevel(threshold)
-        try:
-            yield
-        finally:
-            handler.setLevel(orig_level)
+    def suppressed(self):
+        """
+        Context manager - Supress all logging to the console from the calling thread
+        """
+        return ThreadControl.CONTEXT(silenced=True)
+
+    def solo(self):
+        """
+        Context manager - Allow logging to the console from the calling thread only
+        """
+        return ThreadControl.solo()
 
     @contextmanager
     def indented(self, header=None, *args, level=logging.INFO1, timing=True, footer=True):

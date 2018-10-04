@@ -953,6 +953,7 @@ class concurrent(object):
         self.sleep = kwargs.pop('sleep', 1)
         self.loop = kwargs.pop('loop', False)
         self.timer = None
+        self.console_logging = kwargs.pop('console_logging', True)
 
         real_thread_no_greenlet = kwargs.pop('real_thread_no_greenlet', False)
         if is_module_patched("threading"):
@@ -978,9 +979,14 @@ class concurrent(object):
         return "<%s[%s] '%s'>" % (self.__class__.__name__, self.threadname, flags)
 
     def _logged_func(self):
-        self.timer = Timer()
+        stack = ExitStack()
         self.exc = None
+        self.timer = Timer()
+        stack.callback(self.timer.stop)
+        stack.callback(self.stop)
         try:
+            if not self.console_logging:
+                stack.enter_context(_logger.suppressed())
             _logger.debug("%s - starting", self)
             while True:
                 self.result = self.func(*self.args, **self.kwargs)
@@ -1000,8 +1006,7 @@ class concurrent(object):
             except Exception:
                 pass
         finally:
-            self.timer.stop()
-            self.stop()
+            stack.close()
 
     def stop(self):
         _logger.debug("%s - stopping", self)
