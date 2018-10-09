@@ -404,7 +404,7 @@ class ContextLoggerMixin(object):
     def pipe(self, err_level=logging.DEBUG, out_level=logging.INFO, prefix=None, line_timeout=10 * 60, **kw):
         class LogPipe(object):
             def __rand__(_, cmd):
-                popen = cmd.popen()
+                popen = cmd if hasattr(cmd, "iter_lines") else cmd.popen()
                 for out, err in popen.iter_lines(line_timeout=line_timeout, **kw):
                     for level, line in [(out_level, out), (err_level, err)]:
                         if not line:
