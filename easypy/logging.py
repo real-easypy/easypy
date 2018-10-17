@@ -156,23 +156,9 @@ else:
             return yaml.dump(vars(record), Dumper=Dumper) + "\n---\n"
 
 
-class ContextHandler(logging.NullHandler):
-
-    def __init__(self, **kw):
-        self._ctx = ExitStack()
-        indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
-        kw.setdefault("indentation", indentation)
-        self._ctx.enter_context(THREAD_LOGGING_CONTEXT(**kw))
-        super().__init__()
-
-    def handle(self, record):
-        contexts = THREAD_LOGGING_CONTEXT.context
-        extra = THREAD_LOGGING_CONTEXT.flatten()
-        extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
-        record.__dict__.update(dict(extra, **record.__dict__))
-        drawing = getattr(record, "drawing", INDENT_SEGMENT)
-        indents = chain(repeat(INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
-        record.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+def configure_contextual_logging(_ctx=ExitStack(), **kw):
+    indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
+    _ctx.enter_context(THREAD_LOGGING_CONTEXT(indentation=indentation, **kw))
 
 
 THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context")
@@ -459,6 +445,28 @@ class ContextLoggerMixin(object):
 
 if not issubclass(logging.Logger, ContextLoggerMixin):
     logging.Logger.__bases__ = logging.Logger.__bases__ + (ContextLoggerMixin,)
+
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None):
+        drawing = INDENT_SEGMENT
+
+        rv = logging.Logger._makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=func, sinfo=sinfo)
+        if extra is not None:
+            drawing = extra.pop('drawing', drawing)
+            for key in extra:
+                if (key in ["message", "asctime"]) or (key in rv.__dict__):
+                    raise KeyError("Attempt to overwrite %r in LogRecord" % key)
+                rv.__dict__[key] = extra[key]
+
+        contexts = THREAD_LOGGING_CONTEXT.context
+        extra = THREAD_LOGGING_CONTEXT.flatten()
+        extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
+        rv.__dict__.update(dict(extra, **rv.__dict__))
+
+        indents = chain(repeat(INDENT_SEGMENT, rv.indentation), repeat(drawing, 1))
+        rv.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+        return rv
+
+    logging.Logger._makeRecord, logging.Logger.makeRecord = logging.Logger.makeRecord, makeRecord
 
 
 class HeartbeatHandler(logging.Handler):
