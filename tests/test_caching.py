@@ -3,11 +3,13 @@ import time
 from logging import getLogger
 from uuid import uuid4
 import random
+import weakref
+import gc
 
 import pytest
 
 from easypy.bunch import Bunch
-from easypy.caching import timecache, PersistentCache
+from easypy.caching import timecache, PersistentCache, cached_property, locking_cache
 from easypy.units import DAY
 
 _logger = getLogger(__name__)
@@ -51,6 +53,93 @@ def test_timecache():
     assert (data.a, data.b) == (3, 2)
     inc('b', x=random.random())
     assert (data.a, data.b) == (3, 3)
+
+    inc.cache_clear()
+    inc('a', x=random.random())
+    inc('b', x=random.random())
+    inc('a', x=random.random())
+    inc('b', x=random.random())
+    assert (data.a, data.b) == (4, 4)
+    inc.cache_pop('a', x=random.random())
+    inc('a', x=random.random())
+    inc('b', x=random.random())
+
+
+def test_timecache_method():
+    ts = 0
+
+    def get_ts():
+        return ts
+
+    class Foo:
+        def __init__(self, prefix):
+            self.prefix = prefix
+
+        @timecache(expiration=1, get_ts_func=get_ts, key_func=lambda args: args)
+        def foo(self, *args):
+            return [self.prefix] + list(args)
+
+    foo1 = Foo(1)
+    foo2 = Foo(2)
+
+    assert foo1.foo(1, 2, 3) == foo1.foo(1, 2, 3)
+    assert foo1.foo(1, 2, 3) != foo1.foo(1, 2, 4)
+    assert foo1.foo(1, 2, 3) != foo2.foo(1, 2, 3)
+
+    foo1_1 = foo1.foo(1)
+    foo1_2 = foo1.foo(2)
+    foo2_1 = foo2.foo(1)
+    foo2_2 = foo2.foo(2)
+
+    assert foo1_1 == [1, 1]
+    assert foo1_2 == [1, 2]
+    assert foo2_1 == [2, 1]
+    assert foo2_2 == [2, 2]
+
+    assert foo1_1 is foo1.foo(1)
+    assert foo1_2 is foo1.foo(2)
+    assert foo2_1 is foo2.foo(1)
+    assert foo2_2 is foo2.foo(2)
+
+    assert foo1_1 is foo1.foo(1)
+    assert foo1_2 is foo1.foo(2)
+    assert foo2_1 is foo2.foo(1)
+    assert foo2_2 is foo2.foo(2)
+
+    foo1.foo.cache_clear()
+    foo2.foo.cache_pop(1)
+
+    assert foo1_1 is not foo1.foo(1)
+    assert foo1_2 is not foo1.foo(2)
+    assert foo2_1 is not foo2.foo(1)
+    assert foo2_2 is foo2.foo(2)
+
+
+def test_timecache_getattr():
+    ts = 0
+
+    def get_ts():
+        return ts
+
+    class Foo:
+        def __init__(self):
+            self.count = 0
+
+        @timecache(expiration=1, get_ts_func=get_ts)
+        def __getattr__(self, name):
+            self.count += 1
+            return [self.count, name]
+
+    foo = Foo()
+
+    assert foo.bar == [1, 'bar']
+    assert foo.bar == [1, 'bar']
+    assert foo.baz == [2, 'baz']
+
+    ts += 1
+
+    assert foo.baz == [3, 'baz']
+    assert foo.bar == [4, 'bar']
 
 
 @pytest.yield_fixture()
@@ -137,3 +226,36 @@ def test_locking_timecache():
         return True
 
     MultiObject(range(10)).call(lambda x: test(x=x))
+
+
+@pytest.mark.parametrize('cache_decorator', [cached_property, timecache()])
+def test_caching_gc_leaks(cache_decorator):
+    """
+    Make sure that the cache does not prevent GC collection once the original objects die
+    """
+
+    class Leaked():
+        pass
+
+    class Foo:
+        @cache_decorator
+        def cached_method(self):
+            return Leaked()
+
+        def get(self):
+            """Generalize property type and function type caches"""
+            result = self.cached_method
+            if callable(result):
+                result = result()
+            assert isinstance(result, Leaked), 'cache not used properly - got wrong value %s' % (result,)
+            return result
+
+    foo = Foo()
+    leaked = weakref.ref(foo.get())
+
+    gc.collect()
+    assert leaked() == foo.get()
+
+    del foo
+    gc.collect()
+    assert leaked() is None

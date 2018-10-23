@@ -23,6 +23,12 @@ class Table():
     :param List[Column] columns: column descriptors
     :param List[Bunch] data: rows
     """
+
+    HEADER_SEP = "|"
+    SEPARATORS = "|"
+    BAR = '='
+    BAR_SEP = ":"
+
     def __init__(self, *columns, data=None, max_col_width=None, align='left', header_align='center', padding=1):
         self.data = data or []
         self.columns = []
@@ -80,23 +86,38 @@ class Table():
                 spacing = max_width + coloring_spacing
                 format_string = "{{data:{align}{spacing}}}".format(align=self._ALIGN_MAP[align], spacing=spacing)
                 rendered[i].append(format_string.format(data=data))
+
         output = StringIO()
         for r_i, row in enumerate(rendered):
             r_parts = []
+
+            sep = self.HEADER_SEP if r_i == 0 else self.SEPARATORS[r_i % len(self.SEPARATORS)]
+
             for col_i, col in enumerate(row):
                 column = columns[col_i]
                 padding = column.padding * " "
                 if column.max_width and r_i > 0:
-                    col = compact(col, column.max_width, suffix_length=column.max_width//10)
+                    col = compact(col, column.max_width, suffix_length=column.max_width // 10)
                 r_parts.append("{padding}{col}{padding}".format(col=col, padding=padding))
-            output.write("|".join(r_parts))
+
+            output.write(sep.join(r_parts))
             output.write("\n")
+
             if r_i == 0:
-                output.seek(0)
-                first_row = output.read()
-                output.write(len(uncolorize(first_row)) * '-' + "\n")
+                r_parts = [self.BAR * len(uncolorize(part)) for part in r_parts]
+                output.write(self.BAR_SEP.join(r_parts))
+                output.write("\n")
+
         output.seek(0)
         return output.read()
+
+
+class DecoratedTable(Table):
+    HEADER_SEP = "│"
+    SEPARATORS = "┼│┊┊│"
+    BAR = '═'
+    BAR_SEP = "╪"
+
 
 def _test():
     table = Table(Column("first", "GREEN<<First>>"))

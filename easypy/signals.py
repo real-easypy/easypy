@@ -9,10 +9,10 @@ from contextlib import contextmanager, ExitStack
 import weakref
 
 from easypy.concurrency import Futures, MultiObject
-from easypy.decorations import parametrizeable_decorator, WeakMethodDead
+from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
-from easypy.misc import kwargs_resilient
+from easypy.misc import kwargs_resilient, WeakMethodDead
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
 _logger = logging.getLogger(__name__)
@@ -47,6 +47,13 @@ def get_original_func(func):
             func = func.__wrapped__
         else:
             return func
+
+
+class RemoveHandler(Exception):
+    pass
+
+
+STALE_HANDLER = (WeakMethodDead, RemoveHandler)
 
 
 class SignalHandler(object):
@@ -115,6 +122,9 @@ class SignalHandler(object):
 
         try:
             return self.func(**kwargs)
+        except STALE_HANDLER:
+            self.times = 0
+            raise
         except:
             if not swallow_exceptions:
                 raise
@@ -202,11 +212,7 @@ class Signal:
             raise MissingIdentifier(_signal_name=self.name, _identifier=self.identifier)
 
         if self.log:
-            # log signal for centralized logging analytics.
-            # minimize text message as most of the data is sent in the 'extra' dict
-            # signal fields get prefixed with 'sig_', and the values are repr'ed
-            signal_fields = {("sig_%s" % k): repr(v) for (k, v) in kwargs.items()}
-            _logger.debug("Triggered %s", self, extra=dict(signal_fields, signal=self.name, signal_id=self.id))
+            _logger.debug("Triggered %s", self)
 
         for handler in self.iter_handlers():
             if handler.times == 0:
@@ -228,14 +234,14 @@ class Signal:
                 try:
                     with _logger.context("#%03d" % handler.idx):
                         handler(**kwargs)
-                except WeakMethodDead:
+                except STALE_HANDLER:
                     handlers_to_remove.append(handler)
 
             for handler in self.iter_handlers():
                 try:
                     if not handler.should_run(**kwargs):
                         continue
-                except WeakMethodDead:
+                except STALE_HANDLER:
                     handlers_to_remove.append(handler)
                     continue
                 # allow handler to use our async context
@@ -293,7 +299,7 @@ class ContextManagerSignal(Signal):
                         with handler(**kwargs):
                             yield
                             already_yielded = True
-                except WeakMethodDead:
+                except STALE_HANDLER:
                     handlers_to_remove.append(handler)
                     if not already_yielded:
                         yield
@@ -302,7 +308,7 @@ class ContextManagerSignal(Signal):
                 try:
                     if not handler.should_run(**kwargs):
                         continue
-                except WeakMethodDead:
+                except STALE_HANDLER:
                     handlers_to_remove.append(handler)
                     continue
                 # allow handler to use our async context

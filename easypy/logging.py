@@ -10,7 +10,8 @@ import time
 import traceback
 from contextlib import ExitStack
 from functools import wraps, partial
-from itertools import cycle, chain, repeat
+from itertools import cycle, chain, repeat, count
+from collections import OrderedDict
 
 from easypy.colors import colorize_by_patterns as C, uncolorize
 from easypy.humanize import compact as _compact
@@ -126,6 +127,59 @@ def get_console_handler():
             return handler
 
 
+class ThreadControl(logging.Filter):
+    """
+    Used by ContextLoggerMixin .solo and .suppressed methods to control logging to console
+    To use, add it to the logging configuration as a filter in the console handler
+
+        ...
+        'filters': {
+            'thread_control': {
+                '()': 'easypy.logging.ThreadControl'
+            }
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'filters': ['thread_control'],
+            },
+
+    """
+
+    CONTEXT = ThreadContexts(counters='silenced')
+
+    # we use this ordered-dict to track which thread is currently 'solo-ed'
+    # we populate it with some initial values to make the 'filter' method
+    # implementation more convenient
+    SELECTED = OrderedDict()
+    IDX_GEN = count()
+    LOCK = threading.RLock()
+
+    @classmethod
+    @contextmanager
+    def solo(cls):
+        try:
+            with cls.LOCK:
+                idx = next(cls.IDX_GEN)
+                cls.SELECTED[idx] = threading.current_thread()
+            yield
+        finally:
+            cls.SELECTED.pop(idx)
+
+    def filter(self, record):
+        selected = False
+        while selected is False:
+            idx = next(reversed(self.SELECTED), None)
+            if idx is None:
+                selected = None
+                break
+            selected = self.SELECTED.get(idx, False)
+
+        if selected:
+            return selected == threading.current_thread()
+        return not self.CONTEXT.silenced
+
+
 class ConsoleFormatter(logging.Formatter):
     def formatMessage(self, record):
         if not hasattr(record, "levelcolor"):
@@ -156,23 +210,9 @@ else:
             return yaml.dump(vars(record), Dumper=Dumper) + "\n---\n"
 
 
-class ContextHandler(logging.NullHandler):
-
-    def __init__(self, **kw):
-        self._ctx = ExitStack()
-        indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
-        kw.setdefault("indentation", indentation)
-        self._ctx.enter_context(THREAD_LOGGING_CONTEXT(**kw))
-        super().__init__()
-
-    def handle(self, record):
-        contexts = THREAD_LOGGING_CONTEXT.context
-        extra = THREAD_LOGGING_CONTEXT.flatten()
-        extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
-        record.__dict__.update(dict(extra, **record.__dict__))
-        drawing = getattr(record, "drawing", INDENT_SEGMENT)
-        indents = chain(repeat(INDENT_SEGMENT, record.indentation), repeat(drawing, 1))
-        record.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+def configure_contextual_logging(_ctx=ExitStack(), **kw):
+    indentation = int(os.getenv("EASYPY_LOG_INDENTATION", "0"))
+    _ctx.enter_context(THREAD_LOGGING_CONTEXT(indentation=indentation, **kw))
 
 
 THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context")
@@ -310,15 +350,17 @@ class ContextLoggerMixin(object):
                 stack.enter_context(self.progress_bar())
             yield
 
-    @contextmanager
-    def suppressed(self, threshold=logging.ERROR):
-        handler = get_console_handler()
-        orig_level = handler.level
-        handler.setLevel(threshold)
-        try:
-            yield
-        finally:
-            handler.setLevel(orig_level)
+    def suppressed(self):
+        """
+        Context manager - Supress all logging to the console from the calling thread
+        """
+        return ThreadControl.CONTEXT(silenced=True)
+
+    def solo(self):
+        """
+        Context manager - Allow logging to the console from the calling thread only
+        """
+        return ThreadControl.solo()
 
     @contextmanager
     def indented(self, header=None, *args, level=logging.INFO1, timing=True, footer=True):
@@ -404,7 +446,7 @@ class ContextLoggerMixin(object):
     def pipe(self, err_level=logging.DEBUG, out_level=logging.INFO, prefix=None, line_timeout=10 * 60, **kw):
         class LogPipe(object):
             def __rand__(_, cmd):
-                popen = cmd.popen()
+                popen = cmd if hasattr(cmd, "iter_lines") else cmd.popen()
                 for out, err in popen.iter_lines(line_timeout=line_timeout, **kw):
                     for level, line in [(out_level, out), (err_level, err)]:
                         if not line:
@@ -459,6 +501,28 @@ class ContextLoggerMixin(object):
 
 if not issubclass(logging.Logger, ContextLoggerMixin):
     logging.Logger.__bases__ = logging.Logger.__bases__ + (ContextLoggerMixin,)
+
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=None, extra=None, sinfo=None):
+        drawing = INDENT_SEGMENT
+
+        rv = logging.Logger._makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=func, sinfo=sinfo)
+        if extra is not None:
+            drawing = extra.pop('drawing', drawing)
+            for key in extra:
+                if (key in ["message", "asctime"]) or (key in rv.__dict__):
+                    raise KeyError("Attempt to overwrite %r in LogRecord" % key)
+                rv.__dict__[key] = extra[key]
+
+        contexts = THREAD_LOGGING_CONTEXT.context
+        extra = THREAD_LOGGING_CONTEXT.flatten()
+        extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
+        rv.__dict__.update(dict(extra, **rv.__dict__))
+
+        indents = chain(repeat(INDENT_SEGMENT, rv.indentation), repeat(drawing, 1))
+        rv.drawing = "".join(color(segment) for color, segment in zip(cycle(INDENT_COLORS), indents))
+        return rv
+
+    logging.Logger._makeRecord, logging.Logger.makeRecord = logging.Logger.makeRecord, makeRecord
 
 
 class HeartbeatHandler(logging.Handler):

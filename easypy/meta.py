@@ -3,6 +3,7 @@ from functools import wraps
 from collections import OrderedDict
 
 from .misc import kwargs_resilient
+from .collections import as_list
 
 
 class EasyMeta(ABCMeta):
@@ -102,3 +103,55 @@ class EasyMetaDslDict(OrderedDict):
             self.hooks.add(value.dlg)
         else:
             return super().__setitem__(name, value)
+
+
+class GetAllSubclasses(metaclass=EasyMeta):
+    """
+    Meta-magic mixin for registering subclasses
+
+    The ``get_all_subclasses`` class method will return a list of all subclasses
+    of the class it was called on. The class it was called on is not included in
+    the list.
+
+    >>> class Foo(GetAllSubclasses):
+    >>>     pass
+    >>>
+    >>>
+    >>> class Bar(Foo):
+    >>>     pass
+    >>>
+    >>>
+    >>> class Baz(Foo):
+    >>>     pass
+    >>>
+    >>>
+    >>> class Qux(Bar):
+    >>>     pass
+    >>>
+    >>>
+    >>> Foo.get_all_subclasses()
+    [Bar, Qux, Baz]
+    >>> Bar.get_all_subclasses()
+    [Qux]
+    >>> Baz.get_all_subclasses()
+    []
+    >>> Qux.get_all_subclasses()
+    []
+    """
+
+    @EasyMeta.Hook
+    def after_subclass_init(cls):
+        cls.__direct_subclasses = []
+        for base in cls.__bases__:
+            if base is not GetAllSubclasses and issubclass(base, GetAllSubclasses):
+                base.__direct_subclasses.append(cls)
+
+    @classmethod
+    @as_list
+    def get_all_subclasses(cls):
+        """
+        List all subclasses of this class
+        """
+        for subclass in cls.__direct_subclasses:
+            yield subclass
+            yield from subclass.__direct_subclasses
