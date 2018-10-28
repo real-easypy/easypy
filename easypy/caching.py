@@ -1,18 +1,19 @@
-from contextlib import ExitStack, contextmanager
-import sys
 import os
-import shelve
+import sys
 import time
+import shelve
 import inspect
-from collections import defaultdict
-from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 from threading import RLock
 from logging import getLogger
+from collections import defaultdict
+from contextlib import ExitStack, contextmanager
+from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 
 from .resilience import retrying
 from .decorations import parametrizeable_decorator, DecoratingDescriptor, wrapper_decorator
 from .collections import ilistify
 from .misc import kwargs_resilient
+from .deprecation import deprecated
 
 
 _logger = getLogger(__name__)
@@ -33,24 +34,20 @@ class PersistentCache(object):
     """
     A memoizer that stores its cache persistantly using shelve.
 
-
     :param path: location of cache shelve file.
-
     :param version: increment this to force-clear the cache.
-
-    :param expiration: expiration in seconds for the entire cache.
-                    ``None`` to disable expiration
+    :param expiration: expiration in seconds for the entire cache. ``None`` to disable expiration.
 
     Example::
 
-        CACHE = PersistentCache("/tmp/cache", version=1, expiration=60)
+        >>> CACHE = PersistentCache("/tmp/cache", version=1, expiration=60)
 
-        @CACHE
-        def fib(n):
-            a, b = 0, 1
-            while a < n:
-                a, b = b, a+b
-            return a
+        >>> @CACHE
+        ... def fib(n):
+        ...     a, b = 0, 1
+        ...     while a < n:
+        ...         a, b = b, a+b
+        ...     return a
     """
 
     DELETED = object()
@@ -72,14 +69,14 @@ class PersistentCache(object):
         with self.lock:
             try:
                 db = retrying(3, acceptable=GDBMException, sleep=5)(shelve.open)(self.path)
-            except:
+            except Exception:
                 try:
                     os.unlink(self.path)
                 except FileNotFoundError:
                     pass
                 try:
                     db = shelve.open(self.path)
-                except:
+                except Exception:
                     _logger.warning("Could not open PersistentCache: %s", self.path)
                     db = {}
 
@@ -151,8 +148,18 @@ class PersistentCache(object):
             db.clear()
 
 
-def locking_lru_cache(maxsize=128, typed=False):  # can't implement ignored_keywords because we use python's lru_cache...
-    "An lru cache with a lock, to prevent concurrent invocations and allow reusing from cache"
+@deprecated(message="Please use easypy.caching.locking_cache")
+def locking_lru_cache(maxsize=128, typed=False):
+    """
+    DEPRECATED!
+
+    An lru cache decorator with a lock, to prevent concurrent invocations and allow reusing from cache.
+
+    :param maxsize: LRU cache maximum size, defaults to 128
+    :type maxsize: number, optional
+    :param typed: If typed is set to true, function arguments of different types will be cached separately. defaults to False.
+    :type typed: bool, optional
+    """
 
     def deco(func):
         caching_func = lru_cache(maxsize, typed)(func)
@@ -210,6 +217,23 @@ else:
 
 
 class _TimeCache(DecoratingDescriptor):
+    """
+    A thread-safe cache decorator with time expiration.
+
+    :param expiration: if a positive number, set an expiration on the cache, defaults to 0
+    :type expiration: number, optional
+    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
+    :type typed: bool, optional
+    :param get_ts_func: The function to be used in order to get the current time, defaults to time.time
+    :type get_ts_func: callable, optional
+    :param log_recalculation: Whether or not to log cache misses, defaults to False
+    :type log_recalculation: bool, optional
+    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
+    :type ignored_keywords: iterable, optional
+    :param key_func: The function to use in order to create the item key, defaults to functools._make_key
+    :type key_func: callable, optional
+    """
+
     def __init__(self, func, **kwargs):
         super().__init__(func=func, cached=True)
         self.func = func
@@ -246,6 +270,7 @@ class _TimeCache(DecoratingDescriptor):
         else:
             def make_key(args, kwargs):
                 return _make_key(args, kwargs, typed=self.typed)
+
         self.make_key = make_key
 
         update_wrapper(self, self.func)
@@ -291,14 +316,6 @@ class _TimeCache(DecoratingDescriptor):
 
 
 def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
-    """
-    An lru cache with a lock, preventing concurrent invocations and allowing caching accross threads.
-
-    :param expiration: if >0, set an expiration on the cache.
-    :param get_ts_func: can be used to provide an alternative timestamp for measuring expiration
-    :param ignored_keywords: can be used to ignore various arguments (positional or keyword) when generating the key for the cache
-    :param key_func: can be used to fully control how the key is generated
-    """
 
     def deco(func):
         return _TimeCache(
@@ -309,16 +326,41 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
             log_recalculation=log_recalculation,
             ignored_keywords=ignored_keywords,
             key_func=key_func)
+
     return deco
+
+
+timecache.__doc__ = _TimeCache.__doc__
 
 
 @parametrizeable_decorator
 def locking_cache(func=None, typed=False, log_recalculation=False, ignored_keywords=False):
+    """
+    A syntactic sugar for a locking cache without time expiration.
+
+    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
+    :type typed: bool, optional
+    :param log_recalculation: Whether or not to log cache misses, defaults to False
+    :type log_recalculation: bool, optional
+    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
+    :type ignored_keywords: iterable, optional
+    """
+
     return timecache(typed=typed, log_recalculation=log_recalculation, ignored_keywords=ignored_keywords)(func)
 
 
 class cached_property(object):
-    """A property whose value is computed only once. """
+    """
+    A property whose value is computed only once.
+
+    :param function: Function to decorate, defaults to None
+    :type function: function, optional
+    :param locking: Lock cache access to make thread-safe, defaults to True
+    :type locking: bool, optional
+    :param safe: See `easypy.properties.safe_property`, defaults to True
+    :type safe: bool, optional
+    """
+
     locks_lock = RLock()
     LOCKS_KEY = '__cached_properties_locks'
 
