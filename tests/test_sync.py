@@ -1,11 +1,21 @@
+from mock import patch, call
 import pytest
 from time import sleep
-from threading import BrokenBarrierError
-from contextlib import contextmanager
+import threading
+from contextlib import contextmanager, ExitStack
+import random
 
-from easypy.concurrency import MultiObject, MultiException
-from easypy.concurrency import SynchronizationCoordinator, SYNC
+from easypy.concurrency import MultiObject, MultiException, concurrent
+from easypy.timing import repeat, timing
+from easypy.bunch import Bunch
+
+from easypy.sync import iter_wait, wait, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
+from easypy.sync import SynchronizationCoordinator, SYNC
 from easypy.sync import shared_contextmanager
+from easypy.sync import TagAlongThread
+from easypy.sync import LoggedRLock, LockLeaseExpired
+from easypy.sync import SynchronizedSingleton
+from easypy.sync import LoggedCondition
 
 
 def test_shared_contextmanager():
@@ -359,8 +369,7 @@ def test_synchronization_coordinator_with_multiobject_method():
     assert mo.foo().T == (
         (0, [0, 1, 2]),
         (1, [0, 1, 2]),
-        (2, [0, 1, 2]),
-        )
+        (2, [0, 1, 2]))
 
 
 def test_synchronization_coordinator_timeout():
@@ -373,7 +382,7 @@ def test_synchronization_coordinator_timeout():
     with pytest.raises(MultiException) as exc:
         mo.call(foo)
     assert exc.value.count == len(mo)
-    assert exc.value.common_type is BrokenBarrierError
+    assert exc.value.common_type is threading.BrokenBarrierError
 
 
 def test_synchronization_coordinator_with_context_manager():
@@ -403,3 +412,355 @@ def test_synchronization_coordinator_with_context_manager():
         {(i, 'before yield') for i in range(3)},
         {'with body'},
         {(i, 'after yield') for i in range(3)})
+
+
+def test_tag_along_thread():
+    counter = 0
+
+    def increment_counter():
+        nonlocal counter
+        counter += 1
+        sleep(0.5)
+
+    tag_along_thread = TagAlongThread(increment_counter, 'counter-incrementer')
+
+    MultiObject(range(8)).call(lambda _: tag_along_thread())
+
+    # The first call should get it's own iteration of the TagAlongThread. The
+    # rest should wait for it to finish, and then all use the second iteration.
+    # We don't have control over the timing inside the threads though, so we
+    # allow fewer or more iterations - as long as an iteration did happen(at
+    # least 1) and that invocations did stack together(less than 5 should do
+    # it)
+    assert 1 <= counter < 5
+
+
+def test_logged_lock():
+    lock = LoggedRLock("test", lease_expiration=1, log_interval=.2)
+
+    step1 = threading.Event()
+    step2 = threading.Event()
+
+    def do_lock():
+        with lock:
+            step1.set()
+            step2.wait()
+
+    with concurrent(do_lock):
+        # wait for thread to hold the lock
+        step1.wait()
+
+        # we'll mock the logger so we can ensure it logged
+        with patch("easypy.sync._logger") as _logger:
+
+            assert not lock.acquire(timeout=0.5)  # below the lease_expiration
+
+            # the expiration mechanism should kick in
+            with pytest.raises(LockLeaseExpired):
+                lock.acquire()
+
+        # let other thread finish
+        step2.set()
+
+    with lock:
+        pass
+
+    assert sum(c == call("%s - waiting...", lock) for c in _logger.debug.call_args_list) > 3
+
+
+# this might be useful sometimes, but for now it didn't catch a bug
+def disable_test_logged_lock_races():
+    lease_expiration = 1
+    lock = LoggedRLock("test", lease_expiration=lease_expiration, log_interval=.1)
+    import logging
+
+    def do_lock(idx):
+        sleep(random.random())
+        if lock.acquire(timeout=1, blocking=random.random() > 0.5):
+            logging.info("%02d: acquired", idx)
+            sleep(random.random() * lease_expiration * 0.9)
+            lock.release()
+            logging.info("%02d: released", idx)
+        else:
+            logging.info("%02d: timed out", idx)
+
+    with ExitStack() as stack:
+        for i in range(30):
+            stack.enter_context(concurrent(do_lock, idx=i, loop=True, sleep=0))
+        sleep(5)
+
+
+def test_sync_singleton():
+
+    class S(metaclass=SynchronizedSingleton):
+        def __init__(self):
+            sleep(1)
+
+    a, b = MultiObject(range(2)).call(lambda _: S())
+    assert a is b
+
+
+def test_logged_condition():
+    cond = LoggedCondition('test', log_interval=.1)
+
+    progress = 0
+    executed = []
+
+    def wait_for_progress_to(progress_to):
+        cond.wait_for(lambda: progress_to <= progress, 'progress to %s', progress_to)
+        executed.append(progress_to)
+
+    with concurrent(wait_for_progress_to, 10), concurrent(wait_for_progress_to, 20), concurrent(wait_for_progress_to, 30):
+        with patch("easypy.sync._logger") as _logger:
+            sleep(0.3)
+
+        assert any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == []
+
+        with patch("easypy.sync._logger") as _logger:
+            with cond.notifying_all('setting progress to 10'):
+                progress = 10
+        assert [c for c in _logger.debug.call_args_list if 'performed' in c[0][0]] == [
+            call("%s - performed: setting progress to 10", cond)]
+
+        with patch("easypy.sync._logger") as _logger:
+            sleep(0.3)
+
+        assert not any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == [10]
+
+        with patch("easypy.sync._logger") as _logger:
+            with cond.notifying_all('setting progress to 30'):
+                progress = 30
+        assert [c for c in _logger.debug.call_args_list if 'performed' in c[0][0]] == [
+            call("%s - performed: setting progress to 30", cond)]
+
+        with patch("easypy.sync._logger") as _logger:
+            sleep(0.3)
+
+        assert not any(c == call("%s - waiting for progress to %s", cond, 10) for c in _logger.debug.call_args_list)
+        assert not any(c == call("%s - waiting for progress to %s", cond, 20) for c in _logger.debug.call_args_list)
+        assert not any(c == call("%s - waiting for progress to %s", cond, 30) for c in _logger.debug.call_args_list)
+        assert executed == [10, 20, 30] or executed == [10, 30, 20]
+
+        with patch("easypy.sync._logger") as _logger:
+            with pytest.raises(TimeoutException):
+                cond.wait_for(lambda: False, 'the impossible', timeout=1)
+
+        assert sum(c == call("%s - waiting for the impossible", cond) for c in _logger.debug.call_args_list) > 3
+
+
+def test_logged_condition_exception():
+    cond = LoggedCondition('test', log_interval=.2)
+
+    should_throw = False
+
+    class TestException(Exception):
+        pass
+
+    def waiter():
+        if should_throw:
+            raise TestException
+
+    with pytest.raises(TestException):
+        with concurrent(cond.wait_for, waiter, 'throw'):
+            sleep(0.5)
+            should_throw = True
+
+
+def test_logged_condition_waited_for():
+    cond = LoggedCondition('test', log_interval=15)
+    progress = 0
+    executed = []
+
+    def wait_then_set_to(wait_to, set_to):
+        nonlocal progress
+        with cond.waited_for(lambda: progress == wait_to, 'progress to be %s', wait_to):
+            executed.append('%s -> %s' % (progress, set_to))
+            progress = set_to
+
+    with concurrent(wait_then_set_to, 10, 20), concurrent(wait_then_set_to, 20, 30), concurrent(wait_then_set_to, 30, 40):
+        with cond.notifying_all('setting progress to 10'):
+            progress = 10
+
+    assert executed == ['10 -> 20', '20 -> 30', '30 -> 40']
+
+
+def test_wait_exception():
+    with pytest.raises(Exception, match=".*`message` is required.*"):
+        wait(0.1, pred=lambda: True)
+
+    wait(0.1)
+    wait(0.1, pred=lambda: True, message='message')
+    wait(0.1, pred=lambda: True, message=False)
+    repeat(0.1, callback=lambda: True)
+
+
+def test_wait_better_exception():
+
+    class TimedOut(PredicateNotSatisfied):
+        pass
+
+    i = 0
+
+    def check():
+        nonlocal i
+        i += 1
+        if i < 3:
+            raise TimedOut(a=1, b=2)
+        return True
+
+    with pytest.raises(TimedOut):
+        # due to the short timeout and long sleep, the pred would called exactly twice
+        wait(.1, pred=check, sleep=1, message=False)
+
+    assert i == 2
+    wait(.1, pred=check, message=False)
+
+
+def test_wait_better_exception_nested():
+
+    class TimedOut(PredicateNotSatisfied):
+        pass
+
+    i = 0
+
+    def check():
+        nonlocal i
+        i += 1
+        if i < 3:
+            raise TimedOut(a=1, b=2)
+        return True
+
+    with pytest.raises(TimedOut):
+        # due to the short timeout and long sleep, the pred would called exactly twice
+        # also, the external wait should call the inner one only once, due to the TimedOut exception,
+        # which it knows not to swallow
+        wait(5, lambda: wait(.1, pred=check, sleep=1, message=False), sleep=1, message=False)
+
+    assert i == 2
+    wait(.1, pred=check, message=False)
+
+
+def test_iter_wait_warning():
+    with pytest.raises(Exception, match=".*`message` is required.*"):
+        for _ in iter_wait(0.1, pred=lambda: True):
+            pass
+
+    no_warn_iters = [
+        iter_wait(0.1),
+        iter_wait(0.1, pred=lambda: True, message='message'),
+        iter_wait(0.1, pred=lambda: True, throw=False),
+        iter_wait(0.1, pred=lambda: True, message=False)
+    ]
+    for i in no_warn_iters:
+        for _ in i:
+            pass
+
+
+def test_iter_wait_progress_inbetween_sleep():
+    data = Bunch(a=3)
+
+    def get():
+        data.a -= 1
+        return data.a
+
+    sleep = .1
+    g = iter_wait_progress(get, advance_timeout=10, sleep=sleep)
+
+    # first iteration should be immediate
+    t = Timer()
+    next(g)
+    assert t.duration < sleep
+
+    # subsequent iteration should be at least 'sleep' long
+    next(g)
+    assert t.duration >= sleep
+
+    for state in g:
+        pass
+    assert state.finished is True
+
+
+def test_iter_wait_progress_total_timeout():
+    data = Bunch(a=1000)
+
+    def get():
+        data.a -= 1
+        return data.a
+
+    with pytest.raises(TimeoutException) as exc:
+        for state in iter_wait_progress(get, advance_timeout=1, sleep=.05, total_timeout=.1):
+            pass
+    assert exc.value.message.startswith("advanced but failed to finish")
+
+
+def test_wait_long_predicate():
+    """
+    After the actual check the predicate is held for .3 seconds. Make sure
+    that we don't get a timeout after .2 seconds - because the actual
+    condition should be met in .1 second!
+    """
+
+    t = Timer()
+
+    def pred():
+        try:
+            return 0.1 < t.duration
+        finally:
+            wait(0.3)
+
+    wait(0.2, pred, message=False)
+
+
+def test_timeout_exception():
+    exc = None
+
+    with timing() as t:
+        try:
+            wait(0.5, lambda: False, message=False)
+        except TimeoutException as e:
+            exc = e
+
+    assert exc.duration > 0.5
+    assert exc.start_time >= t.start_time
+    assert exc.start_time < t.stop_time
+    assert t.duration > exc.duration
+
+
+def test_wait_with_callable_message():
+    val = ['FOO']
+
+    with pytest.raises(TimeoutException) as e:
+        def pred():
+            val[0] = 'BAR'
+            return False
+        wait(pred=pred, timeout=.1, message=lambda: 'val is %s' % val[0])
+
+    assert val[0] == 'BAR'
+    assert e.value.message == 'val is BAR'
+
+
+@pytest.mark.parametrize("multipred", [False, True])
+def test_wait_do_something_on_final_attempt(multipred):
+    data = []
+
+    def pred(is_final_attempt):
+        if is_final_attempt:
+            data.append('final')
+        data.append('regular')
+        return False
+
+    if multipred:
+        pred = [pred]
+
+    with pytest.raises(TimeoutException):
+        wait(pred=pred, timeout=.5, sleep=.1, message=False)
+
+    assert all(iteration == 'regular' for iteration in data[:-2])
+    assert data[-2] == 'final'
+    assert data[-1] == 'regular'
