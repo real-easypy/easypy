@@ -512,3 +512,21 @@ def test_typed_struct_auto_field_wrapping_dsl():
         b.convertible_from(str)
 
     assert Foo(b='2.3').to_dict() == dict(a=1, b=2.3)
+
+
+def test_typed_struct_inheritance():
+    class Foo(ts.TypedStruct):
+        a = int
+        a.default = 1
+
+        b = int
+        b.default = 2
+
+    class Bar(Foo):
+        a.default = 3
+
+        c = int
+        c.default = 4
+
+    assert Foo().to_dict() == dict(a=1, b=2)
+    assert Bar().to_dict() == dict(a=3, b=2, c=4)
