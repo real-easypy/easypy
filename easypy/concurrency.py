@@ -284,7 +284,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
             with buff.indent("{.__class__.__qualname__}", exc):
                 if isinstance(exc, MultiException):
                     buff.extend(exc._get_buffer(**kw))
-                elif hasattr(exc, "render"):
+                elif callable(getattr(exc, "render", None)):
                     buff.write(exc.render(**kw))
                 else:
                     buff.write("{}", exc)
