@@ -9,7 +9,6 @@ from collections import defaultdict
 from contextlib import ExitStack, contextmanager
 from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 
-from .resilience import retrying
 from .decorations import parametrizeable_decorator, DecoratingDescriptor, wrapper_decorator
 from .collections import ilistify
 from .misc import kwargs_resilient
@@ -66,6 +65,7 @@ class PersistentCache(object):
             yield {}
             return
 
+        from .resilience import retrying
         with self.lock:
             try:
                 db = retrying(3, acceptable=GDBMException, sleep=5)(shelve.open)(self.path)
