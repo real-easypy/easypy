@@ -1,11 +1,8 @@
-from mock import patch, call
-import pytest
-from time import sleep
 import threading
 
 import logging
 from easypy.concurrency import concurrent
-from easypy.concurrency import RWLock
+from easypy.sync import RWLock
 from easypy.bunch import Bunch
 
 

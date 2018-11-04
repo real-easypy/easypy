@@ -268,6 +268,13 @@ class Field(object):
     def __repr__(self):
         return 'Field<%s>' % self.to_parameter()
 
+    def _clone(self):
+        return type(self)(
+            type=self.type,
+            default=self.default,
+            preprocess=self.preprocess,
+            meta=deepcopy(self.meta))
+
 
 class TypedCollection(object):
     def __init__(self, owner, field):
@@ -380,7 +387,7 @@ TypedBunch.__name__ = 'Bunch'  # make it look like a Bunch when formatted
 class TypedStructMeta(type):
     @classmethod
     def __prepare__(metacls, name, bases, **kwds):
-        return _TypedStructDslDict()
+        return _TypedStructDslDict(base for base in bases if isinstance(base, metacls))
 
     def __new__(mcs, name, bases, dct):
         fields = []
@@ -408,6 +415,12 @@ class TypedStructMeta(type):
 
 
 class _TypedStructDslDict(PythonOrderedDict):
+    def __init__(self, bases):
+        super().__init__()
+        for base in bases:
+            for field in base._fields:
+                super().__setitem__(field.name, field._clone()._named(field.name))
+
     def __setitem__(self, name, value):
         if isinstance(value, Field):
             value = value._named(name)

@@ -1,28 +1,9 @@
-from contextlib import contextmanager, ExitStack
-import sys
+from contextlib import contextmanager
 import time
-import threading
 from datetime import datetime, timedelta
-from functools import wraps
 
-from .bunch import Bunch
 from .decorations import parametrizeable_decorator
 from .units import Duration
-from .exceptions import PException
-from .humanize import time_duration  # due to interference with jrpc
-from .misc import kwargs_resilient
-
-IS_A_TTY = sys.stdout.isatty()
-
-
-class TimeoutException(PException, TimeoutError):
-    pass
-
-
-class PredicateNotSatisfied(TimeoutException):
-    # use this exception with 'wait', to indicate predicate is not satisfied
-    # and allow it to raise a more informative exception
-    pass
 
 
 class Timer(object):
@@ -86,11 +67,11 @@ class Timer(object):
 
     @property
     def expired(self):
-        return Duration(max(0, self.elapsed-self.expiration) if self.expiration is not None else 0)
+        return Duration(max(0, self.elapsed - self.expiration) if self.expiration is not None else 0)
 
     @property
     def remain(self):
-        return Duration(max(0, self.expiration-self.elapsed)) if self.expiration is not None else None
+        return Duration(max(0, self.expiration - self.elapsed)) if self.expiration is not None else None
 
     @property
     def start_time(self):
@@ -179,219 +160,9 @@ def timing(t=None):
         t.stop()
 
 
-# cache result only when predicate succeeds
-class CachingPredicate():
-    def __init__(self, pred):
-        self.pred = pred
-
-    def __call__(self, *args, **kwargs):
-        try:
-            return self.result
-        except AttributeError:
-            pass
-        ret = self.pred(*args, **kwargs)
-        if ret in (False, None):
-            return ret
-        self.result = ret
-        return self.result
-
-
-def make_multipred(preds):
-    preds = list(map(CachingPredicate, preds))
-
-    def pred(*args, **kwargs):
-        results = [pred(*args, **kwargs) for pred in preds]
-        if all(results):
-            return results
-    return pred
-
-
-def iter_wait(timeout, pred=None, sleep=0.5, message=None,
-              progressbar=True, throw=True, allow_interruption=False, caption=None):
-
-    # Calling wait() with a predicate and no message is very not informative
-    # (throw=False or message=False disables this behavior)
-    if message is False:
-        message = None
-    elif throw and pred and not message:
-        raise Exception(
-            "Function iter_wait()'s parameter `message` is required if "
-            "`pred` is passed",
-        )
-
-    if timeout is None:
-        msg = "Waiting indefinitely%s"
-    else:
-        msg = "Waiting%%s up to %s" % time_duration(timeout)
-
-    if message is None:
-        if caption:
-            message = "Waiting %s timed out after {duration:.1f} seconds" % (caption,)
-        elif pred:
-            message = "Waiting on predicate (%s) timed out after {duration:.1f} seconds" % (pred,)
-        else:
-            message = "Timed out after {duration:.1f} seconds"
-
-    if pred:
-        pred_decorator = kwargs_resilient(negligible=['is_final_attempt'])
-        if hasattr(pred, "__iter__"):
-            pred = make_multipred(map(pred_decorator, pred))
-        else:
-            pred = pred_decorator(pred)
-        if not caption:
-            caption = "on predicate (%s)" % pred
-    else:
-        pred = lambda **kwargs: False
-        throw = False
-
-    if caption:
-        msg %= " %s" % (caption,)
-    else:
-        msg %= ""
-
-    if isinstance(sleep, tuple):
-        data = list(sleep)  # can't use nonlocal since this module is indirectly used in python2
-
-        def sleep():
-            cur, mx = data
-            try:
-                return cur
-            finally:
-                data[0] = min(mx, cur*1.5)
-
-    if not IS_A_TTY:
-        # can't interrupt
-        allow_interruption = False
-        progressbar = False
-
-    if progressbar and threading.current_thread() is not threading.main_thread():
-        # prevent clutter
-        progressbar = False
-
-    if allow_interruption:
-        msg += " (hit <ESC> to continue)"
-
-    l_timer = Timer(expiration=timeout)
-
-    with ExitStack() as stack:
-        if progressbar:
-            from .logging import PROGRESS_BAR
-            pr = stack.enter_context(PROGRESS_BAR())
-            pr.set_message(msg)
-
-        while True:
-            s_timer = Timer()
-            expired = l_timer.expired
-            last_exc = None
-            try:
-                ret = pred(is_final_attempt=bool(expired))
-            except PredicateNotSatisfied as _exc:
-                if getattr(_exc, "duration", 0):
-                    # this exception was raised by a nested 'wait' call - don't swallow it!
-                    raise
-                last_exc = _exc
-                ret = None
-            else:
-                if ret not in (None, False):
-                    yield ret
-                    return
-            if expired:
-                duration = l_timer.stop()
-                start_time = l_timer.start_time
-                if throw:
-                    if last_exc:
-                        last_exc.add_params(duration=duration, start_time=start_time)
-                        raise last_exc
-                    if callable(message):
-                        message = message()
-                    raise TimeoutException(message, duration=duration, start_time=start_time)
-                yield None
-                return
-            yield l_timer.remain
-            sleep_for = sleep() if callable(sleep) else sleep
-            if allow_interruption:
-                from termenu.keyboard import keyboard_listener
-                timer = Timer(expiration=sleep_for-s_timer.elapsed)
-                for key in keyboard_listener(heartbeat=0.25):
-                    if key == "esc":
-                        yield None
-                        return
-                    if key == "enter":
-                        break
-                    if timer.expired:
-                        break
-            else:
-                s_timeout = max(0, sleep_for - s_timer.elapsed)
-                if l_timer.expiration:
-                    s_timeout = min(l_timer.remain, s_timeout)
-                time.sleep(s_timeout)
-
-
-@wraps(iter_wait)
-def wait(*args, **kwargs):
-    for ret in iter_wait(*args, **kwargs):
-        pass
-    return ret
-
-
 def repeat(timeout, callback, sleep=0.5, progressbar=True):
     pred = lambda: callback() and False  # prevent 'wait' from stopping when the callback returns a nonzero
     return wait(timeout, pred=pred, sleep=sleep, progressbar=progressbar, throw=False)
-
-
-def wait_progress(*args, **kwargs):
-    for _ in iter_wait_progress(*args, **kwargs):
-        pass
-
-
-def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf"), state_threshold=0, sleep=0.5, throw=True,
-                       allow_regression=True, advancer_name=None, progressbar=True):
-
-    ADVANCE_TIMEOUT_MESSAGE = "did not advance for {duration: .1f} seconds"
-    TOTAL_TIMEOUT_MESSAGE = "advanced but failed to finish in {duration: .1f} seconds"
-
-    state = state_getter()  # state_getter should return a number, represent current state
-
-    progress = Bunch(state=state, finished=False, changed=False)
-    progress.total_timer = Timer(expiration=total_timeout)
-    progress.advance_timer = Timer(expiration=advance_timeout)
-
-    def did_advance():
-        current_state = state_getter()
-        progress.advanced = progress.state > current_state
-        progress.changed = progress.state != current_state
-        if progress.advanced or allow_regression:
-            progress.state = current_state
-        return progress.advanced
-
-    # We want to make sure each iteration sleeps at least once,
-    # since the internal 'wait' could return immediately without sleeping at all,
-    # and if the external while loop isn't done we could be iterating too much
-    min_sleep = None
-
-    while progress.state > state_threshold:
-        progress.timeout, message = min(
-            (progress.total_timer.remain, TOTAL_TIMEOUT_MESSAGE),
-            (progress.advance_timer.remain, ADVANCE_TIMEOUT_MESSAGE))
-        if advancer_name:
-            message = advancer_name + ' ' + message
-
-        if min_sleep:
-            wait(min_sleep.remain)
-        min_sleep = Timer(expiration=sleep)
-
-        result = wait(progress.timeout, pred=did_advance, sleep=sleep, message=message, throw=throw, progressbar=progressbar)
-        if not result:  # if wait times out without throwing
-            return
-
-        if progress.total_timer.expired:
-            raise TimeoutException(message, duration=progress.total_timer.duration)
-
-        progress.advance_timer.reset()
-        yield progress
-
-    progress.finished = True
-    yield progress  # indicate success
 
 
 @parametrizeable_decorator
@@ -435,3 +206,19 @@ class StateTimeHistogram(object):
         states_times = dict(self._states_times)
         self._update_state_time(states_times)
         return states_times
+
+
+def throttled(duration):
+    """
+    Syntax sugar over timecache decorator.
+
+    With accent on throttling calls and not actual caching of values Concurrent
+    callers will block if function is executing, since they might depend on
+    side effect of function call.
+    """
+    from easypy.caching import timecache
+    return timecache(expiration=duration)
+
+
+# re-exports
+from .sync import wait, PredicateNotSatisfied, TimeoutException, iter_wait, wait_progress, iter_wait_progress

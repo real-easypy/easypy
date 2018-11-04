@@ -1,5 +1,23 @@
+"""
+This module is about Tokens. Tokens are string-based objects for when
+``None`` is not enough, and ``Enum`` is too much.
+Tokens are used to indicate a desired behavior, instead of some specific value.
+
+Tokens can be created by simple instantiation::
+
+    from easypy.tokens import Token
+    AUTO = Token('AUTO')
+
+If you don't like repeating yourself, however, you can use this 'dark' magic::
+
+    from easypy.tokens import AUTO
+"""
+
 import sys
 from types import ModuleType
+
+
+__all__ = ["Token", "if_auto"]
 
 
 class Token(str):
@@ -84,7 +102,7 @@ def if_auto(val, auto):
     return auto if val is AUTO else val
 
 
-class TokensModule(ModuleType):
+class _TokensModule(ModuleType):
     """
     The module-hack that allows us to use ``from easypy.tokens import AUTO``
     """
@@ -113,9 +131,9 @@ class TokensModule(ModuleType):
     __file__ = __file__
 
 
-mod = TokensModule(__name__, __doc__)
+mod = _TokensModule(__name__, __doc__)
 sys.modules[__name__] = mod
 
 del ModuleType
-del TokensModule
+del _TokensModule
 del mod, sys

@@ -25,6 +25,10 @@ _logger = getLogger(__name__)
 
 
 def get_thread_uuid(thread=None):
+    """
+    Assigns and returns a UUID to our thread, since thread.ident can be recycled.
+    The UUID is used in mapping child threads to their parent threads.
+    """
     if not thread:
         thread = threading.current_thread()
 
@@ -36,10 +40,14 @@ def get_thread_uuid(thread=None):
         UUID_TO_IDENT[uuid] = ident
     return uuid
 
+
 _orig_start_new_thread = _thread.start_new_thread
 
 
 def start_new_thread(target, *args, **kwargs):
+    """
+    A wrapper for the built in 'start_new_thread' used to capture the parent of each new thread.
+    """
     parent_uuid = get_thread_uuid()
 
     def wrapper(*args, **kwargs):
@@ -59,11 +67,8 @@ get_parent_uuid = UUIDS_TREE.get
 
 def get_thread_parent(thread):
     """
-    Retrieves parent thread for provided thread
-    In case UUID table has parent but it's not valid anymore - returns DeadThread, so threads tree will be preserved
-
-    :param thread:
-    :return:
+    Returns parent thread for the given thread.
+    If the parent thread died, returns a ``DeadThread`` object, to preserve the thread-tree structure.
     """
     uuid = thread.uuid
     parent_uuid = UUIDS_TREE.get(uuid)
@@ -86,6 +91,10 @@ threading._start_new_thread = start_new_thread
 
 
 class DeadThread(object):
+    """
+    A dummy object representing a thread that already died.
+    """
+
     name = "DeadThread"
     ident = 0
     uuid = 0
@@ -149,7 +158,13 @@ this_module = import_module(__name__)
 _BOOTSTRAPPERS = {threading, this_module}
 
 
-def get_thread_tree(including_this=True):
+def get_thread_trees(including_this=True):
+    """
+    Returns raw information about currently active threads, including their stack frames, and their immediate child-threads.
+
+    The tree structure is maintained by special monkey-patching implemented by this module.
+    """
+
     from .logging import THREAD_LOGGING_CONTEXT
     from .bunch import Bunch
 
@@ -202,36 +217,48 @@ def get_thread_tree(including_this=True):
                 add_thread(thread, this)
         return parent
 
-    return add_thread(None, Bunch(children=[]))
+    root = Bunch(children=[])
+    add_thread(None, root)
+    return root.children
 
 
 def get_thread_stacks(including_this=True):
+    """
+    Returns an ``IndentableTextBuffer`` which renders the currently active threads.
+    """
 
-    stack_tree = get_thread_tree(including_this=including_this)
+    stack_trees = get_thread_trees(including_this=including_this)
 
-    def write_thread(parent):
-        for branch in parent.children:
+    def write_thread(branches):
+        for branch in branches:
             with buff.indent('Thread{daemon}: {name} ({ident:X})', **branch):
                 ts = time.strftime("%H:%M:%S", time.localtime(branch.timestamp))
                 buff.write("{}  {}", ts, branch.context_line)
                 for line in branch.stack.splitlines():
                     buff.write(line)
-                write_thread(branch)
+                write_thread(branch.children)
 
     from .humanize import IndentableTextBuffer
     buff = IndentableTextBuffer("Current Running Threads")
-    write_thread(stack_tree)
+    write_thread(stack_trees)
 
     return buff
 
 
-def watch_threads(interval):
+def watch_threads(interval, logger_name='threads'):
+    """
+    Starts a daemon thread that logs the active-threads to a ``threads`` logger, at the specified interval.
+    The data is logged using the ``extra`` logging struct.
+    It is recommended to configure the logger to use ``easypy.logging.YAMLFormatter``, so that the log can be
+    easily parsed by other tools.
+    """
+
     from easypy.resilience import resilient
     from easypy.concurrency import concurrent
 
     cmdline = " ".join(sys.argv)
     _logger = logging.getLogger(__name__)
-    _threads_logger = logging.getLogger('threads')
+    _threads_logger = logging.getLogger(logger_name)
 
     last_threads = set()
 
@@ -248,10 +275,10 @@ def watch_threads(interval):
         nonlocal last_threads
 
         with _logger.indented('getting thread tree', level=logging.DEBUG):
-            tree = get_thread_tree(including_this=False)
+            trees = get_thread_trees(including_this=False)
 
         with _logger.indented('logging threads to yaml', level=logging.DEBUG):
-            _threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=tree.to_dict()))
+            _threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=Bunch(children=trees).to_dict()))
 
         with _logger.indented('creating current thread set', level=logging.DEBUG):
             current_threads = set()
@@ -344,6 +371,9 @@ class ThreadContexts():
         return ctx
 
     def get(self, k, default=None):
+        """
+        safely get the value of the specified key, in the current thread context
+        """
         return self.flatten().get(k, default)
 
     def __getattr__(self, k):
@@ -373,6 +403,9 @@ class ThreadContexts():
             ctx.pop(-1)
 
     def flatten(self, thread_uuid=None):
+        """
+        return a flattened dict of all inherited context data for the current thread
+        """
         stack = self._get_context_data(thread_uuid=thread_uuid, combined=True)
         concats = {k: self._defaults.get(k, []) for k in self._stacks}
         accums = {k: self._defaults.get(k, 0) for k in self._counters}

@@ -103,6 +103,24 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
 
 
 def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=logging.DEBUG, pred=None):
+    """Try running the decorated function, retrying if an acceptable exception caught.
+
+    times - limit number of attempts before errors are propagated instead of suppressed.
+            if an `int`, the execution is retried at most `times` times.
+            if a `Timer`, retries until the `times` expires.
+            if a `Duration`, retries up until `Timer(times)` expires
+    acceptable - exception or tuple of exceptions which to catch and retry upon.
+    sleep - time to wait between attempts. can be a callable.
+    max_sleep - if given, then the time to sleep between attempts is `RandomExponentialBackoff(initial=sleep, maximum=max_sleep)`.
+    log_level - level of the log to emit when catching an exception and retrying.
+    pred - if given, then retries only if pred(exception) is True.
+
+    >>> @retrying(time=5)
+    ... def get_lucky():
+    ...     if random.random() < 0.5:
+    ...         raise Exception('No luck')
+    ...     return 'Got lucky'
+    """
     def wrapper(func):
         @wraps(func)
         def impl(*args, **kwargs):
@@ -127,6 +145,17 @@ retrying.error = partial(retrying, log_level=logging.ERROR)
 
 @parametrizeable_decorator
 def resilient(func=None, default=None, **kw):
+    """Suppress exceptions raised from the decorated function.
+
+    default - value to return if an exception is suppressed.
+    kw      - see `resilience`
+
+    >>> @resilient(default=0)
+    ... def get_number():
+    ...     return int(open('non-existent-file').read())
+    >>> get_number()
+    0
+    """
     kw.setdefault('msg', "ignoring error in %s ({type})" % func.__qualname__)
 
     @wraps(func)
@@ -147,6 +176,12 @@ def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(
                    the exceptions in UNACCEPTABLE_EXCEPTIONS are always unacceptable, unless `unacceptable` is None.
     log_level    - level of the log to emit when suppressing an exception.
     pred         - if given, then an exception is suppressed only if pred(exception) is True.
+
+    >>> with resilience(acceptable=OSError, pred=lambda ex: ex.errno == os.errno.ENOENT):
+    ...     print('before')
+    ...     open('non-existent-file')
+    ...     print('after')
+    before
     """
     if unacceptable is None:
         unacceptable = ()
