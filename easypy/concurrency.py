@@ -832,3 +832,9 @@ class concurrent(object):
         self.__exit__(None, None, None)
 
     __del__ = join
+
+
+# re-exports
+from .sync import break_locks, TerminationSignal, initialize_exception_listener, initialize_termination_listener, Timebomb
+from .sync import set_timebomb, TagAlongThread, SYNC, LoggedRLock, RWLock, SoftLock, skip_if_locked, with_my_lock
+from .sync import synchronized, SynchronizedSingleton, LoggedCondition

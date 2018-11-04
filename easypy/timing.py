@@ -220,4 +220,5 @@ def throttled(duration):
     return timecache(expiration=duration)
 
 
-from .sync import wait, PredicateNotSatisfied, TimeoutException
+# re-exports
+from .sync import wait, PredicateNotSatisfied, TimeoutException, iter_wait, wait_progress, iter_wait_progress
