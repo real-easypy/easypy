@@ -13,7 +13,7 @@ env:
 
 install:
   - pip install gevent PyYaml
-  - pip install sphinx ghp-import
+  - pip install sphinx==1.7.9 ghp-import
 
 script:
   - python -m pytest -vv tests
