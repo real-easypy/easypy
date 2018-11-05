@@ -16,6 +16,8 @@ class TokensModule(ModuleType):
         if attr.startswith("_") or attr == 'trait_names':
             raise AttributeError(attr)
         from .misc import Token
+        if attr == "Token":
+            return Token
         token = Token("<%s>" % attr)
         setattr(self, attr, token)
         return token
