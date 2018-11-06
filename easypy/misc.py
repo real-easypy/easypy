@@ -4,6 +4,7 @@ from functools import wraps, update_wrapper
 from types import MethodType
 from .decorations import parametrizeable_decorator
 from .collections import ilistify, intersected_dict
+from .tokens import Token  # for backwards compatibility
 
 
 class Hex(int):
