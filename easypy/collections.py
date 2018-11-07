@@ -677,15 +677,15 @@ def grouped(sequence, key=None, transform=None):
 
 def separate(sequence, key=None):
     """
-    Partition the sequence into items that don't match (nonzero) and those do:
+    Partition the sequence into items that match and items that don't:
 
         >>> above_three, three_or_less = separate(range(10), lambda n: n > 3)
 
-        >>> print(three_or_less)
-        [0, 1, 2, 3]
-
         >>> print(above_three)
         [4, 5, 6, 7, 8, 9]
+
+        >>> print(three_or_less)
+        [0, 1, 2, 3]
     """
     if not key:
         key = lambda x: x
