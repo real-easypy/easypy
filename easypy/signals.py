@@ -13,6 +13,7 @@ from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
 from easypy.misc import kwargs_resilient, WeakMethodDead
+from easypy.collections import separate
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
 _logger = logging.getLogger(__name__)
@@ -223,7 +224,8 @@ class Signal:
         with ExitStack() as STACK:
             STACK.enter_context(_logger.context(self.id))
 
-            if any(h.async for h in self.iter_handlers()):
+            async_handlers, synced_handlers = separate(self.iter_handlers(), lambda h: h.async)
+            if async_handlers:
                 futures = STACK.enter_context(Futures.executor())
             else:
                 futures = None
@@ -233,22 +235,17 @@ class Signal:
             def run_handler(handler):
                 try:
                     with _logger.context("#%03d" % handler.idx):
+                        if not handler.should_run(**kwargs):
+                            return
                         handler(**kwargs)
                 except STALE_HANDLER:
                     handlers_to_remove.append(handler)
 
-            for handler in self.iter_handlers():
-                try:
-                    if not handler.should_run(**kwargs):
-                        continue
-                except STALE_HANDLER:
-                    handlers_to_remove.append(handler)
-                    continue
-                # allow handler to use our async context
-                if handler.async:
-                    futures.submit(run_handler, handler)
-                else:
-                    run_handler(handler)
+            for handler in async_handlers:
+                futures.submit(run_handler, handler)
+
+            for handler in synced_handlers:
+                run_handler(handler)
 
             if futures:
                 for future in futures.as_completed():
