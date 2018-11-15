@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TypedStruct`: Support for inheritance.
 - `EasyMeta`: the `before_subclass_init` hook.
 
+### Fixed
+- `ExponentialBackoff`: return the value **before** the incrementation.
+
 ### Changed
 - Reorganization:
   - Moved tokens to a proper module.
@@ -21,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - `Bunch`: The rigid `KEYS` feature.
 - `synchronized_on_first_call`.
+- `ExponentialBackoff`: The unused `iteration` argument.
 
 ### Deprecated
 - `locking_lru_cache`.

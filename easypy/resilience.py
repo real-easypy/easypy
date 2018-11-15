@@ -19,19 +19,41 @@ UNACCEPTABLE_EXCEPTIONS = (NameError, AttributeError, TypeError, KeyboardInterru
 
 
 class ExponentialBackoff:
+    """
+    Factory for increasing backoffs.
 
-    def __init__(self, initial=1, maximum=30, base=1.5, iteration=0):
-        self.base = base
+    :param initial: The value to return on the first call.
+    :param base: The ratio between two consecutive returned values.
+    :param maximum: A limit to the value increasing.
+
+    Each call generates a backoff (number) that's greater than the previous::
+
+        >>> backoff = ExponentialBackoff(initial=1, base=2)
+        >>> backoff()
+        1
+        >>> backoff()
+        2
+        >>> backoff()
+        4
+        >>> backoff()
+        8
+        >>> backoff()
+        16
+    """
+
+    def __init__(self, initial=1, maximum=30, base=1.5):
         self.initial = initial
         self.current = initial
         self.maximum = float(maximum)
 
     def get_current(self):
+        """Get the current value without progressing."""
         return self.current
 
     def __call__(self):
-        self.current = min(self.current * self.base, self.maximum)
+        """Get the current value and progress to the next one."""
         ret = min(self.get_current(), self.maximum)
+        self.current = min(ret * self.base, self.maximum)
         return ret
 
     def __repr__(self):
@@ -39,27 +61,57 @@ class ExponentialBackoff:
 
 
 class RandomExponentialBackoff(ExponentialBackoff):
+    """Variation of ``ExponentialBackoff`` that adds randomization to the returned values."""
 
     def get_current(self):
         return random.random() * self.current + self.initial
 
 
 class ExpiringCounter(object):
+    """
+    A counter that decreases every time its expiration is checked.
+
+    >>> counter = ExpiringCounter(3)
+    >>> counter.expired
+    False
+    >>> counter.expired
+    False
+    >>> counter.expired
+    False
+    >>> counter.expired
+    True
+    """
     def __init__(self, times):
         self.times = times
 
     @property
     def expired(self):
+        """Progress the counter and return whether or not it expired."""
         self.times -= 1
         return self.times < 0
 
     @property
     def remain(self):
+        """Return the number of remaining times to check ``expired`` before it expires."""
         return self.times
 
 
 def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
           max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
+    """
+    Runs a function again and again until it finishes without throwing.
+
+    :param times: How many times to retry the function.
+    :param func: The function to run.
+    :param list args: Positional arguments for the function.
+    :param dict kwargs: Keyword arguments for the function.
+    :param acceptable: Exception (or tuple of exceptions) to repeat the function on.
+    :param sleep: Time to wait between multiple retries.
+    :param max_sleep: If set, increase the sleep after each retry until reaching this number.
+    :param log_level: Before retrying, log the exceptions at that level.
+    :param pred: If set, decide whether or not to retry on an exception.
+    :param unacceptable: Exception (or tuple of exceptions) to not repeat the function on and re-raise them instead.
+    """
 
     if unacceptable is None:
         unacceptable = ()
@@ -214,8 +266,12 @@ resilience.error = partial(resilience, log_level=logging.ERROR)
 
 
 def raise_if_async_exception(exc):
-    # This is so that exception raised from other threads don't get supressed by retry/resilience
-    # see easypy.concurrency's raise_in_main_thread
+    """
+    Helper for handling exceptions potentially invoked in another thread.
+
+    This is so that exception raised from other threads don't get supressed by retry/resilience.
+    See :meth:`~easypy.concurrency.raise_in_main_thread`.
+    """
     if getattr(exc, "_raised_asynchronously", False):
         _logger.info('Raising asynchronous error')
         raise exc
