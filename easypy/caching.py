@@ -9,10 +9,12 @@ from collections import defaultdict
 from contextlib import ExitStack, contextmanager
 from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 
-from .decorations import parametrizeable_decorator, DecoratingDescriptor, wrapper_decorator
+from .decorations import parametrizeable_decorator, DecoratingDescriptor
 from .collections import ilistify
 from .misc import kwargs_resilient
 from .deprecation import deprecated
+from .units import HOUR
+from .tokens import DELETED, NO_DEFAULT
 
 
 _logger = getLogger(__name__)
@@ -49,10 +51,7 @@ class PersistentCache(object):
         ...     return a
     """
 
-    DELETED = object()
-    NONE = object()
-
-    def __init__(self, path, version=0, expiration=60*60*4, ignored_keywords=None):
+    def __init__(self, path, version=0, expiration=4 * HOUR, ignored_keywords=None):
         self.path = path
         self.version = version
         self.expiration = expiration
@@ -96,17 +95,17 @@ class PersistentCache(object):
 
     def set(self, key, value):
         with self.db_opened(lock=True) as db:
-            if value == self.DELETED:
+            if value == DELETED:
                 del db[key]
             else:
                 db[key] = value
 
-    def get(self, key, default=NONE):
+    def get(self, key, default=NO_DEFAULT):
         try:
             with self.db_opened() as db:
                 return db[key]
         except KeyError:
-            if default is PersistentCache.NONE:
+            if default is NO_DEFAULT:
                 raise
             else:
                 return default
@@ -135,7 +134,7 @@ class PersistentCache(object):
                 if validated_value:
                     self.set(key, validated_value)
                     return validated_value
-                self.set(key, self.DELETED)
+                self.set(key, DELETED)
                 return inner(*args, **kwargs)
             ret = func(*args, **kwargs)
             self.set(key, ret)
@@ -217,23 +216,6 @@ else:
 
 
 class _TimeCache(DecoratingDescriptor):
-    """
-    A thread-safe cache decorator with time expiration.
-
-    :param expiration: if a positive number, set an expiration on the cache, defaults to 0
-    :type expiration: number, optional
-    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
-    :type typed: bool, optional
-    :param get_ts_func: The function to be used in order to get the current time, defaults to time.time
-    :type get_ts_func: callable, optional
-    :param log_recalculation: Whether or not to log cache misses, defaults to False
-    :type log_recalculation: bool, optional
-    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
-    :type ignored_keywords: iterable, optional
-    :param key_func: The function to use in order to create the item key, defaults to functools._make_key
-    :type key_func: callable, optional
-    """
-
     def __init__(self, func, **kwargs):
         super().__init__(func=func, cached=True)
         self.func = func
@@ -316,6 +298,22 @@ class _TimeCache(DecoratingDescriptor):
 
 
 def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
+    """
+    A thread-safe cache decorator with time expiration.
+
+    :param expiration: if a positive number, set an expiration on the cache, defaults to 0
+    :type expiration: number, optional
+    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
+    :type typed: bool, optional
+    :param get_ts_func: The function to be used in order to get the current time, defaults to time.time
+    :type get_ts_func: callable, optional
+    :param log_recalculation: Whether or not to log cache misses, defaults to False
+    :type log_recalculation: bool, optional
+    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
+    :type ignored_keywords: iterable, optional
+    :param key_func: The function to use in order to create the item key, defaults to functools._make_key
+    :type key_func: callable, optional
+    """
 
     def deco(func):
         return _TimeCache(
