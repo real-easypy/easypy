@@ -93,7 +93,6 @@ def test_multiobject_1():
 
     assert m.filter(None).T == (1, 2, 3, 4, 5, 6, 7, 8, 9)
     assert sum(m.denominator) == 10
-
     with pytest.raises(MultiException) as info:
         m.call(lambda i: 1 / (i % 2))
 
