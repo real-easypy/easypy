@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='weka-easypy',
-      version='0.9.1',
+      version='0.2.0',
       description='easypy is a collection of python modules that makes developers happy',
       author='Ofer Koren',
       author_email='koreno [at] gmail.com',

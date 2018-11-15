@@ -25,14 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 - `locking_lru_cache`.
 
-## [0.9.1] - 2018-11-15
-### Added
-- This changelog.
-
-### Fixed
-- The version in `setup.py`.
-
-## [0.9.0] - 2018-11-15
+## [0.2.0] - 2018-11-15
 ### Added
 - Add the `easypy.aliasing` module.
 - Add the `easypy.bunch` module.
