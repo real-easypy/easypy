@@ -5,6 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Support for suppressing and soloing logging to console per thread.
+- `TypedStruct`: Support for inheritance.
+- `EasyMeta`: the `before_subclass_init` hook.
+
+### Changed
+- Reorganization:
+  - Moved tokens to a proper module.
+  - Moved function from `easypy.concurrency` and `easypy.timing` to new module
+    `easypy.sync`
+  - Moved `throttled` from `easypy.concurrency` to `easypy.timing`.
+- `easypy.signals`: Async handlers are invoked first, then the sequential handlers.
+
+### Removed
+- `Bunch`: The rigid `KEYS` feature.
+- `synchronized_on_first_call`.
+
+### Deprecated
+- `locking_lru_cache`.
 
 ## [0.9.1] - 2018-11-15
 ### Added
