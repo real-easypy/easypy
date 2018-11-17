@@ -179,12 +179,12 @@ def get_thread_tree(including_this=True):
             # show the entire stack if it's this thread, don't skip ('after_module') anything
             show_all = thread_ident in (current_ident, main_ident)
             formatted = format_thread_stack(frame, skip_modules=[] if show_all else _BOOTSTRAPPERS) if frame else ''
-        stacks[thread_ident] = formatted, time.time()
+        stacks[thread_ident] = formatted, time.time(), (id(frame) if frame else 0)
 
     def add_thread(parent_thread, parent):
         for thread in sorted(tree[parent_thread], key=lambda thread: thread.name):
             ident = thread.ident or 0
-            stack, ts = stacks.get(ident, ("", 0))
+            stack, ts, frame_id = stacks.get(ident, ("", 0, 0))
             context = contexts.get(ident, {})
             context_line = ", ".join("%s: %s" % (k, context[k]) for k in "host context".split() if context.get(k))
 
@@ -195,6 +195,7 @@ def get_thread_tree(including_this=True):
                 context_line="({})".format(context_line) if context_line else "",
                 stack=stack,
                 timestamp=ts,
+                frame_id=frame_id,
                 children=[],
                 )
             parent.children.append(this)
@@ -213,7 +214,7 @@ def get_thread_stacks(including_this=True):
         for branch in parent.children:
             with buff.indent('Thread{daemon}: {name} ({ident:X})', **branch):
                 ts = time.strftime("%H:%M:%S", time.localtime(branch.timestamp))
-                buff.write("{}  {}", ts, branch.context_line)
+                buff.write("{} Fid:{:X}  {}", ts, branch.frame_id, branch.context_line)
                 for line in branch.stack.splitlines():
                     buff.write(line)
                 write_thread(branch)
