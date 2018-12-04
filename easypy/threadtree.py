@@ -154,6 +154,34 @@ else:
         yield from sys._current_frames().items()
 
 
+def walk_frames(thread=None, *, across_threads=False):
+    """
+    Yields the stack frames of the current/specified thread.
+
+    :param across_threads: yield frames of ancestor threads.
+    Note that the parent thread might be off to other things, and not actually in the frame that spawned the thread at the tip.
+    """
+
+    if not thread:
+        thread = threading.current_thread()
+
+    frame = dict(iter_thread_frames()).get(thread.ident)
+
+    while True:
+        yield frame
+
+        frame = frame.f_back
+        if frame:
+            pass
+        elif not across_threads:
+            return
+        else:
+            if not thread.parent:
+                return
+            thread = thread.parent
+            frame = dict(iter_thread_frames()).get(thread.ident)
+
+
 this_module = import_module(__name__)
 _BOOTSTRAPPERS = {threading, this_module}
 
