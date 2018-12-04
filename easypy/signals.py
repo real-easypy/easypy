@@ -163,6 +163,10 @@ class Signal:
     def iter_handlers(self):
         return chain(*(self.handlers[k] for k in PRIORITIES))
 
+    def iter_handlers_by_priority(self):
+        for k in PRIORITIES:
+            yield separate(self.handlers[k], lambda h: h.async)
+
     def remove_handler(self, handler):
         self.handlers[handler.priority].remove(handler)
         _logger.debug("handler removed from '%s' (%s): %s", self.name, handler.priority.name, handler)
@@ -224,8 +228,7 @@ class Signal:
         with ExitStack() as STACK:
             STACK.enter_context(_logger.context(self.id))
 
-            async_handlers, synced_handlers = separate(self.iter_handlers(), lambda h: h.async)
-            if async_handlers:
+            if any(h.async for h in self.iter_handlers()):
                 futures = STACK.enter_context(Futures.executor())
             else:
                 futures = None
@@ -241,15 +244,17 @@ class Signal:
                 except STALE_HANDLER:
                     handlers_to_remove.append(handler)
 
-            for handler in async_handlers:
-                futures.submit(run_handler, handler)
+            for async_handlers, synced_handlers in self.iter_handlers_by_priority():
 
-            for handler in synced_handlers:
-                run_handler(handler)
+                for handler in async_handlers:
+                    futures.submit(run_handler, handler)
 
-            if futures:
-                for future in futures.as_completed():
-                    future.result()        # bubble up exceptions
+                for handler in synced_handlers:
+                    run_handler(handler)
+
+                if futures:
+                    for future in futures.as_completed():
+                        future.result()        # bubble up exceptions
 
         self.remove_handlers_if_exist(handlers_to_remove)
 
@@ -283,13 +288,21 @@ class ContextManagerSignal(Signal):
         kwargs.setdefault('swallow_exceptions', self.swallow_exceptions)
 
         with ExitStack() as handlers_stack:
-            async_handlers = MultiObject()
-            handlers = []
-
             handlers_to_remove = []
+
+            def should_run(handler):
+                try:
+                    return handler.should_run(**kwargs)
+                except STALE_HANDLER:
+                    pass
+                handlers_to_remove.append(handler)
+                return False
+
+            indexer = count()
 
             @contextmanager
             def run_handler(handler):
+                index = next(indexer)
                 already_yielded = False
                 try:
                     with _logger.context(self.id), _logger.context("%02d" % index):
@@ -301,24 +314,15 @@ class ContextManagerSignal(Signal):
                     if not already_yielded:
                         yield
 
-            for index, handler in enumerate(self.iter_handlers()):
-                try:
-                    if not handler.should_run(**kwargs):
-                        continue
-                except STALE_HANDLER:
-                    handlers_to_remove.append(handler)
-                    continue
-                # allow handler to use our async context
-                if handler.async:
-                    async_handlers.append(handler)
-                else:
-                    handlers.append(handler)
-            if async_handlers:
-                handlers_stack.enter_context(async_handlers.call(run_handler))
-            for handler in handlers:
-                res = run_handler(handler)
-                if res:
-                    handlers_stack.enter_context(res)
+            for async_handlers, synced_handlers in self.iter_handlers_by_priority():
+                async_handlers = MultiObject(filter(should_run, async_handlers))
+                synced_handlers = list(filter(should_run, synced_handlers))
+
+                if async_handlers:
+                    handlers_stack.enter_context(MultiObject(async_handlers).call(run_handler))
+
+                for handler in synced_handlers:
+                    handlers_stack.enter_context(run_handler(handler))
             yield
 
         self.remove_handlers_if_exist(handlers_to_remove)

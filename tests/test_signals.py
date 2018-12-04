@@ -138,6 +138,25 @@ def test_priorities():
     assert l == [1, 2, 3]
 
 
+def test_priorities_async():
+
+    l = []
+    import time
+
+    @on_test.register(async=True, priority=PRIORITIES.FIRST)
+    def first():
+        time.sleep(.05)
+        l.append(1)
+
+    @on_test.register(async=True, priority=PRIORITIES.LAST)
+    def last():
+        l.append(2)
+
+    on_test()
+
+    assert l == [1, 2]
+
+
 def test_async():
     from threading import get_ident
 
