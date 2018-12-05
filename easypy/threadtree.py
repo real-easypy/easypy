@@ -167,17 +167,12 @@ def walk_frames(thread=None, *, across_threads=False):
 
     frame = dict(iter_thread_frames()).get(thread.ident)
 
-    while True:
+    while frame:
+
         yield frame
 
         frame = frame.f_back
-        if frame:
-            pass
-        elif not across_threads:
-            return
-        else:
-            if not thread.parent:
-                return
+        if not frame and across_threads and thread.parent:
             thread = thread.parent
             frame = dict(iter_thread_frames()).get(thread.ident)
 
