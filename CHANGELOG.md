@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Bunch`: The rigid `KEYS` feature.
 - `synchronized_on_first_call`.
 - `ExponentialBackoff`: The unused `iteration` argument.
+- `easypy.cartesian`
+- `easypy.selective_queue`
+- `easypy.timezone`
 
 ### Deprecated
 - `locking_lru_cache`.
