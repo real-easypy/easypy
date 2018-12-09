@@ -20,7 +20,7 @@ from easypy.gevent import main_thread_ident_before_patching, is_module_patched
 from .bunch import Bunch
 from .collections import ilistify
 
-from . import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
+from ._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
 _logger = getLogger(__name__)
 
 
