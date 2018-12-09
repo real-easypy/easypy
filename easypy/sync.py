@@ -1078,6 +1078,30 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
 
 @wraps(iter_wait)
 def wait(*args, **kwargs):
+    """Wait until ``pred`` returns True (by polling it), or until ``timeout`` passes.
+
+    :param timeout: how long to wait for ``pred`` to return True. if ``None`` waits
+        indefinitely.
+    :param pred: callable that checks the condition to wait upon.
+        if it returns anything but ``None`` or ``False`` then ``wait`` will finish.
+        if it raises a subclass of PredicateNotSatisfied, then ``wait`` continues.
+        if timeout expires then the last PredicateNotSatisfied exception is raised
+        instead of a TimeoutException.
+        ``pred`` can be a list of predicates, in which case ``wait`` waits until all
+        of them return ``True`` at least once.
+    :param sleep: how long to sleep between calls to ``pred``. can be a callable.
+        can be a (first, max) tuple, in which case the sleep duration will grow
+        exponentially from ``first`` up to ``max``.
+    :param message: message to use for a TimeoutException. can be a callable. if ``None``
+        then a default message is used. cannot be None when ``pred`` is given
+        (default is uninformative). can be False to force using default.
+    :param progressbar: if True, show a progress bar while waiting.
+    :param throw: if True, throw an exception if ``timeout`` expires.
+        if ``pred`` not given, this is always False.
+    :param allow_interruption: if True, the user can end the wait prematurely by hitting ESC.
+    :param caption: message to show in progress bar, and in TimeoutException (if ``message``
+        not given).
+    """
     for ret in iter_wait(*args, **kwargs):
         pass
     return ret
