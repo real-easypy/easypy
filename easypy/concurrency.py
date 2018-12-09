@@ -20,6 +20,7 @@ import time
 from collections import namedtuple
 from datetime import datetime
 
+import easypy._multithreading_init
 from easypy.exceptions import PException
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration, compact
@@ -28,13 +29,17 @@ from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize_by_patterns
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, THREADING_MODULE_PATHS, raise_in_main_thread
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_main_thread
 
 
 this_module = import_module(__name__)
-
-
 MAX_THREAD_POOL_SIZE = 50
+THREADING_MODULE_PATHS = [threading.__file__]
+
+if is_module_patched("threading"):
+    import gevent
+    MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
+    THREADING_MODULE_PATHS.append(gevent.__path__[0])
 
 
 try:
