@@ -42,6 +42,7 @@ class ExponentialBackoff:
     """
 
     def __init__(self, initial=1, maximum=30, base=1.5):
+        self.base = base
         self.initial = initial
         self.current = initial
         self.maximum = float(maximum)
