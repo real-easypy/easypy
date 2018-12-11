@@ -4,10 +4,12 @@ from time import sleep
 import threading
 from contextlib import contextmanager, ExitStack
 import random
+import re
 
 from easypy.concurrency import MultiObject, MultiException, concurrent
 from easypy.timing import repeat, timing
 from easypy.bunch import Bunch
+from easypy.units import Duration
 
 from easypy.sync import iter_wait, wait, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
 from easypy.sync import SynchronizationCoordinator, SYNC
@@ -16,6 +18,8 @@ from easypy.sync import TagAlongThread
 from easypy.sync import LoggedRLock, LockLeaseExpired
 from easypy.sync import SynchronizedSingleton
 from easypy.sync import LoggedCondition
+
+from .test_logging import get_log
 
 
 def test_shared_contextmanager():
@@ -764,3 +768,15 @@ def test_wait_do_something_on_final_attempt(multipred):
     assert all(iteration == 'regular' for iteration in data[:-2])
     assert data[-2] == 'final'
     assert data[-1] == 'regular'
+
+
+def test_wait_log_predicate(get_log):
+    def pred():
+        raise PredicateNotSatisfied('bad attempt')
+
+    with pytest.raises(TimeoutException):
+        wait(pred=pred, timeout=.5, sleep=.1, message=False, log_interval=0.2)
+    durations = re.findall('Still waiting after (.*?): bad attempt', get_log())
+    rounded_durations = [round(Duration(d), 2) for d in durations]
+    assert rounded_durations == [0.2, 0.4], 'expected logs at 200ms and 400ms, got %s' % (durations,)
+

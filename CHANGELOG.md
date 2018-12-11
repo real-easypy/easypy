@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for suppressing and soloing logging to console per thread.
 - `TypedStruct`: Support for inheritance.
 - `EasyMeta`: the `before_subclass_init` hook.
+- `wait` and `iter_wait` support `log_interval` and `log_level` for printing
+  the thrown `PredicateNotSatisfied` to the log.
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
