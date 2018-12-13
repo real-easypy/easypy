@@ -129,25 +129,32 @@ if is_module_patched("threading"):
     IDENT_TO_UUID[main_thread_ident_before_patching] = get_thread_uuid()
 
     def iter_thread_frames():
+        current_thread_ident = threading.current_thread().ident
+
+        def fix(ident, frame):
+            # if it is the current thread, we mustn't yield this very frame,
+            # since it'll get detached from the stack once we exit this function
+            return ident, (frame.f_back if ident == current_thread_ident else frame)
+
         main_thread_frame = None
         for ident, frame in sys._current_frames().items():
             if IDENT_TO_UUID.get(ident) == MAIN_UUID:
                 main_thread_frame = frame
                 # the MainThread should be shown in it's "greenlet" version
                 continue
-            yield ident, frame
+            yield fix(ident, frame)
 
         for thread in threading.enumerate():
             if not getattr(thread, '_greenlet', None):
                 # some inbetween state, before greenlet started or after it died?...
                 pass
             elif thread._greenlet.gr_frame:
-                yield thread.ident, thread._greenlet.gr_frame
+                yield fix(thread.ident, thread._greenlet.gr_frame)
             else:
                 # a thread with greenlet but without gr_frame will be fetched from sys._current_frames
                 # If we switch to another greenlet by the time we get there we will get inconsistent dup of threads.
                 # TODO - make best-effort attempt to show coherent thread dump
-                yield thread.ident, main_thread_frame
+                yield fix(thread.ident, main_thread_frame)
 
 else:
     def iter_thread_frames():
