@@ -955,8 +955,10 @@ def make_multipred(preds):
     return pred
 
 
-def iter_wait(timeout, pred=None, sleep=0.5, message=None,
-              progressbar=True, throw=True, allow_interruption=False, caption=None):
+def iter_wait(
+        timeout, pred=None, sleep=0.5, message=None,
+        progressbar=True, throw=True, allow_interruption=False, caption=None,
+        log_interval=10 * MINUTE, log_level=logging.DEBUG):
 
     # Calling wait() with a predicate and no message is very not informative
     # (throw=False or message=False disables this behavior)
@@ -1021,6 +1023,7 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
         msg += " (hit <ESC> to continue)"
 
     l_timer = Timer(expiration=timeout)
+    log_timer = Timer(expiration=log_interval)
 
     with ExitStack() as stack:
         if progressbar:
@@ -1038,6 +1041,9 @@ def iter_wait(timeout, pred=None, sleep=0.5, message=None,
                 if getattr(_exc, "duration", 0):
                     # this exception was raised by a nested 'wait' call - don't swallow it!
                     raise
+                if log_timer.expired:
+                    log_timer.reset()
+                    _logger.log(log_level, 'Still waiting after %r: %s', l_timer.elapsed, _exc.message)
                 last_exc = _exc
                 ret = None
             else:
@@ -1101,6 +1107,11 @@ def wait(*args, **kwargs):
     :param allow_interruption: if True, the user can end the wait prematurely by hitting ESC.
     :param caption: message to show in progress bar, and in TimeoutException (if ``message``
         not given).
+    :param log_interval: interval for printing thrown ``PredicateNotSatisfied``s to the log.
+        Set to ``None`` to disable this logging. If the predicate returns ``False`` instead
+        of throwing this argument will be ignored. Defaults to 10 minutes.
+    :param log_level: the log level for printing the thrown ``PredicateNotSatisfied`` with
+        ``log_interval``. Defaults to ``logging.DEBUG``.
     """
     for ret in iter_wait(*args, **kwargs):
         pass
