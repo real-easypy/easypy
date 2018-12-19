@@ -756,8 +756,8 @@ class concurrent(object):
         except ProcessExiting as exc:
             _logger.debug(exc)
             raise
-        except Exception as exc:
-            _logger.silent_exception("Exception in thread running %s (traceback can be found in debug-level logs)", self.func)
+        except (KeyboardInterrupt, Exception) as exc:
+            _logger.silent_exception("Exception in thread running %s: %s (traceback can be found in debug-level logs)", self.func, type(exc))
             self.exc = exc
             try:
                 exc.timestamp = time.time()

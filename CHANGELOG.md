@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
+- `concurrent`: capture `KeyboardInterrupt` exceptions like any other
 
 ### Changed
 - Reorganization:
