@@ -28,13 +28,10 @@ from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize_by_patterns
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, THREADING_MODULE_PATHS, raise_in_main_thread
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, THREADING_MODULE_PATHS, MAX_THREAD_POOL_SIZE, raise_in_main_thread
 
 
 this_module = import_module(__name__)
-
-
-MAX_THREAD_POOL_SIZE = 50
 
 
 try:
