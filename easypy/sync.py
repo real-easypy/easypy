@@ -17,6 +17,7 @@ import os
 from collections import Counter
 from .bunch import Bunch
 
+import easypy._multithreading_init
 from .gevent import is_module_patched
 from .decorations import wrapper_decorator, parametrizeable_decorator
 from .caching import locking_cache
@@ -124,14 +125,7 @@ def async_raise_in_main_thread(exc, use_concurrent_loop=True):
         do_signal(exc)
 
 
-THREADING_MODULE_PATHS = [threading.__file__]
-
-
 if is_module_patched("threading"):
-    import gevent
-    MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
-    THREADING_MODULE_PATHS.append(gevent.__path__[0])
-
     def _rimt(exc):
         _logger.info('YELLOW<<killing main thread greenlet>>')
         main_thread_greenlet = threading.main_thread()._greenlet
