@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
-- `concurrent`: capture `KeyboardInterrupt` exceptions like any other
+- `concurrent`: capture `KeyboardInterrupt` exceptions like any other.
+- doctests in various functions and classes
 
 ### Changed
 - Reorganization:
@@ -23,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `easypy.sync`
   - Moved `throttled` from `easypy.concurrency` to `easypy.timing`.
 - `easypy.signals`: Async handlers are invoked first, then the sequential handlers.
+- `async` -> `asynchronous`: to support python 3.7, where this word is reserved
 
 ### Removed
 - `Bunch`: The rigid `KEYS` feature.
