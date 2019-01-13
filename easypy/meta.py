@@ -44,13 +44,13 @@ class EasyMeta(ABCMeta):
             Invoked after a subclass is being initialized
 
             >>> class PrintTheName(metaclass=EasyMeta):
-            >>>     @EasyMeta.Hook
-            >>>     def after_subclass_init(cls):
-            >>>         print('Declared', cls.__name__)
-            >>>
-            >>>
+            ...     @EasyMeta.Hook
+            ...     def after_subclass_init(cls):
+            ...         print('Declared', cls.__name__)
+            ...
+            ...
             >>> class Foo(PrintTheName):
-            >>>     pass
+            ...     pass
             Declared Foo
             """
 
@@ -60,15 +60,15 @@ class EasyMeta(ABCMeta):
             Invoked after a subclass is being initialized
 
             >>> class AddMember(metaclass=EasyMeta):
-            >>>     @EasyMeta.Hook
-            >>>     def before_subclass_init(name, bases, dct):
-            >>>         dct['foo'] = 'bar'
-            >>>
-            >>>
+            ...     @EasyMeta.Hook
+            ...     def before_subclass_init(name, bases, dct):
+            ...         dct['foo'] = 'bar'
+            ...
+            ...
             >>> class Foo(AddMember):
-            >>>     pass
+            ...     pass
             >>> Foo.foo
-            bar
+            'bar'
             """
 
         def __init__(self, class_kwargs={}):
@@ -142,25 +142,25 @@ class GetAllSubclasses(metaclass=EasyMeta):
     the list.
 
     >>> class Foo(GetAllSubclasses):
-    >>>     pass
-    >>>
-    >>>
+    ...     pass
+    ...
+    ...
     >>> class Bar(Foo):
-    >>>     pass
-    >>>
-    >>>
+    ...     pass
+    ...
+    ...
     >>> class Baz(Foo):
-    >>>     pass
-    >>>
-    >>>
+    ...     pass
+    ...
+    ...
     >>> class Qux(Bar):
-    >>>     pass
-    >>>
-    >>>
+    ...     pass
+    ...
+    ...
     >>> Foo.get_all_subclasses()
-    [Bar, Qux, Baz]
+    [<class 'easypy.meta.Bar'>, <class 'easypy.meta.Qux'>, <class 'easypy.meta.Baz'>]
     >>> Bar.get_all_subclasses()
-    [Qux]
+    [<class 'easypy.meta.Qux'>]
     >>> Baz.get_all_subclasses()
     []
     >>> Qux.get_all_subclasses()

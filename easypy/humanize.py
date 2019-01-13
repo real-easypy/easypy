@@ -265,7 +265,7 @@ class IndentableTextBuffer():
 
 def format_in_columns(elements, total_width=None, sep="  ", indent="  ", min_height=10):
     """
-    >>> print format_in_columns(map(str,range(100)), 50)
+    >>> print(format_in_columns([str(i) for i in range(100)], 50))
       0  10  20  30  40  50  60  70  80  90
       1  11  21  31  41  51  61  71  81  91
       2  12  22  32  42  52  62  72  82  92

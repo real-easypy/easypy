@@ -753,8 +753,13 @@ def grouped(sequence, key=None, transform=None):
     """
     Parse the sequence into groups, according to key:
 
-        >>> grouped(range(10), lambda n: n % 3 == 0)
-        {False: [1, 2, 4, 5, 7, 8], True: [0, 3, 6, 9]}
+        >>> ret = grouped(range(10), lambda n: n % 3)
+        >>> ret[0]
+        [0, 3, 6, 9]
+        >>> ret[1]
+        [1, 4, 7]
+        >>> ret[2]
+        [2, 5, 8]
     """
     groups = {}
     if not key:
