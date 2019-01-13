@@ -61,7 +61,7 @@ class SignalHandler(object):
 
     _idx_gen = count(100)
 
-    def __init__(self, func, async=False, priority=PRIORITIES.NONE, times=None, identifier=None):
+    def __init__(self, func, asynchronous=False, priority=PRIORITIES.NONE, times=None, identifier=None, **kw):
         self.func = kwargs_resilient(func)
         self._func = get_original_func(func)  # save the original funtion so we can unregister based on the function
 
@@ -71,7 +71,10 @@ class SignalHandler(object):
         else:
             self.identifier = None
 
-        self.async = async
+        # backwards compatibility
+        assert not kw
+        self.asynchronous = kw.pop("async", asynchronous)
+
         self.priority = priority
         self.times = times
         self.idx = next(self._idx_gen)
@@ -143,7 +146,7 @@ class Signal:
 
     ALL = {}
 
-    def __new__(cls, name, async=None, swallow_exceptions=False, log=True):
+    def __new__(cls, name, asynchronous=None, swallow_exceptions=False, log=True):
         try:
             return cls.ALL[name]
         except KeyError:
@@ -155,7 +158,7 @@ class Signal:
         signal.handlers = {priority: [] for priority in PRIORITIES}
         signal.name = name
         signal.swallow_exceptions = swallow_exceptions
-        signal.async = async
+        signal.asynchronous = asynchronous
         signal.identifier = None
         signal.log = log
         return cls.ALL.setdefault(name, signal)
@@ -165,7 +168,7 @@ class Signal:
 
     def iter_handlers_by_priority(self):
         for k in PRIORITIES:
-            yield separate(self.handlers[k], lambda h: h.async)
+            yield separate(self.handlers[k], lambda h: h.asynchronous)
 
     def remove_handler(self, handler):
         self.handlers[handler.priority].remove(handler)
@@ -178,14 +181,18 @@ class Signal:
         for priority in {h.priority for h in handlers}:
             self.handlers[priority][:] = (handler for handler in self.handlers[priority] if handler not in handlers)
 
-    def register(self, func=None, async=None, priority=PRIORITIES.NONE, times=None):
+    def register(self, func=None, asynchronous=None, priority=PRIORITIES.NONE, times=None, **kw):
+        # backwards compatibility
+        asynchronous = kw.pop('async', asynchronous)
+        assert not kw
+
         if not func:
-            return functools.partial(self.register, async=async, priority=priority)
-        if async is None:
-            async = False if self.async is None else self.async
-        elif self.async is not None:
-            assert self.async == async, "Signal is set with async=%s" % self.async
-        handler = SignalHandler(func, async, priority, times=times, identifier=self.identifier)
+            return functools.partial(self.register, asynchronous=asynchronous, priority=priority)
+        if asynchronous is None:
+            asynchronous = False if self.asynchronous is None else self.asynchronous
+        elif self.asynchronous is not None:
+            assert self.asynchronous == asynchronous, "Signal is set with asynchronous=%s" % self.asynchronous
+        handler = SignalHandler(func, asynchronous, priority, times=times, identifier=self.identifier)
         self.handlers[priority].append(handler)
         _logger.debug("registered handler for '%s' (%s): %s", self.name, priority.name, handler)
         return func
@@ -228,7 +235,7 @@ class Signal:
         with ExitStack() as STACK:
             STACK.enter_context(_logger.context(self.id))
 
-            if any(h.async for h in self.iter_handlers()):
+            if any(h.asynchronous for h in self.iter_handlers()):
                 futures = STACK.enter_context(Futures.executor())
             else:
                 futures = None
@@ -364,8 +371,8 @@ def _set_handler_params(**kw):
 
 run_first = _set_handler_params(priority=PRIORITIES.FIRST)
 run_last = _set_handler_params(priority=PRIORITIES.LAST)
-run_async = _set_handler_params(async=True)
-run_sync = _set_handler_params(async=False)
+run_async = _set_handler_params(asynchronous=True)
+run_sync = _set_handler_params(asynchronous=False)
 
 
 @functools.lru_cache(None)

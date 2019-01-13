@@ -168,7 +168,7 @@ def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=lo
     log_level - level of the log to emit when catching an exception and retrying.
     pred - if given, then retries only if pred(exception) is True.
 
-    >>> @retrying(time=5)
+    >>> @retrying(times=5)
     ... def get_lucky():
     ...     if random.random() < 0.5:
     ...         raise Exception('No luck')
@@ -230,7 +230,8 @@ def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(
     log_level    - level of the log to emit when suppressing an exception.
     pred         - if given, then an exception is suppressed only if pred(exception) is True.
 
-    >>> with resilience(acceptable=OSError, pred=lambda ex: ex.errno == os.errno.ENOENT):
+    >>> import errno
+    >>> with resilience(acceptable=OSError, pred=lambda ex: ex.errno == errno.ENOENT):
     ...     print('before')
     ...     open('non-existent-file')
     ...     print('after')
