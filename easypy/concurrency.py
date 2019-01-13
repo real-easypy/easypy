@@ -20,7 +20,7 @@ import time
 from collections import namedtuple
 from datetime import datetime
 
-import easypy._multithreading_init
+import easypy._multithreading_init  # noqa; make it initialize the threads tree
 from easypy.exceptions import PException
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration, compact
@@ -383,7 +383,7 @@ def _get_context(future):
 
 
 @contextmanager
-def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0, **kw):
+def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeout=2.0, **kw):
     if params is None:
         params = [()]
     if not isinstance(params, list):
@@ -450,7 +450,7 @@ def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0,
 
 def concurrent_find(func, params, **kw):
     timeout = kw.pop("concurrent_timeout", None)
-    with async(func, list(params), **kw) as futures:
+    with asynchronous(func, list(params), **kw) as futures:
         future = None
         try:
             for future in futures.as_completed(timeout=timeout):
@@ -496,7 +496,7 @@ def concurrent_map(func, params, workers=None, log_contexts=None, initial_log_in
     if _disabled or len(params) == 1:
         return nonconcurrent_map(func, params, log_contexts, **kw)
 
-    with async(func, list(params), workers, log_contexts, **kw) as futures:
+    with asynchronous(func, list(params), workers, log_contexts, **kw) as futures:
         futures.logged_wait(initial_log_interval=initial_log_interval)
         return futures.result()
 
@@ -853,3 +853,10 @@ class concurrent(object):
 from .sync import break_locks, TerminationSignal, initialize_exception_listener, initialize_termination_listener, Timebomb
 from .sync import set_timebomb, TagAlongThread, SYNC, LoggedRLock, RWLock, SoftLock, skip_if_locked, with_my_lock
 from .sync import synchronized, SynchronizedSingleton, LoggedCondition, _check_exiting
+
+
+import sys
+if sys.version_info < (3, 7):
+    # async became reserved in 3.7, but we'll keep it for backwards compatibility
+    code = compile("async = asynchronous", __name__, "exec")
+    eval(code, globals(), globals())
