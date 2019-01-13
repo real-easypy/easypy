@@ -462,7 +462,7 @@ class SynchronizationCoordinator(object):
         """
         Stop participating in this synchronization coordinator.
 
-        Note: when using with MultiObject/concurrent_map/async and _sync=SYNC, this
+        Note: when using with MultiObject/concurrent_map/asynchronous and _sync=SYNC, this
         is called automatically when a thread terminates on return or on exception.
         """
         with self._lock:

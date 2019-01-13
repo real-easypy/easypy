@@ -143,12 +143,12 @@ def test_priorities_async():
     l = []
     import time
 
-    @on_test.register(async=True, priority=PRIORITIES.FIRST)
+    @on_test.register(asynchronous=True, priority=PRIORITIES.FIRST)
     def first():
         time.sleep(.05)
         l.append(1)
 
-    @on_test.register(async=True, priority=PRIORITIES.LAST)
+    @on_test.register(asynchronous=True, priority=PRIORITIES.LAST)
     def last():
         l.append(2)
 
@@ -162,7 +162,7 @@ def test_async():
 
     main = get_ident()
 
-    @on_test.register(async=True)
+    @on_test.register(asynchronous=True)
     def a1():
         assert get_ident() != main
 
@@ -172,7 +172,7 @@ def test_async():
 
     on_test()
 
-    on_test.async = True
+    on_test.asynchronous = True
 
     @on_test.register()  # follows the current setting
     def a3():
@@ -180,7 +180,7 @@ def test_async():
 
     on_test()
 
-    on_test.async = False
+    on_test.asynchronous = False
 
 
 def test_ctx():
