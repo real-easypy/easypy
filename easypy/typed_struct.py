@@ -94,8 +94,8 @@ class Field(object):
         If not set, the field will be ``MANDATORY``.
 
         >>> class Foo(TypedStruct):
-        >>>    a = int
-        >>>    a.default = 12
+        ...    a = int
+        ...    a.default = 12
         >>> Foo()
         Foo(a=12)
         """
@@ -135,11 +135,12 @@ class Field(object):
         Calling this method will modify the preprocess function.
 
         >>> class Foo(TypedStruct):
-        >>>     a = int
-        >>>     a.add_validation(lambda value: value < 10, ValueError, 'value for `a` is too big')
+        ...     a = int
+        ...     a.add_validation(lambda value: value < 10, ValueError, 'value for `a` is too big')
         >>> Foo(a=5)
         Foo(a=5)
         >>> Foo(a=15)
+        Traceback (most recent call last):
         ValueError: value for `a` is too big
         """
         orig_preprocess = self.preprocess
@@ -164,9 +165,9 @@ class Field(object):
         Calling this method will modify the preprocess function.
 
         >>> class Foo(TypedStruct):
-        >>>     a = int
-        >>>     a.add_conversion(str, int)
-        >>>     a.add_conversion(list, len)  # passing a list will set `a` to the number of items
+        ...     a = int
+        ...     a.add_conversion(str, int)
+        ...     a.add_conversion(list, len)  # passing a list will set `a` to the number of items
         >>> Foo(a=1)
         Foo(a=1)
         >>> Foo(a='2')
@@ -203,8 +204,8 @@ class Field(object):
         Calling this method will modify the preprocess function.
 
         >>> class Foo(TypedStruct):
-        >>>     a = int
-        >>>     a.convertible_from(str, float)
+        ...     a = int
+        ...     a.convertible_from(str, float)
         >>> Foo(a=1)
         Foo(a=1)
         >>> Foo(a='2')

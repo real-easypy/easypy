@@ -28,17 +28,20 @@ def safe_property(fget=None, fset=None, fdel=None, doc=None):
     ...     prop = property(some_prop)
     ...     safe_prop = safe_property(some_prop)
     >>> t = Test()
-    >>> t.prop #doctest: +IGNORE_EXCEPTION_DETAIL +ELLIPSIS
+    >>> t.prop
     Traceback (most recent call last):
      ...
     AssertionError
-    >>> t.safe_prop #doctest: +ELLIPSIS +NORMALIZE_WHITESPACE
+    >>> t.safe_prop
     Traceback (most recent call last):
      ...
-    RuntimeError: Attribute error within a property:
-    Traceback (...):
+     AttributeError: blap
      ...
-    AttributeError: blap
+     During handling of the above exception, another exception occurred:
+     ...
+     Traceback (most recent call last):
+     ...
+    RuntimeError: Attribute error within a property (blap)
     """
     if fget is not None:
         @wraps(fget)
