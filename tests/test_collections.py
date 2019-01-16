@@ -1,20 +1,46 @@
 import pytest
 from easypy.collections import separate
-from easypy.collections import ListCollection, partial_dict, UNIQUE, ObjectNotFound
+from easypy.collections import ListCollection, SimpleObjectCollection, partial_dict, UNIQUE, ObjectNotFound
 from easypy.bunch import Bunch
 from collections import Counter
 
 
-class O(Bunch):
+class Obj(Bunch):
     def __repr__(self):
         return "%(name)s:%(id)s:%(v)s" % self
 
-L = ListCollection(O(name=n, id=i, v=v) for n, i, v in zip("aabcdddeff", "1234567890", "xxxyyyxxyz") for _ in range(100))
+
+L = ListCollection(Obj(name=n, id=i, v=v) for n, i, v in zip("aabcdddeff", "1234567890", "xxxyyyxxyz") for _ in range(100))
 
 
 def test_collection_filter():
-    l = ListCollection("abcdef")
-    assert l.filtered(lambda c: c == 'a').sample(1) == ['a']
+    lst = ListCollection("abcdef")
+    assert lst.filtered(lambda c: c == 'a').sample(1) == ['a']
+
+
+def test_collection_reprs():
+
+    def check(lst):
+        str(lst)
+        repr(lst)
+
+    check(L)
+    check(L.filtered(id=5))
+
+    NL = ListCollection(L, name='lst')
+
+    check(NL)
+    check(NL.filtered(id=5))
+
+    O = SimpleObjectCollection(L, ID_ATTRIBUTE='name')
+
+    check(O)
+    check(O.filtered(id=5))
+
+    NO = SimpleObjectCollection(L, ID_ATTRIBUTE='name', name='objs')
+
+    check(NO)
+    check(NO.filtered(id=5))
 
 
 def test_partial_dict():
