@@ -217,6 +217,7 @@ else:
 
 class _TimeCache(DecoratingDescriptor):
     def __init__(self, func, **kwargs):
+        update_wrapper(self, func)  # this needs to be first to avoid overriding attributes we set
         super().__init__(func=func, cached=True)
         self.func = func
         self.kwargs = kwargs
@@ -254,8 +255,6 @@ class _TimeCache(DecoratingDescriptor):
                 return _make_key(args, kwargs, typed=self.typed)
 
         self.make_key = make_key
-
-        update_wrapper(self, self.func)
 
     def __call__(self, *args, **kwargs):
         key = self.make_key(args, kwargs)
