@@ -246,16 +246,27 @@ class Futures(list):
     def executor(cls, workers=MAX_THREAD_POOL_SIZE, ctx={}):
         futures = cls()
         with ThreadPoolExecutor(workers) as executor:
+
             def submit(func, *args, log_ctx={}, **kwargs):
+                "Submit a new async task to this executor"
+
                 _ctx = dict(ctx, **log_ctx)
                 future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
                 future.ctx = _ctx
                 future.funcname = _get_func_name(func)
                 futures.append(future)
                 return future
+
+            def kill():
+                "Kill the executor, letting go of any running tasks"
+                executor.shutdown(wait=False)
+                executor._threads.clear()
+
             futures.submit = submit
             futures.shutdown = executor.shutdown
+            futures.kill = kill
             yield futures
+
         futures.result()  # bubble up any exceptions
 
     def dump_stacks(self, futures=None, verbose=False):
