@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ExponentialBackoff`: return the value **before** the incrementation.
 - `concurrent`: capture `KeyboardInterrupt` exceptions like any other.
 - doctests in various functions and classes
+- `SynchronizedSingleton` on `contextmanager` deadlock when some (but not all)
+  of the CMs throw.
 
 ### Changed
 - Reorganization:

@@ -521,6 +521,7 @@ class SynchronizationCoordinator(object):
                     def wrapper_cm():
                         try:
                             with result as yielded_value:
+                                self.wait_for_everyone()  # see https://github.com/weka-io/easypy/issues/150
                                 yield yielded_value
                         finally:
                             self.abandon()
