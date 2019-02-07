@@ -10,6 +10,7 @@ from easypy.concurrency import MultiObject, MultiException, concurrent
 from easypy.timing import repeat, timing
 from easypy.bunch import Bunch
 from easypy.units import Duration
+from easypy.resilience import retrying
 
 from easypy.sync import iter_wait, wait, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
 from easypy.sync import SynchronizationCoordinator, SYNC
@@ -374,6 +375,25 @@ def test_synchronization_coordinator_with_multiobject_method():
         (0, [0, 1, 2]),
         (1, [0, 1, 2]),
         (2, [0, 1, 2]))
+
+
+def test_synchronization_coordinator_failing_context_manager():
+    class MyException(Exception):
+        pass
+
+    @contextmanager
+    def foo(should_fail, _sync=SYNC):
+        if should_fail:
+            raise MyException()
+        else:
+            yield
+
+    inside_executed = False
+    with pytest.raises(MultiException[MyException]):
+        with MultiObject([False, True]).call(foo):
+            inside_executed = True
+
+    assert not inside_executed, 'CM body executed even though __enter__ failed in one thread'
 
 
 def test_synchronization_coordinator_timeout():
@@ -779,4 +799,3 @@ def test_wait_log_predicate(get_log):
     durations = re.findall('Still waiting after (.*?): bad attempt', get_log())
     rounded_durations = [round(Duration(d), 2) for d in durations]
     assert rounded_durations == [0.2, 0.4], 'expected logs at 200ms and 400ms, got %s' % (durations,)
-
