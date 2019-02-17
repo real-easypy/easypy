@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EasyMeta`: the `before_subclass_init` hook.
 - `wait` and `iter_wait` support `log_interval` and `log_level` for printing
   the thrown `PredicateNotSatisfied` to the log.
+- `takesome`: a new generator that partially yields a sequence
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
