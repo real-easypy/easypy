@@ -11,6 +11,7 @@ import pytest
 from easypy.bunch import Bunch
 from easypy.caching import timecache, PersistentCache, cached_property, locking_cache
 from easypy.units import DAY
+from easypy.resilience import resilient
 
 _logger = getLogger(__name__)
 
@@ -259,3 +260,16 @@ def test_caching_gc_leaks(cache_decorator):
     del foo
     gc.collect()
     assert leaked() is None
+
+
+def test_resilient_between_timecaches():
+    class ExceptionLeakedThroughResilient(Exception):
+        pass
+
+    @timecache(1)
+    @resilient(acceptable=ExceptionLeakedThroughResilient, default='default')
+    @timecache(1)
+    def foo():
+        raise ExceptionLeakedThroughResilient()
+
+    assert foo() == 'default'
