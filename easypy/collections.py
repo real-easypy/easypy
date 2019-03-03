@@ -8,10 +8,12 @@ import collections
 from numbers import Integral
 from itertools import chain, islice
 from functools import partial
+import inspect
 import random
 from .predicates import make_predicate
 from .tokens import UNIQUE
 from .decorations import parametrizeable_decorator
+from .exceptions import TException
 
 import sys
 if sys.version_info[:2] >= (3, 5):
@@ -24,8 +26,41 @@ else:
     from collections import OrderedDict as PythonOrderedDict
 
 
-class ObjectNotFound(LookupError):
-    pass
+def _format_predicate(pred):
+    args = inspect.formatargspec(*inspect.getargspec(pred))
+    return "<lambda>" if pred.__name__ == "<lambda>" else "{pred.__name__}{args}".format(**locals())
+
+
+def _format_filter_string(preds, filters):
+    returned = []
+    returned.extend(map(_format_predicate, preds))
+    returned.extend("{!s}={!r}".format(*item) for item in filters.items())
+    return ", ".join(returned)
+
+
+class ObjectNotFound(TException, LookupError):
+    template = "Object not found in {collection!r}, filtered by {_filters}"
+
+    def __init__(self, collection, preds=(), filters={}, **kw):
+        preds = getattr(collection, "preds", ()) + preds
+        filters = dict(getattr(collection, "filters", {}), **filters)
+        filter_str = _format_filter_string(preds, filters)
+        super().__init__(collection=collection, _filters=filter_str, **kw)
+
+
+class TooManyObjectsFound(ObjectNotFound):
+    template = "Too many objects ({_found}) found in {collection!r}, {_filters}"
+
+
+class NotEnoughObjects(ObjectNotFound):
+    template = "Not enough objects found in {collection!r}, {_filters}"
+
+
+class Repr(str):
+    """
+    A string that represents itself without quotes
+    """
+    __repr__ = str.__str__
 
 
 class defaultlist(list):
@@ -170,8 +205,10 @@ def uniquify(objects, num, attrs):
 # Inspired by code written by Rotem Yaari
 
 class ObjectCollectionBase(object):
-    def __init__(self):
+
+    def __init__(self, name=None):
         super().__init__()
+        self.name = name
 
     def __iter__(self):
         raise NotImplementedError()
@@ -214,10 +251,33 @@ class ObjectCollectionBase(object):
         return self._getitem(index)
 
     def __repr__(self):
-        return repr(list(self))
+        if not self.name:
+            items = all_items = list(self)
+            if len(items) > 3:
+                items = items[:2] + [Repr("...")] + items[-1:]
+            return "{0.__class__.__name__}({items}, size={size})".format(self, items=items, size=len(all_items))
+        return "<{0.__class__.__name__} '{0.name}'>".format(self)
 
     def __str__(self):
-        return str(list(self))
+        items = ", ".join(map(str, self))
+        if not self.name:
+            return "<{}>".format(items)
+        return "<'{}': {}>".format(self.name, items)
+
+    def _repr_pretty_(self, p, cycle):
+        from easypy.colors import DARK_CYAN
+        # used by IPython
+        class_name = self.__class__.__name__
+        if cycle:
+            p.text('%s(...)' % DARK_CYAN(class_name))
+            return
+        prefix = '%s(' % DARK_CYAN(class_name)
+        with p.group(len(class_name) + 1, prefix, ')'):
+            for idx, v in enumerate(self):
+                if idx:
+                    p.text(',')
+                    p.breakable()
+                p.pretty(v)
 
     def get_by_key(self, key):
         return self.get(key=key)
@@ -257,30 +317,22 @@ class ObjectCollectionBase(object):
         # this python fu avoids filtering the entire list, while still checking for one item
         matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), range(2))]
         if len(matching) > 1:
-            raise ObjectNotFound("More than one object found")
+            raise TooManyObjectsFound(self, preds, filters)
         return matching[0] if matching else None
-
-    def _format_filter_string(self, preds, filters):
-        returned = ""
-        if preds:
-            returned += " predicates=[%s]" % ", ".join(map(str, preds))
-        if filters:
-            returned += " filters=[%s]" % ", ".join("%s=%r" % item for item in filters.items())
-        return returned
 
     def get(self, *preds, **filters):
         # this python fu avoids filtering the entire list, while still checking for one item
         matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), range(2))]
         if len(matching) == 0:
-            raise ObjectNotFound("No objects found (%s)" % self._format_filter_string(preds, filters))
+            raise ObjectNotFound(self, preds, filters)
         if len(matching) != 1:
-            raise ObjectNotFound("Found more than a single object (%s, %s)" % (len(matching), self._format_filter_string(preds, filters)))
+            raise TooManyObjectsFound(self, preds, filters, found=len(matching))
         return matching[0]
 
     def choose(self, *preds, **filters):
         for obj in self.iter_filtered(_shuffle=True, *preds, **filters):
             return obj
-        raise ObjectNotFound("No objects found (%s)" % self._format_filter_string(preds, filters))
+        raise ObjectNotFound(self, preds, filters)
 
     def safe_choose(self, *preds, **filters):
         try:
@@ -338,7 +390,7 @@ class ObjectCollectionBase(object):
             matching = [obj for _, obj in zip(range(num), self.iter_filtered(_shuffle=True, *preds, **filters))]
 
         if len(matching) < num:
-            raise ObjectNotFound("Not enough objects for sampling (need at least %s)" % num)
+            raise NotEnoughObjects(self, preds, filters, needed=num)
 
         return self._new(matching)
 
@@ -362,6 +414,10 @@ class ObjectCollectionBase(object):
         return self.filtered(filter)
 
     @property
+    def L(self):
+        return list(self)
+
+    @property
     def M(self):
         from .concurrency import MultiObject
         return MultiObject(self)
@@ -375,9 +431,10 @@ class AggregateCollection(ObjectCollectionBase):
     Dynamically aggregate other collections into one chained collection
     """
 
-    def __init__(self, collections):
+    def __init__(self, collections, name=None):
         super().__init__()
         self._collections = collections
+        self.name = name or "+".join((c.name or 'unnamed') for c in collections)
 
     def __iter__(self):
         return chain(*self._collections)
@@ -393,6 +450,9 @@ class ListCollection(list, ObjectCollectionBase):
     """
     A simple list-based implementation of the ObjectCollection protocol
     """
+    def __init__(self, *args, **kwargs):
+        self.name = kwargs.pop('name', None)
+        super().__init__(*args, **kwargs)
 
     def pop_some(self, minimum=0, maximum=None):
         sample_size = self._choose_sampling_size(minimum, maximum)
@@ -401,11 +461,15 @@ class ListCollection(list, ObjectCollectionBase):
     def __getitem__(self, index):
         return self._getitem(index)
 
+    def __repr__(self):
+        if not self.name:
+            return ObjectCollectionBase.__repr__(self)
+        return "<'{0.name}', size={size}>".format(self, size=len(self))
+
 
 class SimpleObjectCollection(ObjectCollectionBase):
     """
-    A dict-based implementation of the ObjectCollection protocol, supporting
-    fast lookup based on an ID attribute found on the objects.
+    An ObjectCollection with fast lookup based on an ID attribute found on the objects.
     """
 
     ID_ATTRIBUTE = 'uid'
@@ -417,13 +481,18 @@ class SimpleObjectCollection(ObjectCollectionBase):
         """
         collection = None
 
-    def __init__(self, objs=(), ID_ATTRIBUTE=None, backref=False):
-        super().__init__()
+    def __init__(self, objs=(), ID_ATTRIBUTE=None, backref=False, name=None):
+        super().__init__(name=name)
         if ID_ATTRIBUTE:
             self.ID_ATTRIBUTE = ID_ATTRIBUTE
         self._objects = PythonOrderedDict()
         for obj in objs:
             self.add(obj, backref=backref)
+
+    def __repr__(self):
+        if not self.name:
+            return ObjectCollectionBase.__repr__(self)
+        return "<'{0.name}', size={size}>".format(self, size=len(self))
 
     def _new(self, items):
         return self.__class__(items, self.ID_ATTRIBUTE)
@@ -466,13 +535,13 @@ class SimpleObjectCollection(ObjectCollectionBase):
 
     def get_by_key(self, key):
         if key not in self._objects:
-            raise ObjectNotFound(key)
+            raise ObjectNotFound(self, (), dict(key=key),)
         return self._objects[key]
 
     def index(self, obj):
         lookup_uid = self._get_object_uid(obj)
         if lookup_uid not in self._objects:
-            raise ValueError("%s not in collection", obj)
+            raise ValueError("%r not in %r" % (obj, self))
         for i, uid in enumerate(self._objects.keys()):
             if lookup_uid == uid:
                 return i
@@ -480,7 +549,7 @@ class SimpleObjectCollection(ObjectCollectionBase):
     def get_next(self, obj):
         uid = self._get_object_uid(obj)
         if uid not in self._objects:
-            raise ObjectNotFound(uid)
+            raise ObjectNotFound(self, (), dict(key=uid),)
         next_uid = self._objects._OrderedDict__map[uid].next
         try:
             key = next_uid.key
@@ -491,7 +560,7 @@ class SimpleObjectCollection(ObjectCollectionBase):
     def get_prev(self, obj):
         uid = self._get_object_uid(obj)
         if uid not in self._objects:
-            raise ObjectNotFound(uid)
+            raise ObjectNotFound(self, (), dict(key=uid),)
         prev_uid = self._objects._OrderedDict__map[uid].prev
         try:
             key = prev_uid.key
@@ -520,8 +589,8 @@ class FilterCollection(ObjectCollectionBase):
     given predicates and filters.
     """
 
-    def __init__(self, base, preds, filters, parent=None):
-        super().__init__()
+    def __init__(self, base, preds, filters, parent=None, name=None):
+        super().__init__(name=name)
         self.base = base
         self.parent = parent if parent is not None else base
         self.preds = preds
@@ -531,6 +600,20 @@ class FilterCollection(ObjectCollectionBase):
         if hasattr(self.base, 'ID_ATTRIBUTE'):
             return self.base.__class__(items, ID_ATTRIBUTE=self.base.ID_ATTRIBUTE)
         return self.base.__class__(items)
+
+    def __repr__(self):
+        if self.name and self.base.name:
+            return "<'{self.name}', based on '{self.base.name}'>".format(**locals())
+        elif self.name:
+            return "<'{self.name}', based on a {self.base.__class__.__name__}>".format(**locals())
+        elif not self.name:
+            filters_str = _format_filter_string(self.preds, self.filters)
+            if self.base.name:
+                return "<Filtered collection based on '{self.base.name}' ({filters_str})>".format(**locals())
+            else:
+                return "<Filtered collection based on an anonymous '{self.base.__class__.__name__}' ({filters_str})>".format(**locals())
+        else:
+            return ObjectCollectionBase.__repr__(self)
 
     def __iter__(self):
         return self.iter_filtered()
@@ -556,9 +639,13 @@ class FilterCollection(ObjectCollectionBase):
             return super().get(*preds, **filters)
 
     def get_by_key(self, key):
-        for obj in filtered([self.base.get_by_key(key)], self.preds, self.filters):
+        try:
+            obj = self.base.get_by_key(key)
+        except ObjectNotFound:
+            raise ObjectNotFound(self, key=key) from None
+        for obj in filtered([obj], self.preds, self.filters):
             return obj
-        raise ObjectNotFound(key)
+        raise ObjectNotFound(self, key=key)
 
     def get_next(self, obj):
         while True:
@@ -570,12 +657,16 @@ class FilterCollection(ObjectCollectionBase):
     def __getitem__(self, uid):
         if not isinstance(uid, str):
             return super().__getitem__(uid)
-        objs = filtered([self.base[uid]], self.preds, self.filters)
-        if not objs:
-            raise ObjectNotFound(uid)
-        for obj in objs:
+
+        try:
+            obj = self.base[uid]
+        except ObjectNotFound:
+            raise ObjectNotFound(self, key=uid) from None
+
+        for obj in filtered([obj], self.preds, self.filters):
             return obj
-        raise ObjectNotFound(uid)
+
+        raise ObjectNotFound(self, key=uid)
 
 
 def TypeFilterCollection(base, type):
