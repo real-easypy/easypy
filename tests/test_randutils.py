@@ -1,7 +1,7 @@
 import pytest
 import random
 
-from easypy.randutils import random_nice_name, random_filename
+from easypy.random import random_nice_name, random_filename
 
 
 def test_random_nice_name():
@@ -27,4 +27,3 @@ def test_random_filename():
 
     fn = random_filename((11, 11))
     assert len(fn) == 11
-

@@ -40,8 +40,25 @@ def stack_level_to_get_out_of_file():
     return stack_levels
 
 
-def clamp(val, *, at_least=None, at_most=None):
-    "Clamp a value so it doesn't exceed specified limits"
+def at_most(val, mx_val):
+    return min(val, mx_val)
+
+
+def at_least(val, mn_val):
+    return max(val, mn_val)
+
+
+def clamp(val, at_least, at_most):
+    """
+    Clamps a value so it doesn't exceed specified limits.
+    If one of the edges is not needed, it should be passed as None (consider using at_most / at_least functions).
+    :param at_least: Minimum possible value.
+    :param at_most: Maxium possible value.
+    :return: The clamped value.
+    """
+
+    if at_least > at_most:
+        raise ValueError("Min value cannot be higher than max value.")
 
     if at_most is not None:
         val = min(at_most, val)

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from easypy.bunch import Bunch, bunchify
 from easypy.colors import colorize
 from easypy.collections import ilistify
+from easypy.misc import clamp
 
 
 def compact(line, length, ellipsis="....", suffix_length=20):
@@ -614,10 +615,6 @@ BAR_SEQUENCE = ' ▏▎▍▌▋▊▉██'
 VERT_SEQUENCE = ' ▁▂▃▄▅▆▇█'
 LITTLE_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹'
 RULER_MARKS = '0' + LITTLE_DIGITS[1:]
-
-
-def clamp(val, mn, mx):
-    return max(mn, min(mx, val))
 
 
 def vertbar(ratio):
