@@ -891,6 +891,32 @@ def takesome(generator, max=None, min=0):
         yield p
 
 
+class InfiniteIterator(object):
+    """
+    Iterator that calls the delegate and iterates on the values it yields
+
+    * Once the sub-iteration finishes, it'll invoke the delegate again to see
+      if there are new values.
+    * If the iteration on the ``InfiniteIterator`` finishes, iterating on it
+      again will invoke the delegate again and may yield new values.
+    """
+
+    def __init__(self, dlg):
+        self._dlg = dlg
+        self._current = iter(self._dlg())
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        try:
+            return next(self._current)
+        except StopIteration:
+            pass
+        self._current = iter(self._dlg())
+        return next(self._current)
+
+
 if __name__ == "__main__":
     import doctest
     doctest.testmod()

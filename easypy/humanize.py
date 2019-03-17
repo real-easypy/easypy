@@ -16,6 +16,8 @@ from datetime import datetime, timedelta
 from easypy.bunch import Bunch, bunchify
 from easypy.colors import colorize
 from easypy.collections import ilistify
+from easypy.exceptions import TException
+from easypy.properties import safe_property
 
 
 def compact(line, length, ellipsis="....", suffix_length=20):
@@ -690,3 +692,137 @@ def percentages_comparison(actual, expected, key_caption='Item', color_bounds={'
     for item in sorted(generate(), key=lambda a: a.abs_diff, reverse=True):
         table.add_row(**item)
     return table
+
+
+class NotEnoughColumns(TException):
+    template = 'Columns diagrm supports up to {_num_columns} columns'
+
+
+class ColumnsDiagram(object):
+    """
+    Generates column diagrams
+
+    >>> diagram = ColumnsDiagram(num_columns=3, column_width=1, spacing_width=2)
+    >>> lines = [
+    >>>     diagram.change(1, '*', '|'),
+    >>>     diagram.empty(),
+    >>>     diagram.change(2, '$', '|'),
+    >>>     diagram.end(1, 'v'),
+    >>>     diagram.change(2, '@', ':'),
+    >>>     diagram.change(3, '&', '|'),
+    >>>     diagram.separator('ABC'),
+    >>>     diagram.empty(),
+    >>>     diagram.change(4, '#', '|'),
+    >>>     diagram.empty(),
+    >>> ]
+    >>> print('\\n'.join(map(repr, lines)))
+    '*      '
+    '|      '
+    '|  $   '
+    'v  |   '
+    '   @   '
+    '&  :   '
+    '--ABC--'
+    '|  :   '
+    '|  :  #'
+    '|  :  |'
+    """
+
+    def __init__(self, num_columns: int, column_width: int = 3, spacing_width: int = 1):
+        self._column_width = column_width
+        self._spacing_width = spacing_width
+        self._columns = [None] * num_columns
+        self._column_map = {}
+        self._empty = ' ' * column_width
+        self._spacing = ' ' * spacing_width
+
+    @safe_property
+    def graph_width(self):
+        """The width of every generated line of the graph"""
+        return (self._column_width + self._spacing_width) * len(self._columns) - self._spacing_width
+
+    def _assign_column(self, key) -> int:
+        try:
+            return self._column_map[key]
+        except KeyError:
+            pass
+
+        for index, column in enumerate(self._columns):
+            if column is None:
+                self._column_map[key] = index
+                return index
+        raise NotEnoughColumns(_num_columns=len(self._columns), existing_columns_keys=list(self._column_map.keys()))
+
+    def _gen_graph(self) -> str:
+        """
+        Generate a row of the graph without changing anything
+
+        :return: a row of the graph with nothing changed.
+        """
+        return self._spacing.join(column or self._empty for column in self._columns)
+
+    def change(self, key, tick_style: str, line_style: str) -> str:
+        """
+        Create a tick in a vertical line of the graph
+
+        :param key: An hashable value used to identify that line in future
+                    calls to this or other methods. If a vertical line with
+                    that key does not exist, a new column will be assigned to
+                    it.
+        :param tick_style: The symbol to show at the column in this row.
+        :param line_style: The symbol to show at the column in the following
+                           lines.
+
+        :return: a new row of the graph, with the ticked line.
+
+        :raises NotEnoughColumns: if the vertical line is new and there are no
+                                  available columns to assign to it.
+        """
+        assert len(tick_style) == self._column_width
+        assert len(line_style) == self._column_width
+
+        index = self._assign_column(key)
+        self._columns[index] = tick_style
+
+        graph = self._gen_graph()
+
+        self._columns[index] = line_style
+
+        return graph
+
+    empty = _gen_graph
+
+    def end(self, key, tick_style: str) -> str:
+        """
+        Terminates a line, clearing its column
+
+        :param key: An hashable value used to identify that line.
+        :param tick_style: The symbol to show at the column in this row.
+
+        :return: a new row of the graph, with the ended line.
+        """
+        assert len(tick_style) == self._column_width
+
+        try:
+            index = self._column_map.pop(key)
+        except KeyError:
+            return self._gen_graph()
+
+        self._columns[index] = tick_style
+
+        graph = self._gen_graph()
+
+        self._columns[index] = None
+
+        return graph
+
+    def separator(self, text: str, fill: str = '-') -> str:
+        """
+        An horizontal row that separates the graph
+
+        :param text: The text to write in the separator.
+        :param fill: A character for padding the separator, to fit the ``graph_width``.
+
+        :return: a separator row.
+        """
+        return '{:{fill}^{width}}'.format(text, fill=fill, width=self.graph_width)

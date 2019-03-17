@@ -1,4 +1,6 @@
-from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table
+import pytest
+
+from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table, ColumnsDiagram, NotEnoughColumns
 
 
 _SAMPLE_DATA = b'J\x9c\xe8Z!\xc2\xe6\x8b\xa0\x01\xcb\xc3.x]\x11\x9bsC\x1c\xb2\xcd\xb3\x9eM\xf7\x13`\xc8\xce\xf8g1H&\xe2\x9b'     \
@@ -88,3 +90,36 @@ def test_format_table_without_titles():
         "{'x': 'x'}|b'bytes'|string\n")
 
     assert output == format_table(table, titles=False)
+
+
+def test_columns_diagram():
+    diagram = ColumnsDiagram(num_columns=3, column_width=1, spacing_width=2)
+
+    lines = [
+        diagram.change(1, '*', '|'),
+        diagram.empty(),
+        diagram.change(2, '$', '|'),
+        diagram.end(1, 'v'),
+        diagram.change(2, '@', ':'),
+        diagram.change(3, '&', '|'),
+        diagram.separator('ABC'),
+        diagram.empty(),
+        diagram.change(4, '#', '|'),
+        diagram.empty(),
+    ]
+
+    with pytest.raises(NotEnoughColumns):
+        diagram.change(5, '?', '|')
+
+    assert lines == [
+        '*      ',
+        '|      ',
+        '|  $   ',
+        'v  |   ',
+        '   @   ',
+        '&  :   ',
+        '--ABC--',
+        '|  :   ',
+        '|  :  #',
+        '|  :  |',
+    ]
