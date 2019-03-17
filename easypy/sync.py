@@ -125,6 +125,9 @@ def async_raise_in_main_thread(exc, use_concurrent_loop=True):
         do_signal(exc)
 
 
+MAX_THREAD_POOL_SIZE = 50
+
+
 if is_module_patched("threading"):
     def _rimt(exc):
         _logger.info('YELLOW<<killing main thread greenlet>>')

@@ -29,17 +29,11 @@ from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize_by_patterns
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_main_thread
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, MAX_THREAD_POOL_SIZE, raise_in_main_thread
 
 
 this_module = import_module(__name__)
-MAX_THREAD_POOL_SIZE = 50
 THREADING_MODULE_PATHS = [threading.__file__]
-
-if is_module_patched("threading"):
-    import gevent
-    MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
-    THREADING_MODULE_PATHS.append(gevent.__path__[0])
 
 
 try:
@@ -254,16 +248,27 @@ class Futures(list):
     def executor(cls, workers=MAX_THREAD_POOL_SIZE, ctx={}):
         futures = cls()
         with ThreadPoolExecutor(workers) as executor:
+
             def submit(func, *args, log_ctx={}, **kwargs):
+                "Submit a new async task to this executor"
+
                 _ctx = dict(ctx, **log_ctx)
                 future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
                 future.ctx = _ctx
                 future.funcname = _get_func_name(func)
                 futures.append(future)
                 return future
+
+            def kill():
+                "Kill the executor, letting go of any running tasks"
+                executor.shutdown(wait=False)
+                executor._threads.clear()
+
             futures.submit = submit
             futures.shutdown = executor.shutdown
+            futures.kill = kill
             yield futures
+
         futures.result()  # bubble up any exceptions
 
     def dump_stacks(self, futures=None, verbose=False):
