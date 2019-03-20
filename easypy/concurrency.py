@@ -1,8 +1,64 @@
 # encoding: utf-8
 
 """
-This module helps you run things concurrently
+This module helps you run things concurrently.
+Most useful are the ``concurrent`` context manager and the ``MultiObject`` class.
+The features in this module are integrated with the ``logging`` module, to provide
+thread-context to log messages. It also has support for integration ``gevent``.
+
+``MultiObject``
+
+Here's how you would, for example, concurrently send a message to a bunch of servers::
+
+    responses = MultiObject(servers).send('Hello')
+
+The above replaces the following threading boiler-plate code::
+
+    from threading import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(server.send, args=['Hello'])
+            for server in servers]
+
+    responses = [future.result for future in futures]```
+
+
+``concurrent``
+
+A high-level thread controller.
+As a context manager, it runs a function in a thread, and joins it upon exiting the context
+
+    with concurrent(requests.get, "api.myserver.com/data") as async:
+        my_data = open("local_data").read()
+
+    remote_data = async.result()
+    process_it(my_data, remote_data)
+
+It can also be used to run something repeatedly in the background:
+
+    concurrent(send_heartbeat, loop=True, sleep=5).start()  # until the process exits
+
+    with concurrent(print_status, loop=True, sleep=5):
+        some_long_task()
+
+
+Environment variables
+
+    EASYPY_DISABLE_CONCURRENCY (yes|no|true|false|1|0)
+    EASYPY_MAX_THREAD_POOL_SIZE
+
+Important notes
+
+    * Exception.timestamp
+
+    Exceptions raised in functions that use the features here may get a ``timestamp`` attribute that
+    records the precise time those exceptions were raised. This is useful when there's a lag between
+    when the exception was raised within a thread, and when that exception was finally propagated to
+    the calling thread.
+
 """
+
 
 from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, Future, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
@@ -17,6 +73,7 @@ import inspect
 import logging
 import threading
 import time
+import os
 from collections import namedtuple
 from datetime import datetime
 
@@ -24,7 +81,7 @@ import easypy._multithreading_init  # noqa; make it initialize the threads tree
 from easypy.exceptions import PException
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration, compact
-from easypy.humanize import format_thread_stack
+from easypy.humanize import format_thread_stack, yesno_to_bool
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
@@ -34,6 +91,14 @@ from easypy.sync import SynchronizationCoordinator, ProcessExiting, MAX_THREAD_P
 
 this_module = import_module(__name__)
 THREADING_MODULE_PATHS = [threading.__file__]
+
+
+if is_module_patched("threading"):
+    import gevent
+    THREADING_MODULE_PATHS.append(gevent.__path__[0])
+
+
+DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 
 try:
@@ -51,22 +116,30 @@ except ImportError:
 
 _logger = logging.getLogger(__name__)
 
-_disabled = False
-
 
 def disable():
-    global _disabled
-    _disabled = True
+    """
+    Force MultiObject and concurrent calls to run synchronuously in the current thread.
+    For debugging purposes.
+    """
+    global DISABLE_CONCURRENCY
+    DISABLE_CONCURRENCY = True
     logging.info("Concurrency disabled")
 
 
 def enable():
-    global _disabled
-    _disabled = False
+    """
+    Re-enable concurrency, after disabling it
+    """
+    global DISABLE_CONCURRENCY
+    DISABLE_CONCURRENCY = False
     logging.info("Concurrency enabled")
 
 
 def _find_interesting_frame(f):
+    """
+    Find the next frame in the stack that isn't threading-related, to get to the actual caller.
+    """
     default = next(_extract_stack_iter(f))
     non_threading = (
         p for p in _extract_stack_iter(f)
@@ -74,9 +147,19 @@ def _find_interesting_frame(f):
     return next(non_threading, default)
 
 
-# This metaclass helps generate MultiException subtypes so that it's easier
-# to catch a MultiException with a specific common type
 class MultiExceptionMeta(type):
+    """
+    This metaclass helps generate MultiException subtypes so that it's easier
+    to catch a MultiException with a specific common type, for example::
+
+        try:
+            MultiObject(servers).connect()
+        except MultiException[ConnectionError]:
+            pass
+
+    See ``MultiException`` for more information. 
+    """
+
     _SUBTYPES = {}
     _SUBTYPES_LOCK = threading.RLock()
 
@@ -110,6 +193,19 @@ PickledFuture = namedtuple("PickledFuture", "ctx, funcname")
 
 
 class MultiException(PException, metaclass=MultiExceptionMeta):
+    """
+    A ``MultiException`` subtype is raised when a ``MultiObject`` call fails in one or more of its threads.
+    The exception contains the following members:
+
+    :param actual: a MultiObject of all exceptions raised in the ``MultiObject`` call
+    :param count: the number of threads that raised an exception
+    :param invocations_count: the total number of calls the ``MultiObject`` made (the size of the ``MultiObject``)
+    :param common_type: the closest common ancestor (base-class) of all the exceptions
+    :param one: a sample exception (the first)
+    :param futures: a MultiObject of futures (:concurrent.futures.Future:) that were created in the ``MultiObject`` call
+    :param exceptions: a sparse list of exceptions corresponding to the MultiObject threads
+    :param complete: ``True`` if all threads failed on exception
+    """
 
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
@@ -120,12 +216,12 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         # we want to keep futures in parallel with exceptions,
         # so some exceptions could be None
         assert len(futures) == len(exceptions)
-        self.actual = list(filter(None, exceptions))
+        self.actual = MultiObject(filter(None, exceptions))
         self.count = len(self.actual)
         self.invocations_count = len(futures)
         self.common_type = self.COMMON_TYPE
-        self.one = self.actual[0] if self.actual else None
-        self.futures = futures
+        self.one = self.actual.T[0] if self.actual else None
+        self.futures = MultiObject(futures)
         self.exceptions = exceptions
         self.complete = self.count == self.invocations_count
         if self.complete and hasattr(self.common_type, 'exit_with_code'):
@@ -208,21 +304,51 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         return buff
 
 
+def _submit_execution(executor, func, args, kwargs, ctx, funcname=None):
+    """
+    This helper takes care of submitting a function for async execution, while wrapping and storing
+    useful information for tracing it in logs (for example, by ``Futures.dump_stacks``)
+    """
+    future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
+    future.ctx = ctx
+    future.funcname = funcname or _get_func_name(func)
+    return future
+
+
 class Futures(list):
+    """
+    A collection of ``Future`` objects.
+    """
 
     def done(self):
+        """
+        Return ``True`` if all futures are done
+        """
         return all(f.done() for f in self)
 
     def cancelled(self):
+        """
+        Return ``True`` if all futures are cancelled
+        """
         return all(f.cancelled() for f in self)
 
     def running(self):
+        """
+        Return ``True`` if all futures are running
+        """
         return all(f.running() for f in self)
 
     def wait(self, timeout=None):
+        """
+        Wait for all Futures to complete
+        """
         return futures_wait(self, timeout=timeout)
 
     def result(self, timeout=None):
+        """
+        Wait and return the results from all futures as an ordered list.
+        Raises a ``MultiException`` if one or more exceptions are raised.
+        """
         me = self.exception(timeout=timeout)
         if me:
             if isinstance(me, MultiException[ProcessExiting]):
@@ -232,30 +358,46 @@ class Futures(list):
         return [f.result() for f in self]
 
     def exception(self, timeout=None):
+        """
+        Wait and return a ``MultiException`` if there any exceptions, otherwise returns ``None``.
+        """
         exceptions = [f.exception(timeout=timeout) for f in self]
         if any(exceptions):
             return MultiException(exceptions=exceptions, futures=self)
 
     def cancel(self):
+        """
+        Cancel all futures.
+        """
         cancelled = [f.cancel() for f in self]  # list-comp, to ensure we call cancel on all futures
         return all(cancelled)
 
     def as_completed(self, timeout=None):
+        """
+        Returns an iterator yielding the futures in order of completion.
+        Wraps `concurrent.futures.as_completed`.
+        """
         return as_completed(self, timeout=timeout)
 
     @classmethod
     @contextmanager
-    def executor(cls, workers=MAX_THREAD_POOL_SIZE, ctx={}):
+    def execution(cls, workers=MAX_THREAD_POOL_SIZE, log_ctx={}):
+        """
+        A context-manager for scheduling asynchronous executions and waiting on them as upon exiting the context::
+
+            With Futures.execution() as futures:
+                for task in tasks:
+                    futures.submit(task)
+
+            results = futures.results()
+        """
         futures = cls()
         with ThreadPoolExecutor(workers) as executor:
 
             def submit(func, *args, log_ctx={}, **kwargs):
                 "Submit a new async task to this executor"
 
-                _ctx = dict(ctx, **log_ctx)
-                future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
-                future.ctx = _ctx
-                future.funcname = _get_func_name(func)
+                future = _submit_execution(executor, func, args, kwargs, ctx=dict(log_ctx, **log_ctx))
                 futures.append(future)
                 return future
 
@@ -265,14 +407,22 @@ class Futures(list):
                 executor._threads.clear()
 
             futures.submit = submit
+            futures.executor = executor
             futures.shutdown = executor.shutdown
             futures.kill = kill
             yield futures
 
         futures.result()  # bubble up any exceptions
 
-    def dump_stacks(self, futures=None, verbose=False):
-        futures = futures or self
+    executor = execution  # for backwards compatibility
+
+    @classmethod
+    def dump_stacks(cls, futures, verbose=False):
+        """
+        Logs the stack frame for each of the given futures.
+        The Future objects must have been submitted with ``_submit_execution`` so that they contain
+        the necessary information.
+        """
         frames = dict(iter_thread_frames())
 
         for i, future in enumerate(futures, 1):
@@ -287,16 +437,37 @@ class Futures(list):
                 else:
                     location = "..."
                 _logger.info("%3s - %s (DARK_YELLOW<<%s>>)%s",
-                             i, future.funcname, _get_context(future), location)
+                             i, future.funcname, cls._get_context(future), location)
                 continue
 
-            with _logger.indented("%3s - %s (%s)", i, future.funcname, _get_context(future), footer=False):
+            with _logger.indented("%3s - %s (%s)", i, future.funcname, cls._get_context(future), footer=False):
                 lines = format_thread_stack(frame, skip_modules=[this_module]).splitlines()
                 for line in lines:
                     _logger.info(line.strip())
 
-    def logged_wait(self, timeout=None, initial_log_interval=None):
-        log_interval = initial_log_interval or 2 * MINUTE
+    @classmethod
+    def _get_context(cls, future: Future):
+        """
+        Get interesting context information about this future object (as long as it was submitted by _submit_execution)
+        """
+        def compacted(s):
+            return compact(str(s).split("\n", 1)[0], 20, "....", 5).strip()
+        ctx = dict(future.ctx)
+        context = []
+        threadname = ctx.pop("threadname", None)
+        thread_ident = ctx.pop("thread_ident", None)
+        context.append(threadname or thread_ident)
+        context.append(ctx.pop("context", None))
+        context.extend("%s=%s" % (k, compacted(v)) for k, v in sorted(ctx.items()))
+        return ";".join(filter(None, context))
+
+    def logged_wait(self, timeout=None, initial_log_interval=2 * MINUTE):
+        """
+        Wait for all futures to complete, logging their status along the way.
+        Logging will occur at an every-increasing log interval, beginning with ``initial_log_interval``,
+        and increasing 5-fold (x5) every 5 iterations.
+        """
+        log_interval = initial_log_interval
         global_timer = Timer(expiration=timeout)
         iteration = 0
 
@@ -316,6 +487,12 @@ class Futures(list):
 
 
 def _run_with_exception_logging(func, args, kwargs, ctx):
+    """
+    Use as a wrapper for functions that run asynchronously, setting up a logging context and
+    recording the thread in-which they are running, so that we can later log their progress
+    and identify the source of exceptions they raise. In addition, it stamps any exception
+    raised from the function with the current time.
+    """
     thread = threading.current_thread()
     ctx.update(threadname=thread.name, thread_ident=thread.ident)
     with _logger.context(**ctx):
@@ -339,11 +516,13 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
 
 
 def _to_args_list(params):
+    "Helper for normalizing a list of parameters to be mapped on a function"
     # We use type(args) == tuple because isinstance will return True for namedtuple
     return [args if type(args) == tuple else (args,) for args in params]
 
 
 def _get_func_name(func):
+    "Helper for finding an appropriate name for the given callable, handling ``partial`` objects."
     kw = {}
     while isinstance(func, partial):
         if func.keywords:
@@ -356,6 +535,7 @@ def _get_func_name(func):
 
 
 def _to_log_contexts(params, log_contexts):
+    "Helper for normalizing a list of parameters and log-contexts into a list of usable log context dicts"
     if not log_contexts:
         log_contexts = (dict(context=str(p) if len(p) > 1 else str(p[0])) for p in params)
     else:
@@ -364,25 +544,28 @@ def _to_log_contexts(params, log_contexts):
     return log_contexts
 
 
-def _get_context(future):
-    def compacted(s):
-        return compact(str(s).split("\n", 1)[0], 20, "....", 5).strip()
-    ctx = dict(future.ctx)
-    context = []
-    threadname = ctx.pop("threadname", None)
-    thread_ident = ctx.pop("thread_ident", None)
-    context.append(threadname or thread_ident)
-    context.append(ctx.pop("context", None))
-    context.extend("%s=%s" % (k, compacted(v)) for k, v in sorted(ctx.items()))
-    return ";".join(filter(None, context))
-
-
 @contextmanager
 def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeout=2.0, **kw):
+    """
+    Map the list of tuple-parameters onto asynchronous calls to the specified function::
+
+        with async(connect, [(host1,), (host2,), (host3,)]) as futures:
+            ...
+
+        connections = futures.results()
+
+    :param func: The callable to invoke asynchronously.
+    :param params: A list of tuples to map onto the function.
+    :param workers: The number of workers to use. Defaults to the number of items in ``params``.
+    :param log_contexts: A optional list of logging context objects, matching the items in ``params``.
+    :param final_timeout: The amount of time to allow for the futures to complete after exiting the async context.
+    """
     if params is None:
         params = [()]
-    if not isinstance(params, list):
+
+    if not isinstance(params, list):  # don't use listify - we want to listify tuples too
         params = [params]
+
     params = _to_args_list(params)
     log_contexts = _to_log_contexts(params, log_contexts)
 
@@ -398,8 +581,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
         pass
     else:
         if '_sync' in signature.parameters and '_sync' not in kw:
-            assert len(params) <= executor._max_workers, 'SynchronizationCoordinator with %s tasks but only %s workers' % (
-                len(params), executor._max_workers)
+            assert len(params) <= workers, 'SynchronizationCoordinator with %s tasks but only %s workers' % (len(params), workers)
             synchronization_coordinator = SynchronizationCoordinator(len(params))
             kw['_sync'] = synchronization_coordinator
 
@@ -407,9 +589,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
 
     futures = Futures()
     for args, ctx in zip(params, log_contexts):
-        future = executor.submit(_run_with_exception_logging, func, args, kw, ctx)
-        future.ctx = ctx
-        future.funcname = funcname
+        future = _submit_execution(executor, func, args, kw, ctx=ctx, funcname=funcname)
         futures.append(future)
 
     def kill(wait=False):
@@ -444,6 +624,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
 
 
 def concurrent_find(func, params, **kw):
+    assert not DISABLE_CONCURRENCY, "concurrent_find runs only with concurrency enabled"
     timeout = kw.pop("concurrent_timeout", None)
     with asynchronous(func, list(params), **kw) as futures:
         future = None
@@ -488,7 +669,7 @@ def nonconcurrent_map(func, params, log_contexts=None, **kw):
 
 
 def concurrent_map(func, params, workers=None, log_contexts=None, initial_log_interval=None, **kw):
-    if _disabled or len(params) == 1:
+    if DISABLE_CONCURRENCY or len(params) == 1:
         return nonconcurrent_map(func, params, log_contexts, **kw)
 
     with asynchronous(func, list(params), workers, log_contexts, **kw) as futures:
@@ -709,6 +890,41 @@ def concestor(*cls_list):
 
 
 class concurrent(object):
+    """
+    Higher-level thread execution.
+
+    :param func: The callable to invoke asynchronously.
+    :param throw: When used as a context-manager, if an exception was thrown inside the thread, re-raise it to the calling thread upon exiting the context. (default: True)
+    :param daemon: Set the thread as daemon, so it does not block the process from exiting if it did not complete. (default: True)
+    :param threadname: Set a name for this thread. (default: ``anon-<id>``)
+
+    :param loop: If ``True``, repeatedly calls ``func`` until the context is exited, ``.stop()`` is called, or the ``stopper`` event object is set. (default: False)
+    :param sleep: Used with the ``loop`` flag - the number of seconds between consecutive calls to ``func``. (default: 1)
+    :param stopper: Used with the ``loop`` flag - an external ``threading.Event`` object to use for stopping the loop .
+
+    :param console_logging: If ``False``, suppress logging to the console log handler. (default: False)
+
+    Running multiple tasks side-by-side::
+
+        with \
+            concurrent(requests.get, "api.myserver.com/data1") as async1, \
+            concurrent(requests.get, "api.myserver.com/data2") as async2:
+            my_data = open("local_data").read()
+
+        remote_data1 = async1.result
+        remote_data2 = async2.result
+        process_it(my_data, remote_data1, remote_data2)
+
+    Run something repeatedly in the background:
+
+        heartbeats = concurrent(send_heartbeat, loop=True, sleep=5)
+        heartbeats.start()  # until stopped, or the process exits
+
+        with concurrent(print_status, loop=True, sleep=5):
+            some_long_task()
+
+        heartbeats.stop()
+    """
 
     def __init__(self, func, *args, **kwargs):
         self.func = func
@@ -757,7 +973,7 @@ class concurrent(object):
                 stack.enter_context(_logger.suppressed())
             _logger.debug("%s - starting", self)
             while True:
-                self.result = self.func(*self.args, **self.kwargs)
+                self._result = self.func(*self.args, **self.kwargs)
                 if not self.loop:
                     return
                 if self.wait(self.sleep):
@@ -799,7 +1015,7 @@ class concurrent(object):
 
     @contextmanager
     def _running(self):
-        if _disabled:
+        if DISABLE_CONCURRENCY:
             self._logged_func()
             yield self
             return
@@ -830,6 +1046,7 @@ class concurrent(object):
         return self._ctx.__exit__(*args)
 
     def __iter__(self):
+        # TODO: document or remove
         with self:
             self.iterations = 0
             while not self.wait(self.sleep):
