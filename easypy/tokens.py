@@ -35,7 +35,7 @@ class Token(str):
                 size = get_capacity()
 
             if fname is AUTO:
-                from .randutils import random_nice_name
+                from .random import random_nice_name
                 fname = random_nice_name()
             os.truncate(fname, size)
 
