@@ -1,7 +1,7 @@
 from io import StringIO
 
 from easypy.collections import defaultlist
-from easypy.colors import colored, uncolorize
+from easypy.colors import colorize, uncolored
 from easypy.humanize import compact
 
 
@@ -77,8 +77,8 @@ class Table():
                 column.padding = self.padding
 
             raw_data = [column.title] + rows
-            colored_data = [colored(str(data)) for data in raw_data]
-            uncolored_data = [uncolorize(data) for data in colored_data]
+            colored_data = [colorize(str(data)) for data in raw_data]
+            uncolored_data = [uncolored(data) for data in colored_data]
             max_width = column.max_width or max(len(data) for data in uncolored_data)
             for i, data in enumerate(colored_data):
                 align = column.header_align if i == 0 else column.align
@@ -104,7 +104,7 @@ class Table():
             output.write("\n")
 
             if r_i == 0:
-                r_parts = [self.BAR * len(uncolorize(part)) for part in r_parts]
+                r_parts = [self.BAR * len(uncolored(part)) for part in r_parts]
                 output.write(self.BAR_SEP.join(r_parts))
                 output.write("\n")
 

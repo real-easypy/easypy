@@ -85,7 +85,7 @@ from easypy.humanize import format_thread_stack, yesno_to_bool
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
-from easypy.colors import colorize_by_patterns
+from easypy.colors import colorize, uncolored
 from easypy.sync import SynchronizationCoordinator, ProcessExiting, MAX_THREAD_POOL_SIZE, raise_in_main_thread
 
 
@@ -251,13 +251,13 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
     def render(self, *, width=80, color=True, **kw):
         buff = self._get_buffer(color=color, **kw)
         text = buff.render(width=width, edges=not color)
-        return colorize_by_patterns("\n" + text)
+        return colorize("\n" + text)
 
     def _get_buffer(self, **kw):
         if kw.get("color", True):
             normalize_color = lambda x: x
         else:
-            normalize_color = partial(colorize_by_patterns, no_color=True)
+            normalize_color = uncolored
 
         def _format_context(context):
             if not isinstance(context, dict):

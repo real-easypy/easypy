@@ -14,7 +14,7 @@ from io import StringIO
 from datetime import datetime, timedelta
 
 from easypy.bunch import Bunch, bunchify
-from easypy.colors import colorize
+from easypy.colors import Colorizer
 from easypy.collections import ilistify
 from easypy.misc import clamp
 
@@ -661,6 +661,7 @@ def percentages_comparison(actual, expected, key_caption='Item', color_bounds={'
         return table
 
     color_bounds = sorted(color_bounds.items(), key=lambda a: a[1], reverse=True)
+
     def color_for(percentage):
         for color, bound in color_bounds:
             if bound <= percentage:
@@ -678,10 +679,11 @@ def percentages_comparison(actual, expected, key_caption='Item', color_bounds={'
             abs_diff = abs(diff)
             color = color_for(abs_diff)
             if color:
-                yield Bunch(key=colorize(key, color),
-                            actual=colorize('%.1f%%' % actual_percentage, color),
-                            expected=colorize('%.1f%%' % expected_percentage, color),
-                            diff=colorize('%.1f%%' % diff, color),
+                colorizer = Colorizer(color)
+                yield Bunch(key=colorizer(key),
+                            actual=colorizer('%.1f%%' % actual_percentage),
+                            expected=colorizer('%.1f%%' % expected_percentage),
+                            diff=colorizer('%.1f%%' % diff),
                             abs_diff=abs_diff)
 
     for item in sorted(generate(), key=lambda a: a.abs_diff, reverse=True):

@@ -2,7 +2,7 @@ import pytest
 from contextlib import contextmanager
 from io import StringIO
 from logging import getLogger, Formatter, StreamHandler
-from easypy.colors import colorize_by_patterns
+from easypy.colors import uncolored
 logger = getLogger(__name__)
 
 
@@ -16,7 +16,7 @@ def get_log():
     logger.root.setLevel(0)
 
     def get():
-        return colorize_by_patterns(stream.getvalue(), no_color=True)
+        return uncolored(stream.getvalue())
     yield get
 
     logger.root.setLevel(level)

@@ -13,7 +13,7 @@ from functools import wraps, partial
 from itertools import cycle, chain, repeat, count
 from collections import OrderedDict
 
-from easypy.colors import colorize_by_patterns as C, uncolorize
+from easypy.colors import colorize, uncolored
 from easypy.humanize import compact as _compact
 from easypy.timing import timing as timing_context, Timer
 from easypy.threadtree import ThreadContexts
@@ -187,8 +187,7 @@ class ConsoleFormatter(logging.Formatter):
         msg = super().formatMessage(record)
         if IS_A_TTY:
             msg = '\r' + msg + CLEAR_EOL
-        msg = C(msg, not LOG_WITH_COLOR)
-        return msg
+        return colorize(msg) if LOG_WITH_COLOR else uncolored(msg)
 
 
 try:
@@ -281,7 +280,7 @@ class ProgressBar:
             return
         if record.levelno >= logging.DEBUG:
             record.drawing = "__PB__" + record.drawing[2:]
-            self._last_line = compact(uncolorize(self._format(record).split("\n")[0]).strip()[8:])
+            self._last_line = compact(uncolored(self._format(record).split("\n")[0]).strip()[8:])
         self._event.set()
 
     def set_message(self, msg):
