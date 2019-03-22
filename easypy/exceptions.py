@@ -73,8 +73,8 @@ class PException(Exception):
             text += "\n".join(map(fmt.format, self.traceback.splitlines()))
 
         if not color:
-            from easypy.colors import colorize_by_patterns
-            text = colorize_by_patterns(text, no_color=True)
+            from easypy.colors import uncolored
+            text = uncolored(text)
 
         return text
 

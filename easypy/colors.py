@@ -1,57 +1,90 @@
 #!/usr/bin/env python
-from __future__ import division, absolute_import, print_function, unicode_literals
+
+"""
+This module allows rendering colored text in the console using a custom markup language::
+
+    >> print(colorize("This will render as BLUE<<blue>>, and this will be YELLOW(BLUE)@{yellow-on-blue}@"))
+
+"""
 
 import re
 import functools
-import sys
+from collections import namedtuple
+
+ColorSpec = namedtuple("ColorSpec", "color light".split())
 
 
 color_names = [
-    'dark_gray',
-    'red',
-    'green',
-    'yellow',
-    'blue',
-    'magenta',
-    'cyan',
-    'white',
+    'dark_gray',  # 0
+    'red',        # 1
+    'green',      # 2
+    'yellow',     # 3
+    'blue',       # 4
+    'magenta',    # 5
+    'cyan',       # 6
+    'white',      # 7
 ]
 
 COLORS = dict(
-    (name, dict(color=color_num, light=True))
+    (name, ColorSpec(color=color_num, light=True))
     for color_num, name in enumerate(color_names)
 )
 
 for orig in sorted(COLORS):
-    COLORS['dark_' + orig] = dict(COLORS[orig], light=False)
+    COLORS['dark_' + orig] = ColorSpec(COLORS[orig].color, light=False)
 
 for orig, dark in [('dark_gray', 'black'),
                    ('white', 'gray')]:
-    COLORS[dark] = dict(COLORS[orig], light=False)
-
-# TODO - tokenize an ascii-colored string
-# list(re.finditer("\\x1b\[([\d;]+)m(.*?)\\x1b\[m", x))
-
-MAGIC = "\x1b"
-END_CODE = MAGIC + "[0m"
-
-_RE_ANSI_COLOR = re.compile(re.escape(MAGIC) + '.+?m')
-_COLORIZER_RE_PATTERN = re.compile("([\w]+)(?:\((.*)\))?")
-_COLOR_RE_PATTERN = re.compile(r"(?ms)([A-Z_]+(?:\([^\)]+\))?(?:(?:\<\<).*?(?:\>\>)|(?:\@\{).*?(?:\}\@)))")
-_COLORING_RE_PATTERN = re.compile(r"(?ms)([A-Z_]+(?:\([^\)]+\))?)((?:\<\<.*?\>\>|\@\{.*?\}\@))")
+    COLORS[dark] = ColorSpec(COLORS[orig].color, light=False)
 
 
-def colorize(text, color='white', background=None, underline=False):
-    if not isinstance(text, str):
-        text = str(text)
-    fmt = _get_colorize_formatter(color, background, underline)
-    return fmt(text)
+ANSI_BEGIN = "\x1b"
+ANSI_END = ANSI_BEGIN + "[0m"
 
-def uncolorize(text):
-    return _RE_ANSI_COLOR.sub("", text)
+
+# this regex is used to split text into ANSI-colored/uncolored text blocks
+RE_FIND_ANSI_COLORING = re.compile(r"({0}.*?{0}\[0m)".format(ANSI_BEGIN))
+
+# this regex is used to tokenize an ANSI-colored string
+RE_PARSE_ANSI_COLORING = re.compile(
+    r"(?P<underline>{0}\[4m)"
+    r"?{0}\[(?P<light>[01]\d*)"
+    r"(?P<color>(?:;[1-9]\d*)*)m"
+    r"(?P<text>.*?)"
+    r"{0}\[0m".format(ANSI_BEGIN))
+
+
+# this regex is used to split text into markup/non-markup text blocks
+RE_FIND_COLOR_MARKUP = re.compile(
+    r"(?ms)("
+    r"[A-Z_]+(?:\([^\)]+\))?"
+    r"(?:"
+    r"(?:\<\<).*?(?:\>\>)|"
+    r"(?:\@\{).*?(?:\}\@)"
+    "))")
+
+# this regex is used to parse the color markup into a foreground color, optional background, and the text itself.
+# the text can be enclosed either by '<<..>>' or '@{...}@'
+RE_PARSE_COLOR_MARKUP = re.compile(
+    r"(?ms)"
+    r"([A-Z_]+(?:\([^\)]+\))?)"  # group 0: the coloring
+    r"(?:"
+    r"\<\<(.*?)\>\>|"            # group 1: first trap for text <<...>>
+    r"\@\{(.*?)\}\@"             # group 2: second trap for text @{...}@
+    ")")
 
 
 class Colorized(str):
+    """
+    A string with coloring mark-up that retains string operation without interfering with the markup.
+    For example::
+
+        >> len(Colorized("RED<<red>>"))
+        3
+
+        >> Colorized("RED<<Red>>").lower()
+        "RED<<red>>"
+    """
 
     class Token(str):
 
@@ -76,10 +109,11 @@ class Colorized(str):
         def __new__(cls, text, colorizer_name):
             self = str.__new__(cls, text)
             self.__name = colorizer_name
+            self.__colored = Colorizer.from_markup(self.__name)(text)
             return self
 
         def __str__(self):
-            return get_colorizer(self.__name)(str.__str__(self))
+            return self.__colored
 
         def copy(self, text):
             return self.__class__(text, self.__name)
@@ -91,27 +125,33 @@ class Colorized(str):
             return repr(self.raw())
 
     def __new__(cls, text):
-        text = uncolorize(text)  # remove exiting colors
+        text = uncolored(text, markup=False)  # remove exiting ANSI colors
         self = str.__new__(cls, text)
         self.tokens = []
-        for text in _COLOR_RE_PATTERN.split(text):
-            match = _COLORING_RE_PATTERN.match(text)
+        for part in RE_FIND_COLOR_MARKUP.split(text):
+            if not part:
+                continue
+            match = RE_PARSE_COLOR_MARKUP.match(part)
             if match:
-                stl = match.group(1).strip("_")
-                text = match.group(2)[2:-2]
-                for l in text.splitlines():
+                stl, part1, part2 = match.groups()
+                stl = stl.strip("_")
+                part = part1 or part2 or ""
+                for l in part.splitlines():
                     self.tokens.append(self.ColoredToken(l, stl))
                     self.tokens.append(self.Token("\n"))
-                if not text.endswith("\n"):
+                if not part.endswith("\n"):
                     del self.tokens[-1]
             else:
-                self.tokens.append(self.Token(text))
+                self.tokens.append(self.Token(part))
         self.uncolored = "".join(str.__str__(token) for token in self.tokens)
         self.colored = "".join(str(token) for token in self.tokens)
         return self
 
     def raw(self):
         return str.__str__(self)
+
+    def len_delta(self):
+        return len(self.colored) - len(self.uncolored)
 
     def __str__(self):
         return self.colored
@@ -122,6 +162,7 @@ class Colorized(str):
         return inner
 
     __len__ = withuncolored(len)
+
     count = withuncolored(str.count)
     endswith = withuncolored(str.endswith)
     find = withuncolored(str.find)
@@ -141,7 +182,7 @@ class Colorized(str):
             return self.__class__("".join(t.copy(func(t, *args)).raw() for t in self.tokens if t))
         return inner
 
-    #capitalize = withcolored(str.capitalize)
+    capitalize = withcolored(str.capitalize)
     expandtabs = withcolored(str.expandtabs)
     lower = withcolored(str.lower)
     replace = withcolored(str.replace)
@@ -171,8 +212,14 @@ class Colorized(str):
     def __add__(self, other):
         return self.__class__("".join(map(str.__str__, (self, other))))
 
+    def __radd__(self, other):
+        return self.__class__("".join(map(str.__str__, (other, self))))
+
     def __mod__(self, other):
         return self.__class__(self.raw() % other)
+
+    def __rmod__(self, other):
+        return self.__class__(other % self.raw())
 
     def format(self, *args, **kwargs):
         return self.__class__(self.raw().format(*args, **kwargs))
@@ -223,86 +270,193 @@ class Colorized(str):
         padding = self.uncolored.zfill(*args)[:-len(self.uncolored)]
         return self.__class__(padding + self.raw())
 
+    @classmethod
+    def from_ansi(cls, text):
+        """
+        Parse ANSI coloring and convert into Colorized text
+        """
+        parts = []
+        for part in RE_FIND_ANSI_COLORING.split(text):
+            if not part:
+                continue
+            match = RE_PARSE_ANSI_COLORING.match(part)
+            if match:
+                d = match.groupdict()
+                fg = bg = None
+                for color in d['color'].split(";"):
+                    if not color:
+                        continue
+                    color = int(color)
+                    if color >= 40:
+                        bg = color_names[color - 40]
+                    else:
+                        fg = color_names[color - 30]
+
+                color = fg.upper()
+                if d['light'] in (None, "", "0"):
+                    color = "DARK_{}".format(color)
+                if bg:
+                    color = "{}({})".format(color, bg.upper())
+                part = d['text']
+                if "<<" in part or ">>" in part:
+                    sep = "@{", "}@"
+                else:
+                    sep = "<<", ">>"
+
+                parts.append("{color}{sep[0]}{part}{sep[1]}".format(**locals()))
+            else:
+                parts.append(part)
+        return cls("".join(parts))
+
+    del withuncolored, withcolored
+
+
 C = Colorized
 
 
-def colored(string, *args):
-    return str(C(string % args if args else string))
-
-
-def colorize_by_patterns(text, no_color=False):
-    if no_color:
-        def _subfunc(match_obj):
-            return match_obj.group(2)[2:-2]
-    else:
-        def _subfunc(match_obj):
-            return get_colorizer(match_obj.group(1))(match_obj.group(2)[2:-2])
-
-    text = _COLORING_RE_PATTERN.sub(_subfunc, text)
-    if no_color:
-        text = uncolorize(text)
+def uncolored(text, ansi=True, markup=True):
+    """
+    Strip coloring markup and/or ANSI escape coloing from text
+    """
+    if ansi:
+        text = re.sub(re.escape(ANSI_BEGIN) + '.+?m', "", text)
+    if markup:
+        text = RE_PARSE_COLOR_MARKUP.sub(lambda m: m.group(2) or m.group(3), text)
     return text
 
 
-COLORIZERS = {}
+def colorize(text):
+    """
+    Colorize text according to markup
+    """
+    if not isinstance(text, str):
+        text = str(text)
+
+    def _subfunc(match_obj):
+        colorizer = Colorizer.from_markup(match_obj.group(1))
+        return colorizer(match_obj.group(2) or match_obj.group(3))
+
+    return RE_PARSE_COLOR_MARKUP.sub(_subfunc, text)
 
 
-def _get_colorize_formatter(color='white', background=None, underline=False):
-    key = color, background, underline
+class Colorizer():
+    """
+    A callable for styling text::
 
-    try:
-        return COLORIZERS[key]
-    except KeyError:
-        pass
+        >> warning = Colorizer('yellow', 'blue', underline=True, name='warning')
+        >> warning("this is a warning")
+        '\\x1b[4m\\x1b[1;44;33mthis is a warning\\x1b[0m'
+    """
 
-    light = COLORS[color]['light']
-    color = COLORS[color]['color']
-    if not underline and not light:
-        prefix_str = MAGIC + "[0"
-    elif not underline or not light:
-        prefix_str = MAGIC + "[%d" % (light and 1 or 4)
-    else:
-        prefix_str = MAGIC + "[4m" + MAGIC + "[1"
-    if background is not None:
-        background = COLORS[background]['color']
-        color_str = "%d;%d" % (background + 40, color + 30)
-    else:
-        color_str = "%d" % (color + 30,)
+    COLORIZERS = {}
 
-    fmt = "%s;%sm{}%s" % (prefix_str, color_str, END_CODE)
+    def __new__(cls, color='white', background=None, underline=False, name=None):
+        if name:
+            name = name.lower()
+            try:
+                return cls.COLORIZERS[name]
+            except KeyError:
+                pass
 
-    COLORIZERS[key] = fmt.format
-    return fmt.format
+        key = color, background, underline
+
+        try:
+            ret = cls.COLORIZERS[key]
+        except KeyError:
+            ret = cls.COLORIZERS[key] = super().__new__(cls)
+
+        if name:
+            cls.COLORIZERS[name] = ret
+
+        return ret
+
+    def __init__(self, color='white', background=None, underline=False, name=None):
+        self.color = color
+        self.background = background
+        self.underline = underline
+        self.name = name.lower() if name else None
+
+        color_spec = COLORS[color]
+        light = color_spec.light
+        color = color_spec.color
+        if not underline and not light:
+            prefix_str = ANSI_BEGIN + "[0"
+        elif not underline or not light:
+            prefix_str = ANSI_BEGIN + "[%d" % (1 if light else 4)
+        else:
+            prefix_str = ANSI_BEGIN + "[4m" + ANSI_BEGIN + "[1"
+        if background is not None:
+            background = COLORS[background].color
+            color_str = "%d;%d" % (background + 40, color + 30)
+        else:
+            color_str = "%d" % (color + 30,)
+
+        self.fmt = "%s;%sm{}%s" % (prefix_str, color_str, ANSI_END)
+
+    def __repr__(self):
+        if self.name:
+            return "{0.__class__.__name__}('{0.name}')".format(self)
+        else:
+            spec = self.color
+            if self.background:
+                spec = "{}/{}".format(spec, self.background)
+            if self.underline:
+                spec += ", underlined"
+            return "{0.__class__.__name__}({1})".format(self, spec)
+
+    def __call__(self, text):
+        return self.fmt.format(text)
+
+    # this regex is used to parse the color spec in a color markup into a foreground color and an optional background color
+    RE_PARSE_COLOR_SPEC = re.compile(r"([\w]+)(?:\((.*)\))?")
+
+    @classmethod
+    def from_markup(cls, markup):
+        try:
+            return cls.COLORIZERS[markup.lower()]
+        except KeyError:
+            pass
+        color, background = (c and c.lower().strip("_") for c in cls.RE_PARSE_COLOR_SPEC.match(markup).groups())
+        if color not in COLORS:
+            color = "white"
+        if background not in COLORS:
+            background = None
+        return cls(color=color, background=background, name=markup)
 
 
-def get_colorizer(name):
-    try:
-        return COLORIZERS[name.lower().strip("_")]
-    except KeyError:
-        pass
+def register_colorizers(**styles):
+    """
+    Install named colorizers::
 
-    color, background = (c and c.lower().strip("_") for c in _COLORIZER_RE_PATTERN.match(name).groups())
-    if color not in COLORS:
-        color = "white"
-    if background not in COLORS:
-        background = None
-    return add_colorizer(name, color, background)
+        >> register_colorizers(
+            warning="yellow",               # yellow foreground
+            critical=("yellow", "red"),     # yellow on red
+            url=("white", "blue", True),    # white on blue with underline
+            )
+    """
 
-
-def add_colorizer(name, color="white", background=None):
-    COLORIZERS[name.lower().strip("_")] = colorizer = _get_colorize_formatter(color=color, background=background)
-    return colorizer
-
-
-def init_colorizers(styles):
+    ret = {}
     for name, style in styles.items():
-        add_colorizer(name, color=style['fg'], background=style['bg'])
+        if isinstance(style, str):
+            fg = style
+            bg = None
+            underline = False
+        elif isinstance(style, tuple):
+            fg, bg, *more = style
+            underline = more[0] if more else False
+        else:
+            raise ValueError("Invalid style: %r (expecting an str or a fg/bg tuple)", (style,))
+        ret[name] = Colorizer(name=name, color=fg, background=bg, underline=underline)
+    return ret
 
 
-globals().update((name.upper(), get_colorizer(name)) for name in COLORS)
+globals().update((name.upper(), Colorizer(color=name, name=name)) for name in COLORS)
 
 
 if __name__ == '__main__':
+    """
+    Colorize lines from stdin
+    """
     import fileinput
     for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
-        print(colorize_by_patterns(line), end="", flush=True)
+        print(colorize(line), end="", flush=True)
