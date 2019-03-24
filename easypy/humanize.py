@@ -595,20 +595,24 @@ def format_size(num, suffix='B'):
     return "%.1f%s%s" % (num, 'Yi', suffix)
 
 
-def ipython_mapping_repr(mapping, p, cycle):
-    # used by IPython. add to any mapping class as '_repr_pretty_'
+def ipython_fields_repr(name, field_items, p, cycle):
     from easypy.colors import DARK_CYAN
     if cycle:
-        p.text('%s(...)' % mapping.__class__.__name__)
+        p.text('%s(...)' % (name,))
         return
-    prefix = '%s(' % mapping.__class__.__name__
+    prefix = '%s(' % (name,)
     with p.group(len(prefix), prefix, ')'):
-        for idx, (k, v) in enumerate(sorted(mapping.items())):
+        for idx, (k, v) in enumerate(field_items):
             if idx:
                 p.text(',')
                 p.breakable()
             with p.group(len(k)+1, DARK_CYAN(k) + "="):
-                p.pretty(mapping[k])
+                p.pretty(v)
+
+
+def ipython_mapping_repr(mapping, p, cycle):
+    """Used by IPython. add to any mapping class as '_repr_pretty_'"""
+    ipython_fields_repr(mapping.__class__.__name__, sorted(mapping.items()), p, cycle)
 
 
 BAR_SEQUENCE = ' ▏▎▍▌▋▊▉██'
@@ -687,3 +691,11 @@ def percentages_comparison(actual, expected, key_caption='Item', color_bounds={'
     for item in sorted(generate(), key=lambda a: a.abs_diff, reverse=True):
         table.add_row(**item)
     return table
+
+
+class _ReprAsString:
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return str(self.value)

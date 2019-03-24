@@ -60,7 +60,7 @@ class Field(object):
                  on the TypedStruct object.
     """
 
-    def __init__(self, type, *, default=MANDATORY, preprocess=None, meta=Bunch()):
+    def __init__(self, type, *, default=MANDATORY, repr=AUTO, hash=AUTO, preprocess=None, meta=Bunch()):
         if isinstance(type, list):
             if len(type) != 1:
                 raise InvalidFieldType(field_type=type,
@@ -98,6 +98,32 @@ class Field(object):
         ...    a.default = 12
         >>> Foo()
         Foo(a=12)
+        """
+
+        self.repr = repr
+        """
+        How to represent the field when converting the typed struct to a string.
+
+        >>> from easypy.typed_struct import TypedStruct
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.repr = lambda n: '0x%X' % n  # show a as hex
+        >>>     b = int
+        >>>     b.repr = False  # don't show b in the representation
+        >>> Foo(a=11, b=12)
+        Foo(a=0xB)
+        """
+
+        self.hash = hash
+        """
+        How to hash the field in when creating an hash for the typed struct.
+
+        >>> from easypy.typed_struct import TypedStruct
+        >>> class Foo(TypedStruct):
+        >>>     a = int
+        >>>     a.hash = lambda a: a % 2  # a's hash will only be it's parity
+        >>>     b = int
+        >>>     b.hash = False  # b will not be considered in the hash
         """
 
         # NOTE: _validate_type() will be also be called in _process_new_value()
@@ -520,12 +546,37 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
     def __setattr__(self, name, value):
         self._get_field(name, NotAField).__set__(self, value)
 
-    def __repr__(self):
-        return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % pair for pair in self.items()))
+    def __gen_for_repr(self):
+        from .humanize import _ReprAsString
+        for field in self._fields:
+            if field.repr is False:
+                continue  # skip this field
+            elif field.repr is AUTO:
+                yield field.name, field.__get__(self)
+            else:
+                assert callable(field.repr), '%s.repr must be False, AUTO or a callable' % (field,)
+                yield field.name, _ReprAsString(field.repr(field.__get__(self)))
 
-    def _repr_pretty_(self, *args, **kwargs):
-        from easypy.humanize import ipython_mapping_repr
-        return ipython_mapping_repr(self, *args, **kwargs)
+    def __repr__(self):
+        # return '%s(%s)' % (type(self).__name__, ', '.join(gen_parts()))
+        return '%s(%s)' % (type(self).__name__, ', '.join('%s=%r' % pair for pair in self.__gen_for_repr()))
+
+    def _repr_pretty_(self, p, cycle):
+        from easypy.humanize import ipython_fields_repr
+        return ipython_fields_repr(type(self).__name__, self.__gen_for_repr(), p, cycle)
+
+    def __hash__(self):
+        def gen_parts():
+            yield type(self)
+            for field in self._fields:
+                if field.hash is False:
+                    continue  # skip this field
+                elif field.hash is AUTO:
+                    yield field.__get__(self)
+                else:
+                    assert callable(field.hash), '%s.hash must be False, AUTO or a callable' % (field,)
+                    yield field.hash(field.__get__(self))
+        return hash(tuple(gen_parts()))
 
     def __eq__(self, other):
         if type(self) != type(other):
