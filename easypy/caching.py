@@ -15,7 +15,7 @@ from .misc import kwargs_resilient
 from .deprecation import deprecated
 from .units import HOUR
 from .tokens import DELETED, NO_DEFAULT
-
+from .humanize import yesno_to_bool
 
 _logger = getLogger(__name__)
 
@@ -28,7 +28,7 @@ except:  # noqa
         from dbm import error as GDBMException
 
 
-_disable_persistance = bool(os.getenv("bamboo_planKey", os.getenv("WEKA_job_key", None)))  # disable this feature when running from bamboo
+DISABLE_CACHING_PERSISTENCE = yesno_to_bool(os.getenv("EASYPY_DISABLE_CACHING_PERSISTENCE", "no"))
 
 
 class PersistentCache(object):
@@ -60,7 +60,7 @@ class PersistentCache(object):
 
     @contextmanager
     def db_opened(self, lock=False):
-        if _disable_persistance:
+        if DISABLE_CACHING_PERSISTENCE:
             yield {}
             return
 
