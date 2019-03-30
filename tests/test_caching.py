@@ -203,9 +203,9 @@ def test_persistent_cache(persistent_cache_path):
     assert ps.get(TEST_KEY, default=None) is None, "Database was not cleared properly"
 
     # Expiration
-    ps = PersistentCache(persistent_cache_path, version=3, expiration=1 * DAY)
+    ps = PersistentCache(persistent_cache_path, version=3, expiration=.01)
     ps.set(TEST_KEY, TEST_VALUE)
-    ps.set("_PersistentCacheSignature", [3, time.time() - 2 * DAY])
+    time.sleep(0.011)
     assert ps.get(TEST_KEY, None) is None, "Database was not cleaned up on expiration"
 
 
