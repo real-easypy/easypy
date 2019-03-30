@@ -21,7 +21,7 @@ The above replaces the following threading boiler-plate code::
             executor.submit(server.send, args=['Hello'])
             for server in servers]
 
-    responses = [future.result for future in futures]```
+    responses = [future.result() for future in futures]```
 
 
 ``concurrent``
@@ -916,8 +916,8 @@ class concurrent(object):
             concurrent(requests.get, "api.myserver.com/data2") as async2:
             my_data = open("local_data").read()
 
-        remote_data1 = async1.result
-        remote_data2 = async2.result
+        remote_data1 = async1.result()
+        remote_data2 = async2.result()
         process_it(my_data, remote_data1, remote_data2)
 
     Run something repeatedly in the background:
@@ -1011,6 +1011,12 @@ class concurrent(object):
                 return True
             return False
         return self.stopper.wait(timeout)
+
+    def result(self, timeout=None):
+        self.wait(timeout=timeout)
+        if self.throw and self.exc:
+            raise self.exc
+        return self._result
 
     @contextmanager
     def paused(self):
