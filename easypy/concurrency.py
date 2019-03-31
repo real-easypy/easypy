@@ -29,10 +29,10 @@ The above replaces the following threading boiler-plate code::
 A high-level thread controller.
 As a context manager, it runs a function in a thread, and joins it upon exiting the context
 
-    with concurrent(requests.get, "api.myserver.com/data") as async:
+    with concurrent(requests.get, "api.myserver.com/data") as future:
         my_data = open("local_data").read()
 
-    remote_data = async.result()
+    remote_data = future.result()
     process_it(my_data, remote_data)
 
 It can also be used to run something repeatedly in the background:
@@ -311,7 +311,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
 def _submit_execution(executor, func, args, kwargs, ctx, funcname=None):
     """
-    This helper takes care of submitting a function for async execution, while wrapping and storing
+    This helper takes care of submitting a function for asynchronous execution, while wrapping and storing
     useful information for tracing it in logs (for example, by ``Futures.dump_stacks``)
     """
     future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
@@ -400,7 +400,7 @@ class Futures(list):
         with ThreadPoolExecutor(workers) as executor:
 
             def submit(func, *args, log_ctx={}, **kwargs):
-                "Submit a new async task to this executor"
+                "Submit a new asynchronous task to this executor"
 
                 future = _submit_execution(executor, func, args, kwargs, ctx=dict(log_ctx, **log_ctx))
                 futures.append(future)
@@ -554,7 +554,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
     """
     Map the list of tuple-parameters onto asynchronous calls to the specified function::
 
-        with async(connect, [(host1,), (host2,), (host3,)]) as futures:
+        with asynchronous(connect, [(host1,), (host2,), (host3,)]) as futures:
             ...
 
         connections = futures.results()
@@ -563,7 +563,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
     :param params: A list of tuples to map onto the function.
     :param workers: The number of workers to use. Defaults to the number of items in ``params``.
     :param log_contexts: A optional list of logging context objects, matching the items in ``params``.
-    :param final_timeout: The amount of time to allow for the futures to complete after exiting the async context.
+    :param final_timeout: The amount of time to allow for the futures to complete after exiting the asynchronous context.
     """
     if params is None:
         params = [()]
