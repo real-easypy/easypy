@@ -86,7 +86,11 @@ from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize, uncolored
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, MAX_THREAD_POOL_SIZE, raise_in_main_thread
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_main_thread
+
+
+MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
+DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 
 this_module = import_module(__name__)
@@ -96,14 +100,6 @@ if is_module_patched("threading"):
     import gevent
     MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
     THREADING_MODULE_PATHS.append(gevent.__path__[0])
-
-
-if is_module_patched("threading"):
-    import gevent
-    THREADING_MODULE_PATHS.append(gevent.__path__[0])
-
-
-DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 
 try:
