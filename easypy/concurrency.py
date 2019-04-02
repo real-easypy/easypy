@@ -243,20 +243,55 @@ class Futures(list):
 
     @classmethod
     @contextmanager
-    def executor(cls, workers=MAX_THREAD_POOL_SIZE, ctx={}):
-        futures = cls()
-        with ThreadPoolExecutor(workers) as executor:
-            def submit(func, *args, log_ctx={}, **kwargs):
+    def executor(cls, workers=None, ctx={}):
+        if workers is None:
+            workers = MAX_THREAD_POOL_SIZE
+
+        class PooledFutures(cls):
+
+            killed = False
+
+            def submit(self, func, *args, log_ctx={}, **kwargs):
+                "Submit a new async task to this executor"
+
                 _ctx = dict(ctx, **log_ctx)
                 future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
                 future.ctx = _ctx
                 future.funcname = _get_func_name(func)
-                futures.append(future)
+                self.append(future)
                 return future
-            futures.submit = submit
-            futures.shutdown = executor.shutdown
-            yield futures
-        futures.result()  # bubble up any exceptions
+
+            def kill(self):
+                "Kill the executor and discard any running tasks"
+                self.cancel()
+                self.shutdown(wait=False)
+                while executor._threads:
+                    thread = executor._threads.pop()
+                    if getattr(thread, "_greenlet", None):
+                        thread._greenlet.kill()
+                self.killed = True
+
+            def shutdown(self, *args, **kwargs):
+                executor.shutdown(*args, **kwargs)
+
+        with ThreadPoolExecutor(workers) as executor:
+
+            futures = PooledFutures()
+
+            try:
+                yield futures
+            except:  # noqa
+                _logger.debug("shutting down ThreadPoolExecutor due to exception")
+                futures.kill()
+                raise
+            else:
+                if not futures.killed:
+                    # force exceptions to bubble up
+                    futures.result()
+            finally:
+                # break the cycle so that the GC doesn't clean up the executor under a lock (https://bugs.python.org/issue21009)
+                futures.kill = futures.shutdown = futures.submit = None
+                futures = None
 
     def dump_stacks(self, futures=None, verbose=False):
         futures = futures or self
@@ -365,18 +400,15 @@ def _get_context(future):
 
 
 @contextmanager
-def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0, **kw):
+def async(func, params=None, workers=None, log_contexts=None, **kw):
     if params is None:
         params = [()]
     if not isinstance(params, list):
         params = [params]
     params = _to_args_list(params)
     log_contexts = _to_log_contexts(params, log_contexts)
-
-    workers = workers or min(MAX_THREAD_POOL_SIZE, len(params))
-    executor = ThreadPoolExecutor(workers) if workers else None
-
-    funcname = _get_func_name(func)
+    if workers is None:
+        workers = min(MAX_THREAD_POOL_SIZE, len(params))
 
     try:
         signature = inspect.signature(func)
@@ -385,49 +417,22 @@ def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0,
         pass
     else:
         if '_sync' in signature.parameters and '_sync' not in kw:
-            assert len(params) <= executor._max_workers, 'SynchronizationCoordinator with %s tasks but only %s workers' % (
-                len(params), executor._max_workers)
+            assert len(params) <= workers, 'SynchronizationCoordinator with %s tasks but only %s workers' % (len(params), workers)
             synchronization_coordinator = SynchronizationCoordinator(len(params))
             kw['_sync'] = synchronization_coordinator
 
             func = synchronization_coordinator._abandon_when_done(func)
 
-    futures = Futures()
-    for args, ctx in zip(params, log_contexts):
-        future = executor.submit(_run_with_exception_logging, func, args, kw, ctx)
-        future.ctx = ctx
-        future.funcname = funcname
-        futures.append(future)
+    if not params:
+        # noop
+        yield Futures()
+        return
 
-    def kill(wait=False):
-        nonlocal killed
-        futures.cancel()
-        if executor:
-            executor.shutdown(wait=wait)
-        killed = True
+    with Futures.executor(workers=workers) as futures:
+        for args, ctx in zip(params, log_contexts):
+            futures.submit(func, *args, log_ctx=ctx, **kw)
 
-    killed = False
-    futures.kill = kill
-
-    try:
         yield futures
-    except:
-        _logger.debug("shutting down ThreadPoolExecutor due to exception")
-        kill(wait=False)
-        raise
-    else:
-        if executor:
-            executor.shutdown(wait=not killed)
-        if not killed:
-            # force exceptions to bubble up
-            try:
-                futures.result(timeout=final_timeout)
-            except CancelledError:
-                pass
-    finally:
-        # break the cycle so that the GC doesn't clean up the executor under a lock (https://bugs.python.org/issue21009)
-        futures.kill = None
-        futures = None
 
 
 def concurrent_find(func, params, **kw):
