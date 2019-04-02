@@ -238,8 +238,28 @@ class Futures(list):
         cancelled = [f.cancel() for f in self]  # list-comp, to ensure we call cancel on all futures
         return all(cancelled)
 
-    def as_completed(self, timeout=None):
-        return as_completed(self, timeout=timeout)
+    def as_completed(self, timeout=None, initial_log_interval=None):
+        pending = list(self)
+        log_interval = initial_log_interval or 2 * MINUTE
+        global_timer = Timer(expiration=timeout)
+        iteration = 0
+        while not global_timer.expired:
+            try:
+                for future in as_completed(pending, timeout=log_interval):
+                    yield future
+                    pending.remove(future)
+                return
+            except FutureTimeoutError:
+                pass
+
+            iteration += 1
+            if iteration % 5 == 0:
+                log_interval *= 5
+            with _logger.indented("(Waiting for %s on %s/%s tasks...)",
+                                  time_duration(global_timer.elapsed),
+                                  len(pending), len(self),
+                                  level=logging.WARNING, footer=False):
+                self.dump_stacks(pending, verbose=global_timer.elapsed >= HOUR)
 
     @classmethod
     @contextmanager
@@ -443,10 +463,11 @@ def async(func, params=None, workers=None, log_contexts=None, final_timeout=2.0,
 
 def concurrent_find(func, params, **kw):
     timeout = kw.pop("concurrent_timeout", None)
+    initial_log_interval = kw.pop("initial_log_interval")
     with async(func, list(params), **kw) as futures:
         future = None
         try:
-            for future in futures.as_completed(timeout=timeout):
+            for future in futures.as_completed(timeout=timeout, initial_log_interval=initial_log_interval):
                 if not future.exception() and future.result():
                     futures.kill()
                     return future.result()
@@ -682,7 +703,8 @@ class MultiObject(object, metaclass=MultiObjectMeta):
                 yield self._new(ret)
 
     def concurrent_find(self, func=lambda f: f(), **kw):
-        return concurrent_find(func, self, log_contexts=self._log_ctx, workers=self._workers, **kw)
+        initial_log_interval = kw.pop("initial_log_interval", self._initial_log_interval)
+        return concurrent_find(func, self, log_contexts=self._log_ctx, workers=self._workers, initial_log_interval=initial_log_interval, **kw)
 
     def __enter__(self):
         return self.call(lambda obj: obj.__enter__())
