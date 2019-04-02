@@ -215,7 +215,7 @@ def configure_contextual_logging(_ctx=ExitStack(), **kw):
     _ctx.enter_context(THREAD_LOGGING_CONTEXT(indentation=indentation, **kw))
 
 
-THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context")
+THREAD_LOGGING_CONTEXT = ThreadContexts(counters="indentation", stacks="context", defaults=dict(host=''))
 get_current_context = THREAD_LOGGING_CONTEXT.flatten
 
 
