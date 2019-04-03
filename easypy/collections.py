@@ -317,7 +317,7 @@ class ObjectCollectionBase(object):
         # this python fu avoids filtering the entire list, while still checking for one item
         matching = [obj for obj, _ in zip(self.iter_filtered(*preds, **filters), range(2))]
         if len(matching) > 1:
-            raise TooManyObjectsFound(self, preds, filters)
+            raise TooManyObjectsFound(self, preds, filters, _found=len(matching))
         return matching[0] if matching else None
 
     def get(self, *preds, **filters):
@@ -326,7 +326,7 @@ class ObjectCollectionBase(object):
         if len(matching) == 0:
             raise ObjectNotFound(self, preds, filters)
         if len(matching) != 1:
-            raise TooManyObjectsFound(self, preds, filters, found=len(matching))
+            raise TooManyObjectsFound(self, preds, filters, _found=len(matching))
         return matching[0]
 
     def choose(self, *preds, **filters):
