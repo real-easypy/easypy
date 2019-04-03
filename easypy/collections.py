@@ -753,8 +753,13 @@ def grouped(sequence, key=None, transform=None):
     """
     Parse the sequence into groups, according to key:
 
-        >>> grouped(range(10), lambda n: n % 3 == 0)
-        {False: [1, 2, 4, 5, 7, 8], True: [0, 3, 6, 9]}
+        >>> ret = grouped(range(10), lambda n: n % 3)
+        >>> ret[0]
+        [0, 3, 6, 9]
+        >>> ret[1]
+        [1, 4, 7]
+        >>> ret[2]
+        [2, 5, 8]
     """
     groups = {}
     if not key:
@@ -936,6 +941,45 @@ def as_list(generator, sort_by=None):
             l.sort(key=sort_by)
         return l
     return inner
+
+
+def takesome(generator, max=None, min=0):
+    """
+    Take between ``min`` and ``max`` items from the generator.
+    Throws a ValueError if the generator didn't yield ``min`` items.
+
+    >>> list(takesome("abcdef", 3))
+    ['a', 'b', 'c']
+
+    >>> list(takesome("abcdef", 10))
+    ['a', 'b', 'c', 'd', 'e', 'f']
+
+    >>> list(takesome("abcdef", 0))
+    []
+
+    >>> list(takesome("abcdef", min=8))
+    Traceback (most recent call last):
+        ...
+    ValueError: Not enough items in sequence (wanted 8, got 6)
+    """
+
+    if max is not None and max < min:
+        raise ValueError("'max' must be great than 'min'")
+
+    items = [p for p, _ in zip(generator, range(min))]
+
+    if len(items) < min:
+        raise ValueError("Not enough items in sequence (wanted {}, got {})".format(min, len(items)))
+
+    yield from items
+
+    if max is None:
+        yield from generator
+        return
+
+    remain = max - min
+    for p, _ in zip(generator, range(remain)):
+        yield p
 
 
 if __name__ == "__main__":

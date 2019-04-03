@@ -1,5 +1,5 @@
 """
-This module is about synchronizing and coordinating between... things.
+This module is about synchronizing and coordinating events among concurrent activities.
 """
 
 
@@ -17,6 +17,7 @@ import os
 from collections import Counter
 from .bunch import Bunch
 
+import easypy._multithreading_init
 from .gevent import is_module_patched
 from .decorations import wrapper_decorator, parametrizeable_decorator
 from .caching import locking_cache
@@ -124,15 +125,8 @@ def async_raise_in_main_thread(exc, use_concurrent_loop=True):
         do_signal(exc)
 
 
-THREADING_MODULE_PATHS = [threading.__file__]
-MAX_THREAD_POOL_SIZE = 50
-
-
 if is_module_patched("threading"):
     import gevent
-    MAX_THREAD_POOL_SIZE = 5000  # these are not threads anymore, but greenlets. so we allow a lot of them
-    THREADING_MODULE_PATHS.append(gevent.__path__[0])
-
     def _rimt(exc):
         _logger.info('YELLOW<<killing main thread greenlet>>')
         main_thread_greenlet = threading.main_thread()._greenlet
@@ -469,7 +463,7 @@ class SynchronizationCoordinator(object):
         """
         Stop participating in this synchronization coordinator.
 
-        Note: when using with MultiObject/concurrent_map/async and _sync=SYNC, this
+        Note: when using with MultiObject/concurrent_map/asynchronous and _sync=SYNC, this
         is called automatically when a thread terminates on return or on exception.
         """
         with self._lock:
@@ -528,6 +522,7 @@ class SynchronizationCoordinator(object):
                     def wrapper_cm():
                         try:
                             with result as yielded_value:
+                                self.wait_for_everyone()  # see https://github.com/weka-io/easypy/issues/150
                                 yield yielded_value
                         finally:
                             self.abandon()

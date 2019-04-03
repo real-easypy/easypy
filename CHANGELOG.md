@@ -11,10 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `EasyMeta`: the `before_subclass_init` hook.
 - `wait` and `iter_wait` support `log_interval` and `log_level` for printing
   the thrown `PredicateNotSatisfied` to the log.
+- `takesome`: a new generator that partially yields a sequence
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
-- `concurrent`: capture `KeyboardInterrupt` exceptions like any other
+- `concurrent`: capture `KeyboardInterrupt` exceptions like any other.
+- doctests in various functions and classes.
+- `SynchronizedSingleton` on `contextmanager` deadlock when some (but not all)
+  of the CMs throw.
+- `resilient` between `timecache`s bug.
 
 ### Changed
 - Reorganization:
@@ -23,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     `easypy.sync`
   - Moved `throttled` from `easypy.concurrency` to `easypy.timing`.
 - `easypy.signals`: Async handlers are invoked first, then the sequential handlers.
+- `async` -> `asynchronous`: to support python 3.7, where this word is reserved
 
 ### Removed
 - `Bunch`: The rigid `KEYS` feature.

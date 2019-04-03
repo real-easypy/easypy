@@ -17,7 +17,7 @@ from itertools import count
 
 
 from easypy.humanize import format_thread_stack
-from . import _set_thread_uuid, _set_main_uuid
+from ._multithreading_init import _set_thread_uuid, _set_main_uuid
 
 
 _logger = getLogger('gevent')

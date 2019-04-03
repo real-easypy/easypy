@@ -15,7 +15,7 @@ from .misc import kwargs_resilient
 from .deprecation import deprecated
 from .units import HOUR
 from .tokens import DELETED, NO_DEFAULT
-
+from .humanize import yesno_to_bool
 
 _logger = getLogger(__name__)
 
@@ -28,7 +28,7 @@ except:  # noqa
         from dbm import error as GDBMException
 
 
-_disable_persistance = bool(os.getenv("bamboo_planKey", os.getenv("WEKA_job_key", None)))  # disable this feature when running from bamboo
+DISABLE_CACHING_PERSISTENCE = yesno_to_bool(os.getenv("EASYPY_DISABLE_CACHING_PERSISTENCE", "no"))
 
 
 class PersistentCache(object):
@@ -36,7 +36,7 @@ class PersistentCache(object):
     A memoizer that stores its cache persistantly using shelve.
 
     :param path: location of cache shelve file.
-    :param version: increment this to force-clear the cache.
+    :param version: modify to deprecate old cahed data
     :param expiration: expiration in seconds for the entire cache. ``None`` to disable expiration.
 
     Example::
@@ -51,16 +51,18 @@ class PersistentCache(object):
         ...     return a
     """
 
-    def __init__(self, path, version=0, expiration=4 * HOUR, ignored_keywords=None):
+    def __init__(self, path, version=None, expiration=4 * HOUR, ignored_keywords=None):
         self.path = path
         self.version = version
+        if version is not None:
+            self.path = "{self.path}.v{version}".format(**locals())
         self.expiration = expiration
         self.lock = RLock()
         self.ignored_keywords = set(ilistify(ignored_keywords)) if ignored_keywords else set()
 
     @contextmanager
     def db_opened(self, lock=False):
-        if _disable_persistance:
+        if DISABLE_CACHING_PERSISTENCE:
             yield {}
             return
 
@@ -80,12 +82,6 @@ class PersistentCache(object):
                     db = {}
 
         with ExitStack() as stack:
-            timestamp = time.time()
-            c_version, c_timestamp = db.get("_PersistentCacheSignature", [0, 0])
-            if not ((c_version >= self.version) and (self.expiration is None or (c_timestamp + self.expiration) > timestamp)):
-                with self.lock:
-                    db.clear()
-                    db["_PersistentCacheSignature"] = (self.version, timestamp)
             if lock:
                 stack.enter_context(self.lock)
             yield db
@@ -98,12 +94,17 @@ class PersistentCache(object):
             if value == DELETED:
                 del db[key]
             else:
-                db[key] = value
+                db[key] = (value, time.time())
 
     def get(self, key, default=NO_DEFAULT):
         try:
             with self.db_opened() as db:
-                return db[key]
+                value, timestamp = db[key]
+            if not self.expiration:
+                pass
+            elif (timestamp + self.expiration) <= time.time():
+                raise KeyError()
+            return value
         except KeyError:
             if default is NO_DEFAULT:
                 raise
@@ -217,6 +218,7 @@ else:
 
 class _TimeCache(DecoratingDescriptor):
     def __init__(self, func, **kwargs):
+        update_wrapper(self, func)  # this needs to be first to avoid overriding attributes we set
         super().__init__(func=func, cached=True)
         self.func = func
         self.kwargs = kwargs
@@ -254,8 +256,6 @@ class _TimeCache(DecoratingDescriptor):
                 return _make_key(args, kwargs, typed=self.typed)
 
         self.make_key = make_key
-
-        update_wrapper(self, self.func)
 
     def __call__(self, *args, **kwargs):
         key = self.make_key(args, kwargs)
