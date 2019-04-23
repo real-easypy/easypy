@@ -1,7 +1,7 @@
 import re
 import time
 from queue import PriorityQueue
-from .colors import uncolorize
+from .colors import uncolored
 from .logging import PROGRESS_BAR
 
 
@@ -42,7 +42,7 @@ class TimestampedStream(object):
         except StopIteration:
             return
         else:
-            ts = self.get_timestamp(uncolorize(line))
+            ts = self.get_timestamp(uncolored(line))
             return ts, (self.prefix if ts else self.filler) + line, self
 
     def get_timestamp(self, line):

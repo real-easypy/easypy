@@ -21,7 +21,7 @@ The above replaces the following threading boiler-plate code::
             executor.submit(server.send, args=['Hello'])
             for server in servers]
 
-    responses = [future.result for future in futures]```
+    responses = [future.result() for future in futures]```
 
 
 ``concurrent``
@@ -29,10 +29,10 @@ The above replaces the following threading boiler-plate code::
 A high-level thread controller.
 As a context manager, it runs a function in a thread, and joins it upon exiting the context
 
-    with concurrent(requests.get, "api.myserver.com/data") as async:
+    with concurrent(requests.get, "api.myserver.com/data") as future:
         my_data = open("local_data").read()
 
-    remote_data = async.result()
+    remote_data = future.result()
     process_it(my_data, remote_data)
 
 It can also be used to run something repeatedly in the background:
@@ -85,8 +85,12 @@ from easypy.humanize import format_thread_stack, yesno_to_bool
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
-from easypy.colors import colorize_by_patterns
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, MAX_THREAD_POOL_SIZE, raise_in_main_thread
+from easypy.colors import colorize, uncolored
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_main_thread
+
+
+MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
+DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 
 this_module = import_module(__name__)
@@ -95,10 +99,8 @@ THREADING_MODULE_PATHS = [threading.__file__]
 
 if is_module_patched("threading"):
     import gevent
+    MAX_THREAD_POOL_SIZE *= 100  # these are not threads anymore, but greenlets. so we allow a lot of them
     THREADING_MODULE_PATHS.append(gevent.__path__[0])
-
-
-DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 
 try:
@@ -246,13 +248,13 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
     def render(self, *, width=80, color=True, **kw):
         buff = self._get_buffer(color=color, **kw)
         text = buff.render(width=width, edges=not color)
-        return colorize_by_patterns("\n" + text)
+        return colorize("\n" + text)
 
     def _get_buffer(self, **kw):
         if kw.get("color", True):
             normalize_color = lambda x: x
         else:
-            normalize_color = partial(colorize_by_patterns, no_color=True)
+            normalize_color = uncolored
 
         def _format_context(context):
             if not isinstance(context, dict):
@@ -306,7 +308,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
 def _submit_execution(executor, func, args, kwargs, ctx, funcname=None):
     """
-    This helper takes care of submitting a function for async execution, while wrapping and storing
+    This helper takes care of submitting a function for asynchronous execution, while wrapping and storing
     useful information for tracing it in logs (for example, by ``Futures.dump_stacks``)
     """
     future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
@@ -395,7 +397,7 @@ class Futures(list):
         with ThreadPoolExecutor(workers) as executor:
 
             def submit(func, *args, log_ctx={}, **kwargs):
-                "Submit a new async task to this executor"
+                "Submit a new asynchronous task to this executor"
 
                 future = _submit_execution(executor, func, args, kwargs, ctx=dict(log_ctx, **log_ctx))
                 futures.append(future)
@@ -549,7 +551,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
     """
     Map the list of tuple-parameters onto asynchronous calls to the specified function::
 
-        with async(connect, [(host1,), (host2,), (host3,)]) as futures:
+        with asynchronous(connect, [(host1,), (host2,), (host3,)]) as futures:
             ...
 
         connections = futures.results()
@@ -558,7 +560,7 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
     :param params: A list of tuples to map onto the function.
     :param workers: The number of workers to use. Defaults to the number of items in ``params``.
     :param log_contexts: A optional list of logging context objects, matching the items in ``params``.
-    :param final_timeout: The amount of time to allow for the futures to complete after exiting the async context.
+    :param final_timeout: The amount of time to allow for the futures to complete after exiting the asynchronous context.
     """
     if params is None:
         params = [()]
@@ -911,8 +913,8 @@ class concurrent(object):
             concurrent(requests.get, "api.myserver.com/data2") as async2:
             my_data = open("local_data").read()
 
-        remote_data1 = async1.result
-        remote_data2 = async2.result
+        remote_data1 = async1.result()
+        remote_data2 = async2.result()
         process_it(my_data, remote_data1, remote_data2)
 
     Run something repeatedly in the background:
@@ -1006,6 +1008,12 @@ class concurrent(object):
                 return True
             return False
         return self.stopper.wait(timeout)
+
+    def result(self, timeout=None):
+        self.wait(timeout=timeout)
+        if self.throw and self.exc:
+            raise self.exc
+        return self._result
 
     @contextmanager
     def paused(self):
