@@ -65,21 +65,22 @@ class PersistentCache(object):
             return
 
         from .resilience import retrying
-        with self.lock:
-            try:
-                db = retrying(3, acceptable=GDBMException, sleep=5)(shelve.open)(self.path)
-            except Exception:
-                try:
-                    os.unlink(self.path)
-                except FileNotFoundError:
-                    pass
-                try:
-                    db = shelve.open(self.path)
-                except Exception:
-                    _logger.warning("Could not open PersistentCache: %s", self.path)
-                    db = {}
-
         with ExitStack() as stack:
+            with self.lock:
+                try:
+                    db = stack.enter_context(
+                        retrying(3, acceptable=GDBMException, sleep=5)(shelve.open)(self.path))
+                except Exception:
+                    try:
+                        os.unlink(self.path)
+                    except FileNotFoundError:
+                        pass
+                    try:
+                        db = stack.enter_context(shelve.open(self.path))
+                    except Exception:
+                        _logger.warning("Could not open PersistentCache: %s", self.path)
+                        db = {}
+
             timestamp = time.time()
             c_version, c_timestamp = db.get("_PersistentCacheSignature", [0, 0])
             if not ((c_version >= self.version) and (self.expiration is None or (c_timestamp + self.expiration) > timestamp)):
@@ -89,9 +90,6 @@ class PersistentCache(object):
             if lock:
                 stack.enter_context(self.lock)
             yield db
-
-        if type(db) is not dict:
-            db.close()
 
     def set(self, key, value):
         with self.db_opened(lock=True) as db:
