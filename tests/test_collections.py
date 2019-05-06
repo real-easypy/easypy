@@ -124,3 +124,12 @@ def test_collections_slicing():
     assert L[-2:] == list('ef')
     assert L[::2] == list('ace')
     assert L[::-2] == list('fdb')
+
+
+def test_filters_order():
+    l = ListCollection([Bunch(a='b', b=5), Bunch(a='c', c='c')])
+    filterd_l = l.filtered(a='b').select(lambda o: o.b > 4)
+    assert len(filterd_l) == 1
+
+    with pytest.raises(AttributeError):
+        filterd_l = l.select(lambda o: o.b > 4)
