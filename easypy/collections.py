@@ -140,10 +140,17 @@ def filtered(objects, preds, filters):
 
     # don't collapse into one line so easier to debug
     for obj in objects:
+        first_exception = None
         for pred in preds:
-            if not pred(obj):
-                break
+            try:
+                if not pred(obj):
+                    break
+            except Exception as exc:
+                if first_exception is None:
+                    first_exception = exc
         else:
+            if first_exception is not None:
+                raise first_exception
             yield obj
 
 
