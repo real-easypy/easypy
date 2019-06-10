@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.3.0] - 2019-06-10
+
 ### Added
 - Support for suppressing and soloing logging to console per thread.
 - `TypedStruct`: Support for inheritance.
@@ -13,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the thrown `PredicateNotSatisfied` to the log.
 - `takesome`: a new generator that partially yields a sequence
 - `repr` and `hash` to typed struct fields.
+- `PersistentCache`: allow disabling persistence via env-var (`DISABLE_CACHING_PERSISTENCE`)
+- collections: raising user-friendly exceptions for failed object queries (too many, too few)
 
 ### Fixed
 - `ExponentialBackoff`: return the value **before** the incrementation.
@@ -21,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `SynchronizedSingleton` on `contextmanager` deadlock when some (but not all)
   of the CMs throw.
 - `resilient` between `timecache`s bug.
+- `FilterCollection`: deal with missing attributes on objects (#163)
+- `PersistentCache`: don't clear old version when changing cache version
+- concurrency: documentation
+- `SynchronizedSingleton`: deadlock condition when used with `contextmanager` (#150)
+- concurrency: make 'async' available only in python < 3.7, where it became reserved
 
 ### Changed
 - Reorganization:
@@ -30,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Moved `throttled` from `easypy.concurrency` to `easypy.timing`.
 - `easypy.signals`: Async handlers are invoked first, then the sequential handlers.
 - `async` -> `asynchronous`: to support python 3.7, where this word is reserved
+- `concurrency.concurrent`: `.result` property changed into method `.result()`, which also waits on the thread
+- `easypy.colors`: clean-up, documentation, and reverse-parsing from ansi to markup
 
 ### Removed
 - `Bunch`: The rigid `KEYS` feature.
