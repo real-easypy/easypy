@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Logging Initialization
+	- a run-once `initialize` method takes care of it all
+	- removed `set_width`, `set_coloring`, `set_graphics`
+	- the env-var `TERM_COLOR_SUPPORT` is no longer checked
+	- the env-var `EASYPY_LOG_INDENTATION` is no longer checked
+
+
 ## [0.3.0] - 2019-06-10
 
 ### Added
