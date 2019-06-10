@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Logging Initialization
+    - a run-once `initialize` method takes care of it all
+    - removed `set_width`, `set_coloring`, `set_graphics`
+    - the env-var `TERM_COLOR_SUPPORT` is no longer checked
+    - the env-var `EASYPY_LOG_INDENTATION` is no longer checked
+- DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
+
+### Added
+- Examples
+    - a skeleton for initializing logging with easypy
+
 ## [0.4.0] - 2019-11-14
 
 ### Changed

@@ -215,10 +215,11 @@ class IndentableTextBuffer():
 
     def render(self, width=None, textual=None, prune=False, file=None, overflow='ignore', edges=True):
         if width is None:
-            from .logging import TERM_WIDTH as width
+            from .logging import G
+            width, _ = os.get_terminal_size() if G.IS_A_TTY else [120, 0]
         if textual is None:
-            from .logging import GRAPHICAL
-            textual = not GRAPHICAL
+            from .logging import G
+            textual = not G.GRAPHICAL
 
         buff = file if file else StringIO()
         G = self.TEXTUAL_BOX if textual else self.NICE_BOX

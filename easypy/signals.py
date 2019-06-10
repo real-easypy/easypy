@@ -146,12 +146,20 @@ class Signal:
 
     ALL = {}
 
+    @staticmethod
+    def get_main_thread():
+        """
+        This function is used to check that new Signal objects are only created from the main thread.
+        If your App's main thread is not threading.main_thread(), you may patch this function.
+        """
+        return threading.main_thread()
+
     def __new__(cls, name, asynchronous=None, swallow_exceptions=False, log=True):
         try:
             return cls.ALL[name]
         except KeyError:
             pass
-        assert threading.main_thread() is threading.current_thread(), "Can only create Signal objects from the MainThread"
+        assert cls.get_main_thread() is threading.current_thread(), "Can only create Signal objects from the MainThread"
         signal = object.__new__(cls)
         # we use this to track the calling of various callbacks. we use this short id so it doesn't overflow the logs
         signal.id = make_id(name)
