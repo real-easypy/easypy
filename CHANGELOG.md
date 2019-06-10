@@ -72,6 +72,13 @@ Project renamed as 'real-easypy'
 - aliasing: bug fix for 'Cannot create a consistent method resolution', add unittest
 - collections: workaround python bug (3.6.8+) importing 'test.support'
 
+### Changed
+- Logging Initialization
+	- a run-once `initialize` method takes care of it all
+	- removed `set_width`, `set_coloring`, `set_graphics`
+	- the env-var `TERM_COLOR_SUPPORT` is no longer checked
+	- the env-var `EASYPY_LOG_INDENTATION` is no longer checked
+
 ## [0.3.1] - 2019-07-30
 
 ### Added
