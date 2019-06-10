@@ -425,12 +425,23 @@ class ContextLoggerMixin(object):
         self.error(message, *args, **kwargs)
         self.debug('Traceback:', exc_info=True)
 
-    def __rand__(self, cmd):
-        return cmd & self.pipe(logging.INFO, logging.INFO)
+    def __ror__(self, cmd):
+        """
+        Integration with plumbum's command objects for subprocess execution.
+        Pipe stderr and stdout lines into this logger (at level INFO)
+        """
+        return cmd | self.pipe(logging.INFO, logging.INFO)
+
+    __rand__ = __ror__  # for backwards compatibility
 
     def pipe(self, err_level=logging.DEBUG, out_level=logging.INFO, prefix=None, line_timeout=10 * 60, **kw):
+        """
+        Integration with plumbum's command objects for subprocess execution.
+        Pipe stderr and stdout lines into this logger (at levels `err_level/out_level`)
+        Optionally use `prefix` for each line.
+        """
         class LogPipe(object):
-            def __rand__(_, cmd):
+            def __ror__(_, cmd):
                 popen = cmd if hasattr(cmd, "iter_lines") else cmd.popen()
                 for out, err in popen.iter_lines(line_timeout=line_timeout, **kw):
                     for level, line in [(out_level, out), (err_level, err)]:
@@ -441,12 +452,22 @@ class ContextLoggerMixin(object):
                                 l = "%s: %s" % (prefix, l)
                             self.log(level, l)
                 return popen.returncode
+            __rand__ = __ror__  # for backwards compatibility
+
         return LogPipe()
 
     def pipe_info(self, prefix=None, **kw):
+        """
+        Integration with plumbum's command objects for subprocess execution.
+        Pipe stderr and stdout lines into this logger (both at level INFO)
+        """
         return self.pipe(logging.INFO, logging.INFO, prefix=prefix, **kw)
 
     def pipe_debug(self, prefix=None, **kw):
+        """
+        Integration with plumbum's command objects for subprocess execution.
+        Pipe stderr and stdout lines into this logger (both at level DEBUG)
+        """
         return self.pipe(logging.DEBUG, logging.DEBUG, prefix=prefix, **kw)
 
     def info1(self, *args, **kwargs):
