@@ -1,8 +1,8 @@
 import re
 import time
+from datetime import datetime
 from queue import PriorityQueue
 from .colors import uncolored
-from .logging import PROGRESS_BAR
 
 
 TIMESTAMP_PATTERN = "%Y-%m-%d %H:%M:%S"
@@ -13,14 +13,44 @@ def to_timestamp(t):
 
 
 YEAR = time.strftime("%Y")
-TIMESTAMP_GETTERS = (
+MONTH = time.strftime("%m")
+DAY = time.strftime("%d")
 
-    (re.compile("^(\w{3} +\d+ +\d+:\d+:\d+)"),
+TIMESTAMP_GETTERS = [
+
+    # 01:21:27
+    (re.compile(r"^(\d+:\d+:\d+)"),
+     lambda ts: time.mktime(time.strptime("%s-%s-%s %s" % (YEAR, MONTH, DAY, ts), "%Y-%m-%d %H:%M:%S"))),
+
+    # Apr 6 17:13:40
+    (re.compile(r"^(\w{3} +\d+ +\d+:\d+:\d+)"),
      lambda ts: time.mktime(time.strptime("%s %s" % (YEAR, ts), "%Y %b %d %H:%M:%S"))),
-    (re.compile("(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})\|"),
-     lambda ts, ms: time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S")) + float(ms)/100000),
 
-    )
+    # 2018-12-15T02:11:06+0200
+    (re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{4})"),
+     lambda ts: datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S%z').timestamp()),
+
+    # 2018-12-15T02:11:06.123456+02:00
+    (re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6})(\+\d{2}):(\d{2})"),
+     lambda *args: datetime.strptime("{}{}{}".format(*args), '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()),
+
+    # 2018-04-06 17:13:40,955
+    # 2018-04-23 04:48:11,811|
+    (re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})[| ]"),
+     lambda ts, ms: time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S")) + float(ms) / 1000),
+
+    # 2018-04-06 17:13:40
+    # 2018-04-06 17:13:40.955356
+    # [2018/04/06 17:13:40
+    # [2018/04/06 17:13:40.955356
+    (re.compile(r"^\[?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.(\d{6}))?"),
+     lambda ts, ms: time.mktime(time.strptime(ts.replace("/", "-"), "%Y-%m-%d %H:%M:%S")) + float(ms or 0) / 1000000),
+
+    # for strace logs
+    # 16255 15:08:52.554223
+    (re.compile(r"\d+ (\d{2}:\d{2}:\d{2}).(\d{6})"),
+     lambda ts, ms: time.mktime(time.strptime("%s-%s-%s %s" % (YEAR, MONTH, DAY, ts), "%Y-%m-%d %H:%M:%S")) + float(ms) / 1000000),
+]
 
 
 class TimestampedStream(object):
@@ -65,7 +95,7 @@ class TimestampedStream(object):
         return 0
 
 
-def iter_zipped_logs(*log_streams):
+def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@"):
     "Line iterator that merges lines from different log streams based on their timestamp"
 
     # A sorted queue of (timestamp, stream) tuples (lowest-timestamp first)
@@ -73,7 +103,7 @@ def iter_zipped_logs(*log_streams):
     stream_names = []
     for i, stream in enumerate(log_streams):
         if not isinstance(stream, tuple):
-            tstream = TimestampedStream(stream, "DARK_GRAY@{> }@")
+            tstream = TimestampedStream(stream, prefix)
         else:
             tstream = TimestampedStream(*stream)
 
