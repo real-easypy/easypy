@@ -16,14 +16,20 @@ from .decorations import parametrizeable_decorator
 from .exceptions import TException
 
 import sys
+
+from collections import OrderedDict as PythonOrderedDict
+SUPPORT_GET_SIBLING = True
+
 if sys.version_info[:2] >= (3, 5):
     # In order to support 'get_prev' and 'get_next', we need access to OrderedDict's internal .__map,
     # which we don't have in the C-implementation of the class in Python3.5
     # This hack allows us to get to the pythonic implemenation of OrderedDict
-    from test.support import import_fresh_module
-    PythonOrderedDict = import_fresh_module('collections', blocked=['_collections']).OrderedDict
-else:
-    from collections import OrderedDict as PythonOrderedDict
+    try:
+        from test.support import import_fresh_module
+        PythonOrderedDict = import_fresh_module('collections', blocked=['_collections']).OrderedDict
+    except ImportError:
+        # this happens on 3.6.7-8 due to a bug (https://bugzilla.redhat.com/show_bug.cgi?id=1651245)
+        SUPPORT_GET_SIBLING = False
 
 
 def _format_predicate(pred):
@@ -553,27 +559,50 @@ class SimpleObjectCollection(ObjectCollectionBase):
             if lookup_uid == uid:
                 return i
 
-    def get_next(self, obj):
-        uid = self._get_object_uid(obj)
-        if uid not in self._objects:
-            raise ObjectNotFound(self, (), dict(key=uid),)
-        next_uid = self._objects._OrderedDict__map[uid].next
-        try:
-            key = next_uid.key
-        except AttributeError:
-            key = next_uid.next.key
-        return self._objects[key]
+    if SUPPORT_GET_SIBLING:
+        def get_next(self, obj):
+            uid = self._get_object_uid(obj)
+            if uid not in self._objects:
+                raise ObjectNotFound(self, (), dict(key=uid),)
+            next_uid = self._objects._OrderedDict__map[uid].next
+            try:
+                key = next_uid.key
+            except AttributeError:
+                key = next_uid.next.key
+            return self._objects[key]
 
-    def get_prev(self, obj):
-        uid = self._get_object_uid(obj)
-        if uid not in self._objects:
-            raise ObjectNotFound(self, (), dict(key=uid),)
-        prev_uid = self._objects._OrderedDict__map[uid].prev
-        try:
-            key = prev_uid.key
-        except AttributeError:
-            key = prev_uid.prev.key
-        return self._objects[key]
+        def get_prev(self, obj):
+            uid = self._get_object_uid(obj)
+            if uid not in self._objects:
+                raise ObjectNotFound(self, (), dict(key=uid),)
+            prev_uid = self._objects._OrderedDict__map[uid].prev
+            try:
+                key = prev_uid.key
+            except AttributeError:
+                key = prev_uid.prev.key
+            return self._objects[key]
+    else:
+        def get_next(self, obj):
+            from warning import warn
+            warn("Couldn't import a pure-python OrderedDict so this will be a O(n) operation")
+
+            from itertools import cycle
+            l1, l2 = cycle(self._objects.values()), cycle(self._objects.values())
+            next(l2)
+            for a, b in zip(l1, l2):
+                if obj == a:
+                    return b
+
+        def get_prev(self, obj):
+            from warning import warn
+            warn("Couldn't import a pure-python OrderedDict so this will be a O(n) operation")
+
+            from itertools import cycle
+            l1, l2 = cycle(self._objects.values()), cycle(self._objects.values())
+            next(l2)
+            for a, b in zip(l1, l2):
+                if obj == b:
+                    return a
 
     def keys(self):
         return self._objects.keys()

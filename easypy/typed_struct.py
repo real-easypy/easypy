@@ -2,8 +2,9 @@ from copy import deepcopy
 
 from .exceptions import TException
 from .tokens import AUTO, MANDATORY
-from .collections import ListCollection, PythonOrderedDict, iterable
+from .collections import ListCollection, iterable
 from .bunch import Bunch, bunchify
+from collections import OrderedDict
 
 
 class InvalidFieldType(TException):
@@ -441,7 +442,7 @@ class TypedStructMeta(type):
         return cls
 
 
-class _TypedStructDslDict(PythonOrderedDict):
+class _TypedStructDslDict(OrderedDict):
     def __init__(self, bases):
         super().__init__()
         for base in bases:
