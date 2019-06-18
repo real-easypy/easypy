@@ -133,3 +133,9 @@ def test_filters_order():
 
     with pytest.raises(AttributeError):
         filterd_l = l.select(lambda o: o.b > 4)
+
+
+def test_simple_object_collection():
+    S = SimpleObjectCollection(L, ID_ATTRIBUTE='id')
+    assert S.get_next(S['5']) == S['6']
+    assert S.get_prev(S['5']) == S['4']
