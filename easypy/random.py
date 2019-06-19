@@ -53,3 +53,7 @@ def random_filename(length=(3, 50)):
 def random_buf(size):
     assert size < 5 * 2**20, "This is too big for a buffer (%s)" % size
     return random_string(size).encode("latin-1")
+
+
+def perchance(probabilty):
+    return random.random() <= probabilty
