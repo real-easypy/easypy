@@ -105,6 +105,8 @@ class DataSize(int):
         width, precision, name = re.match(r"(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
         if name == "d":
             ret = "{:d}".format(int(self))
+        elif name == "text":
+            ret = self.render(humanize=True)
         elif name == "f":
             ret = "{:.{precision}f}".format(float(self), precision=precision or 1)
         elif name in ("b", "byte", "bytes"):
@@ -115,19 +117,26 @@ class DataSize(int):
             ret = repr(self)
         return "{:>{width}}".format(ret, width=width or "")
 
-    def __str__(self):
+    def render(self, humanize=True):
         if 0 == self:
-            return '0'
+            return '0 bytes' if humanize else '0'
+
         if self in self.UNIT_NAMES:
-            return '1 %s' % (self.UNIT_NAMES[self],)
+            unit = self.UNIT_NAMES[self]
+            return '1 {}'.format(unit) if humanize else unit
+
         for unit in self.SORTED_UNITS:
             name = self.UNIT_NAMES[unit]
             many = 'bytes' if name == 'byte' else name
             if self % unit == 0:
-                return '%d%s' % (self/unit, many)
-            if self >= unit or (self >= unit/10 and self*10 % unit == 0):
-                return '~%.1f%s' % (self/unit, many)
+                return '%d%s' % (self / unit, many)
+            if self >= unit or (self >= unit / 10 and self * 10 % unit == 0):
+                return '~%.1f%s' % (self / unit, many)
+
         assert False, "This Should not happen"
+
+    def __str__(self):
+        return self.render(humanize=False)
 
     def __repr__(self):
         if self == 0:
