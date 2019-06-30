@@ -92,8 +92,14 @@ class TimestampedStream(object):
         return 0
 
 
-def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@"):
-    "Line iterator that merges lines from different log streams based on their timestamp"
+def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@", show_intervals=None):
+    """
+    Line iterator that merges lines from different log streams based on their timestamp.
+    Timestamp patterns are found in the TIMESTAMP_GETTERS list in this module.
+
+    :param prefix: Prepend this prefix to each line where a timestamp was identified
+    :param show_intervals: `s` or `ms` - Prepend the duration since the previous log line
+    """
 
     # A sorted queue of (timestamp, stream) tuples (lowest-timestamp first)
     streams = PriorityQueue()
@@ -109,9 +115,24 @@ def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@"):
             stream_names.append(tstream.name)
             streams.put(n)
 
+    last_ts = None
+    if show_intervals:
+        from easypy.units import Duration
+
+        def formatted(line, current_ts, last_ts):
+            fmt = "{:>7}{}"
+            if (current_ts and last_ts):
+                return fmt.format(Duration(current_ts - last_ts).render(show_intervals), line)
+            else:
+                return fmt.format("", line)
+    else:
+        def formatted(line, current_ts, last_ts):
+            return line
+
     while not streams.empty():
         current_ts, line, stream = streams.get()
-        yield line
+        yield formatted(line, current_ts, last_ts)
+        last_ts = current_ts
         while True:
             n = stream.get_next()
             if not n:
@@ -120,14 +141,29 @@ def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@"):
             if ts and ts > current_ts:
                 streams.put((ts, line, stream))
                 break   # timestamp advanced
-            yield line
+            yield formatted(line, ts, last_ts)
+            if ts:
+                last_ts = ts
 
 
 if __name__ == "__main__":
     import sys
-    files = map(open, sys.argv[1:])
+    import argparse
+    parser = argparse.ArgumentParser(description='ZipLog - merge logs by timestamps')
+    parser.add_argument(
+        'logs', metavar='N', type=str, nargs='+',
+        help='log files')
+    parser.add_argument(
+        '-i', '--interval', dest='interval', default=None,
+        help="Show interval by seconds (s), or milliseconds (ms)")
+    parser.add_argument(
+        '-p', '--prefix', dest='prefix', default="> ",
+        help="A prefix to prepend to timestamped lines")
+    ns = parser.parse_args(sys.argv[1:])
+
+    files = map(open, ns.logs)
     try:
-        for line in iter_zipped_logs(*files):
+        for line in iter_zipped_logs(*files, show_intervals=ns.interval, prefix=ns.prefix):
             print(line, end="")
     except BrokenPipeError:
         pass

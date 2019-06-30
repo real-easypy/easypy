@@ -15,6 +15,10 @@ install:
   - pip install gevent PyYaml
   - pip install sphinx==1.7.9 ghp-import
 
+before_script:
+  # we need this for test_ziplog, which parses ambiguous timestamps
+  - export TZ=Asia/Jerusalem
+
 script:
   - python -m pytest -vv tests
   - python -m pytest -vv --doctest-modules easypy
