@@ -30,6 +30,10 @@ TIMESTAMP_GETTERS = [
     (re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+\d{4})"),
      lambda ts: datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S%z').timestamp()),
 
+    # 2018-04-06 17:13:40.955356
+    (re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\.(\d{6})"),
+     lambda ts, ms: time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S")) + float(ms) / 1000000),
+
     # [2018/04/06 17:13:40.955356,
     (re.compile(r"\[(\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})\.(\d{6}),"),
      lambda ts, ms: time.mktime(time.strptime(ts, "%Y/%m/%d %H:%M:%S")) + float(ms) / 1000000),
