@@ -460,5 +460,9 @@ if __name__ == '__main__':
     Colorize lines from stdin
     """
     import fileinput
-    for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
-        print(colorize(line), end="", flush=True)
+    try:
+        for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
+            print(colorize(line), end="", flush=True)
+    except BrokenPipeError:
+        pass
+

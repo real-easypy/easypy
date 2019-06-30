@@ -122,5 +122,8 @@ def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@"):
 if __name__ == "__main__":
     import sys
     files = map(open, sys.argv[1:])
-    for line in iter_zipped_logs(*files):
-        print(line, end="")
+    try:
+        for line in iter_zipped_logs(*files):
+            print(line, end="")
+    except BrokenPipeError:
+        pass
