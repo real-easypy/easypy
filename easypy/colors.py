@@ -60,17 +60,19 @@ RE_FIND_COLOR_MARKUP = re.compile(
     r"[A-Z_]+(?:\([^\)]+\))?"
     r"(?:"
     r"(?:\<\<).*?(?:\>\>)|"
-    r"(?:\@\{).*?(?:\}\@)"
+    r"(?:\@\{).*?(?:\}\@)|"
+    r"(?:\@\[).*?(?:\]\@)"
     "))")
 
 # this regex is used to parse the color markup into a foreground color, optional background, and the text itself.
-# the text can be enclosed either by '<<..>>' or '@{...}@'
+# the text can be enclosed either by '<<..>>' or '@[...]@'
 RE_PARSE_COLOR_MARKUP = re.compile(
     r"(?ms)"
     r"([A-Z_]+(?:\([^\)]+\))?)"  # group 0: the coloring
     r"(?:"
     r"\<\<(.*?)\>\>|"            # group 1: first trap for text <<...>>
-    r"\@\{(.*?)\}\@"             # group 2: second trap for text @{...}@
+    r"\@\{(.*?)\}\@|"            # group 2: second trap for text @{...}@
+    r"\@\[(.*?)\]\@"             # group 3: second trap for text @[...]@
     ")")
 
 
@@ -334,7 +336,7 @@ def colorize(text):
 
     def _subfunc(match_obj):
         colorizer = Colorizer.from_markup(match_obj.group(1))
-        return colorizer(match_obj.group(2) or match_obj.group(3))
+        return colorizer(next(filter(None, match_obj.groups()[1:])))
 
     return RE_PARSE_COLOR_MARKUP.sub(_subfunc, text)
 
