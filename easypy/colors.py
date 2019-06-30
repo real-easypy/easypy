@@ -60,17 +60,19 @@ RE_FIND_COLOR_MARKUP = re.compile(
     r"[A-Z_]+(?:\([^\)]+\))?"
     r"(?:"
     r"(?:\<\<).*?(?:\>\>)|"
-    r"(?:\@\{).*?(?:\}\@)"
+    r"(?:\@\{).*?(?:\}\@)|"
+    r"(?:\@\[).*?(?:\]\@)"
     "))")
 
 # this regex is used to parse the color markup into a foreground color, optional background, and the text itself.
-# the text can be enclosed either by '<<..>>' or '@{...}@'
+# the text can be enclosed either by '<<..>>' or '@[...]@'
 RE_PARSE_COLOR_MARKUP = re.compile(
     r"(?ms)"
     r"([A-Z_]+(?:\([^\)]+\))?)"  # group 0: the coloring
     r"(?:"
     r"\<\<(.*?)\>\>|"            # group 1: first trap for text <<...>>
-    r"\@\{(.*?)\}\@"             # group 2: second trap for text @{...}@
+    r"\@\{(.*?)\}\@|"            # group 2: second trap for text @{...}@
+    r"\@\[(.*?)\]\@"             # group 3: second trap for text @[...]@
     ")")
 
 
