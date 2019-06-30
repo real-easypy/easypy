@@ -119,7 +119,7 @@ class DataSize(int):
         if 0 == self:
             return '0'
         if self in self.UNIT_NAMES:
-            return '1 %s' % (self.UNIT_NAMES[self],)
+            return self.UNIT_NAMES[self]
         for unit in self.SORTED_UNITS:
             name = self.UNIT_NAMES[unit]
             many = 'bytes' if name == 'byte' else name
