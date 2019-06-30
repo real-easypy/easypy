@@ -18,7 +18,7 @@ class DataSize(int):
 
     def __new__(cls, value):
         if (isinstance(value, str)):
-            i, u = re.match("(\d*(?:\.\d+)?)?(\w*)", value).groups()
+            i, u = re.match(r"(\d*(?:\.\d+)?)?(\w*)", value).groups()
             i = 1 if not i else float(i) if "." in i else int(i)
             value = i * (cls.NAMED_UNITS[u] if u else 1)
             if (isinstance(value, cls)):
@@ -102,7 +102,7 @@ class DataSize(int):
         return random.randrange(start=start, stop=stop) * divisor
 
     def __format__(self, spec):
-        width, precision, name = re.match("(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
+        width, precision, name = re.match(r"(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
         if name == "d":
             ret = "{:d}".format(int(self))
         elif name == "f":
@@ -163,7 +163,7 @@ class Duration(float):
             try:
                 i, u = float(value), None
             except ValueError:
-                i, u = re.match("(\d*(?:\.\d+)?)?(\w*)", value).groups()
+                i, u = re.match(r"(\d*(?:\.\d+)?)?(\w*)", value).groups()
                 i = 1.0 if not i else float(i)
             value = i * (cls.NAMED_UNITS[u] if u else 1)
             if (isinstance(value, cls)):
@@ -253,7 +253,7 @@ class Duration(float):
     __radd__ = __add__
 
     def __format__(self, spec):
-        width, precision, name = re.match("(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
+        width, precision, name = re.match(r"(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
         if name == "f":
             return super(Duration, self).__format__(spec)
         dir = "<"
