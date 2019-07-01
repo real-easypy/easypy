@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0]
+
 ### Changed
 - Logging Initialization
 	- a run-once `initialize` method takes care of it all
@@ -15,7 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
 
 ### Added
-- ziplog - added commonly found timestamp patterns
+- ziplog
+  - expose as a cli tool - `ziplog`
+  - added commonly found timestamp patterns
+- colors
+  - expose as a cli tool - `colorize
+- random: added `perchance(probabilty)`
 - Examples
 	- a skeleton for initializing logging with easypy
 
