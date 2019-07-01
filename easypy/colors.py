@@ -453,7 +453,7 @@ def register_colorizers(**styles):
 globals().update((name.upper(), Colorizer(color=name, name=name)) for name in COLORS)
 
 
-if __name__ == '__main__':
+def main():
     """
     Colorize lines from stdin
     """
@@ -464,3 +464,6 @@ if __name__ == '__main__':
     except BrokenPipeError:
         pass
 
+
+if __name__ == "__main__":
+    main()

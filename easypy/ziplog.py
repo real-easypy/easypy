@@ -149,7 +149,7 @@ def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@", show_intervals=None
                 last_ts = ts
 
 
-if __name__ == "__main__":
+def main():
     import sys
     import argparse
     parser = argparse.ArgumentParser(description='ZipLog - merge logs by timestamps')
@@ -170,3 +170,7 @@ if __name__ == "__main__":
             print(line, end="")
     except BrokenPipeError:
         pass
+
+
+if __name__ == "__main__":
+    main()
