@@ -1,4 +1,4 @@
-from mock import patch, call
+from unittest.mock import patch, call
 import pytest
 from time import sleep
 import threading
@@ -10,7 +10,6 @@ from easypy.concurrency import MultiObject, MultiException, concurrent
 from easypy.timing import repeat, timing
 from easypy.bunch import Bunch
 from easypy.units import Duration
-from easypy.resilience import retrying
 
 from easypy.sync import iter_wait, wait, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
 from easypy.sync import SynchronizationCoordinator, SYNC
