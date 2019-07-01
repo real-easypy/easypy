@@ -1,4 +1,4 @@
-from mock import patch, call
+from unittest.mock import patch
 import pytest
 from time import sleep
 
