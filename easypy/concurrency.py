@@ -78,6 +78,7 @@ from collections import namedtuple
 from datetime import datetime
 
 import easypy._multithreading_init  # noqa; make it initialize the threads tree
+from easypy.logging import DeferredEasypyLogger
 from easypy.exceptions import PException, apply_timestamp
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration, compact
@@ -118,7 +119,7 @@ except ImportError:
             yield filename, lineno, name
 
 
-_logger = logging.getLogger(__name__)
+_logger = DeferredEasypyLogger(name=__name__)
 
 
 def disable():

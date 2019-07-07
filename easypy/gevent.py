@@ -6,18 +6,18 @@ except ImportError:
         return False
 
 
-from logging import getLogger
 import threading   # this will be reloaded after patching
 
 import time
 import sys
 
 
-from easypy.humanize import format_thread_stack
 from ._multithreading_init import _set_thread_uuid, _set_main_uuid
 
-
-_logger = getLogger('gevent')
+# can't use easypy's logging since this has to be run before everything,
+# hence the name '_basic_logger', to remind that easypy features are not available
+from logging import getLogger
+_basic_logger = getLogger(name='gevent')
 
 
 main_thread_ident_before_patching = threading.main_thread().ident
@@ -28,7 +28,7 @@ HOGGING_TIMEOUT = 1
 
 
 def apply_patch(hogging_detection=False, real_threads=1):
-    _logger.info('applying gevent patch (%s real threads)', real_threads)
+    _basic_logger.info('applying gevent patch (%s real threads)', real_threads)
 
     # real_threads is 1 by default so it will be possible to run watch_threads concurrently
     if hogging_detection:
@@ -115,6 +115,8 @@ def _greenlet_trace_func(event, args):
 
 
 def detect_hogging():
+    from easypy.humanize import format_thread_stack
+
     did_switch = True
 
     current_running_greenlet = HUB
@@ -147,14 +149,14 @@ def detect_hogging():
                 continue  # dont dump too much warnings - decay exponentialy until exploding after FAIL_BLOCK_TIME_SEC
             for thread in threading.enumerate():
                 if getattr(thread, '_greenlet', None) == current_running_greenlet:
-                    _logger.info('RED<<greenlet hogger detected (%s seconds):>>', current_blocker_time)
-                    _logger.debug('thread stuck: %s', thread)
+                    _basic_logger.info('RED<<greenlet hogger detected (%s seconds):>>', current_blocker_time)
+                    _basic_logger.debug('thread stuck: %s', thread)
                     break
             else:
-                _logger.info('RED<<unknown greenlet hogger detected (%s seconds):>>', current_blocker_time)
-                _logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
-                _logger.debug('hub is: %s', HUB)
-            func = _logger.debug if current_blocker_time < 5 * HOGGING_TIMEOUT else _logger.info
+                _basic_logger.info('RED<<unknown greenlet hogger detected (%s seconds):>>', current_blocker_time)
+                _basic_logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
+                _basic_logger.debug('hub is: %s', HUB)
+            func = _basic_logger.debug if current_blocker_time < 5 * HOGGING_TIMEOUT else _basic_logger.info
             func("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
             last_warning_time = current_blocker_time
             continue
@@ -175,10 +177,10 @@ def defer_to_thread(func, threadname):
 
     def run():
         _set_thread_uuid(threading.get_ident(), parent_uuid)
-        _logger.debug('Starting job in real thread: %s', threadname or "<anonymous>")
+        _basic_logger.debug('Starting job in real thread: %s', threadname or "<anonymous>")
         gevent.spawn(func)  # running via gevent ensures we have a Hub
         gevent.wait()
-        _logger.debug('ready for the next job')
+        _basic_logger.debug('ready for the next job')
 
     from .threadtree import get_thread_uuid
     parent_uuid = get_thread_uuid(threading.current_thread())

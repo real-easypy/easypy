@@ -1,16 +1,48 @@
-import easypy
-import pkgutil
 import pytest
 import sys
 
-packages = [name for ff, name, is_pkg in pkgutil.walk_packages(easypy.__path__)]
+packages = list(filter(None, """
+_multithreading_init
+aliasing
+bunch
+caching
+collections
+colors
+concurrency
+contexts
+decorations
+deprecation
+exceptions
+fixtures
+gevent
+humanize
+interaction
+lockstep
+meta
+misc
+predicates
+properties
+random
+resilience
+signals
+sync
+tables
+threadtree
+timing
+tokens
+typed_struct
+units
+words
+ziplog
+""".split()))
 
 
 @pytest.yield_fixture
 def clean_modules():
     yield
+    roots = "easypy", "logbook", "logging"
     for n in sorted(sys.modules):
-        if n.startswith("easypy"):
+        if any(n.startswith(root) for root in roots):
             sys.modules.pop(n)
 
 

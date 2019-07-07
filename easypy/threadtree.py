@@ -10,18 +10,14 @@ import time
 import logging
 from copy import deepcopy
 from contextlib import contextmanager
-from logging import getLogger
 import _thread
 import threading
 
-from easypy.humanize import format_thread_stack
-
 from easypy.gevent import main_thread_ident_before_patching, is_module_patched
-from .bunch import Bunch
-from .collections import ilistify
+from easypy.bunch import Bunch
+from easypy.collections import ilistify
+from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
 
-from ._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
-_logger = getLogger(__name__)
 
 
 def get_thread_uuid(thread=None):
@@ -204,6 +200,7 @@ def get_thread_trees(including_this=True):
 
     from .logging import THREAD_LOGGING_CONTEXT
     from .bunch import Bunch
+    from .humanize import format_thread_stack
 
     tree = {}
     dead_threads = set()
@@ -293,10 +290,11 @@ def watch_threads(interval, logger_name='threads'):
 
     from easypy.resilience import resilient
     from easypy.concurrency import concurrent
+    from easypy.logging import _get_logger
 
     cmdline = " ".join(sys.argv)
-    _logger = logging.getLogger(__name__)
-    _threads_logger = logging.getLogger(logger_name)
+    logger = _get_logger(name=__name__)
+    threads_logger = _get_logger(name=logger_name)
 
     last_threads = set()
 
@@ -312,13 +310,13 @@ def watch_threads(interval, logger_name='threads'):
     def dump_threads():
         nonlocal last_threads
 
-        with _logger.indented('getting thread tree', level=logging.DEBUG):
+        with logger.indented('getting thread tree', level=logging.DEBUG):
             trees = get_thread_trees(including_this=False)
 
-        with _logger.indented('logging threads to yaml', level=logging.DEBUG):
-            _threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=Bunch(children=trees).to_dict()))
+        with logger.indented('logging threads to yaml', level=logging.DEBUG):
+            threads_logger.debug("threads", extra=dict(cmdline=cmdline, tree=Bunch(children=trees).to_dict()))
 
-        with _logger.indented('creating current thread set', level=logging.DEBUG):
+        with logger.indented('creating current thread set', level=logging.DEBUG):
             current_threads = set()
             for thread in threading.enumerate():
                 if thread.ident:
@@ -329,16 +327,16 @@ def watch_threads(interval, logger_name='threads'):
         stringify = lambda idents: ", ".join("%X" % ident for ident in idents)
 
         if new_threads:
-            _logger.debug("WHITE<<NEW>> threads (%s): %s", len(new_threads), stringify(new_threads))
+            logger.debug("WHITE<<NEW>> threads (%s): %s", len(new_threads), stringify(new_threads))
         if closed_threads:
-            _logger.debug("threads terminated (%s): %s", len(closed_threads), stringify(closed_threads))
-        _logger.debug("total threads: %s", len(current_threads))
+            logger.debug("threads terminated (%s): %s", len(closed_threads), stringify(closed_threads))
+        logger.debug("total threads: %s", len(current_threads))
 
         last_threads = current_threads
 
     thread = concurrent(dump_threads, threadname="ThreadWatch", loop=True, sleep=interval, real_thread_no_greenlet=True)
     thread.start()
-    _logger.info("threads watcher started")
+    logger.info("threads watcher started")
 
 
 class ThreadContexts():

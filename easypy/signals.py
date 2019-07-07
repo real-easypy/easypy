@@ -14,9 +14,10 @@ from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
 from easypy.misc import kwargs_resilient, WeakMethodDead
 from easypy.collections import separate
+from easypy.logging import DeferredEasypyLogger
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
-_logger = logging.getLogger(__name__)
+_logger = DeferredEasypyLogger(name=__name__)
 
 
 ids = set()

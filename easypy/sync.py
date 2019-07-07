@@ -15,20 +15,21 @@ import atexit
 import signal
 import os
 from collections import Counter
+from easypy.logging import DeferredEasypyLogger
 
 import easypy._multithreading_init  # noqa
-from .bunch import Bunch
-from .gevent import is_module_patched
-from .decorations import wrapper_decorator, parametrizeable_decorator
-from .caching import locking_cache
-from .exceptions import PException, TException
-from .units import NEVER, MINUTE, HOUR
-from .misc import Hex
-from .humanize import time_duration  # due to interference with jrpc
-from .misc import kwargs_resilient
+from easypy.bunch import Bunch
+from easypy.gevent import is_module_patched
+from easypy.decorations import wrapper_decorator, parametrizeable_decorator
+from easypy.caching import locking_cache
+from easypy.exceptions import PException, TException
+from easypy.units import NEVER, MINUTE, HOUR
+from easypy.misc import Hex
+from easypy.humanize import time_duration  # due to interference with jrpc
+from easypy.misc import kwargs_resilient
 
-_logger = logging.getLogger(__name__)
-_verbose_logger = logging.getLogger('%s.locks' % __name__)  # logger for less important logs of RWLock.
+_logger = DeferredEasypyLogger(name=__name__)
+_verbose_logger = DeferredEasypyLogger(name='%s.locks' % __name__)  # logger for less important logs of RWLock.
 
 IS_A_TTY = sys.stdout.isatty()
 
@@ -1050,7 +1051,7 @@ def iter_wait(
 
     with ExitStack() as stack:
         if progressbar:
-            from .logging import PROGRESS_BAR
+            from .logging.progressbar import PROGRESS_BAR
             pr = stack.enter_context(PROGRESS_BAR())
             pr.set_message(msg)
 

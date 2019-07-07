@@ -4,11 +4,11 @@ import time
 import shelve
 import inspect
 from threading import RLock
-from logging import getLogger
 from collections import defaultdict
 from contextlib import ExitStack, contextmanager
 from functools import wraps, _make_key, partial, lru_cache, update_wrapper
 
+from .logging import DeferredEasypyLogger
 from .decorations import parametrizeable_decorator, DecoratingDescriptor
 from .collections import ilistify
 from .misc import kwargs_resilient
@@ -17,7 +17,7 @@ from .units import HOUR
 from .tokens import DELETED, NO_DEFAULT
 from .humanize import yesno_to_bool
 
-_logger = getLogger(__name__)
+_logger = DeferredEasypyLogger(name=__name__)
 
 try:
     from _gdbm import error as GDBMException

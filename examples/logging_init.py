@@ -30,7 +30,7 @@ CONFIG = {
         },
         'console': {
             '()': 'easypy.logging.ConsoleFormatter',
-            'fmt': '%(levelcolor)s<<%(asctime)s|%(levelname)-5s|%(host)-40s>>|%(drawing)s%(message)s',
+            'fmt': '%(levelcolor)s<<%(asctime)s|%(levelname)-5s|%(host)-40s>>|%(decoration)s%(message)s',
             'datefmt': '%H:%M:%S'
         },
         'yaml': {

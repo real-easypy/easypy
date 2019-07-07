@@ -5,8 +5,6 @@ from time import time
 from datetime import datetime
 from contextlib import contextmanager
 from textwrap import indent
-from logging import getLogger
-_logger = getLogger(__name__)
 
 
 class PException(Exception):
@@ -96,6 +94,9 @@ class PException(Exception):
     @classmethod
     @contextmanager
     def on_exception(cls, acceptable=Exception, **kwargs):
+        from easypy.logging import _get_logger  # noqa
+        logger = _get_logger(name=__name__)
+
         try:
             yield
         except cls:
@@ -103,7 +104,7 @@ class PException(Exception):
             raise
         except acceptable as exc:
             exc_info = sys.exc_info()
-            _logger.debug("'%s' raised; Raising as '%s'" % (type(exc), cls), exc_info=exc_info)
+            logger.debug("'%s' raised; Raising as '%s'" % (type(exc), cls), exc_info=exc_info)
             raise cls(traceback=True, **kwargs) from None
 
 

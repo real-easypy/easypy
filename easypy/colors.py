@@ -135,7 +135,8 @@ class Colorized(str):
                 continue
             match = RE_PARSE_COLOR_MARKUP.match(part)
             if match:
-                stl, *parts = match.groups()
+                stl = match.groups()[0]
+                parts = match.groups()[1:]
                 stl = stl.strip("_")
                 part = next(filter(None, parts), "")  # default to "", in case there's no text in the token
                 if part:
@@ -353,8 +354,9 @@ class Colorizer():
     """
 
     COLORIZERS = {}
+    COLORIZERS[None, None, False] = COLORIZERS['none'] = lambda text: text
 
-    def __new__(cls, color='white', background=None, underline=False, name=None):
+    def __new__(cls, color=None, background=None, underline=False, name=None):
         if name:
             name = name.lower()
             try:
@@ -374,7 +376,7 @@ class Colorizer():
 
         return ret
 
-    def __init__(self, color='white', background=None, underline=False, name=None):
+    def __init__(self, color=None, background=None, underline=False, name=None):
         self.color = color
         self.background = background
         self.underline = underline
@@ -421,10 +423,10 @@ class Colorizer():
         except KeyError:
             pass
         color, background = (c and c.lower().strip("_") for c in cls.RE_PARSE_COLOR_SPEC.match(markup).groups())
-        if color not in COLORS:
-            color = "white"
         if background not in COLORS:
             background = None
+        if color not in COLORS:
+            color = "white" if background else None
         return cls(color=color, background=background, name=markup)
 
 
@@ -441,13 +443,15 @@ def register_colorizers(**styles):
 
     ret = {}
     for name, style in styles.items():
+        fg = bg = None
+        underline = False
         if isinstance(style, str):
             fg = style
-            bg = None
-            underline = False
         elif isinstance(style, tuple):
             fg, bg, *more = style
             underline = more[0] if more else False
+        elif style is None:
+            pass
         else:
             raise ValueError("Invalid style: %r (expecting an str or a fg/bg tuple)", (style,))
         ret[name] = Colorizer(name=name, color=fg, background=bg, underline=underline)
