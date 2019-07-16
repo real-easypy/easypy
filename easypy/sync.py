@@ -576,7 +576,7 @@ class LoggedRLock():
     LockType = threading.RLock
 
     __slots__ = ("_lock", "_name", "_lease_expiration", "_lease_timer", "_log_interval", "_get_data")
-    _RE_OWNER = re.compile(".*owner=(\d+) count=(\d+).*")
+    _RE_OWNER = re.compile(r".*owner=(\d+) count=(\d+).*")
     _MIN_TIME_FOR_LOGGING = 10
 
     def __init__(self, name=None, log_interval=15, lease_expiration=NEVER):
@@ -1083,29 +1083,31 @@ def iter_wait(
 
 @wraps(iter_wait)
 def wait(*args, **kwargs):
-    """Wait until ``pred`` returns True (by polling it), or until ``timeout`` passes.
+    """
+    Wait until ``pred`` returns a useful value (see below), or until ``timeout`` passes.
 
-    :param timeout: how long to wait for ``pred`` to return True. if ``None`` waits
+    :param timeout: how long to wait for ``pred`` to get satisfied. if ``None`` waits
         indefinitely.
     :param pred: callable that checks the condition to wait upon.
-        if it returns anything but ``None`` or ``False`` then ``wait`` will finish.
-        if it raises a subclass of PredicateNotSatisfied, then ``wait`` continues.
-        if timeout expires then the last PredicateNotSatisfied exception is raised
-        instead of a TimeoutException.
-        ``pred`` can be a list of predicates, in which case ``wait`` waits until all
-        of them return ``True`` at least once.
-    :param sleep: how long to sleep between calls to ``pred``. can be a callable.
-        can be a (first, max) tuple, in which case the sleep duration will grow
+        It can return ``None`` or ``False`` to indicate that the predicate has not been satisfied.
+        Any other value will end the wait and that value will be returned from the wait function.
+        The predicate can also raise a subclass of PredicateNotSatisfied. The exception will be raised
+        if the timeout expires, instead of a TimeoutException.
+        ``pred`` can be a list of predicates, and ``wait`` will wait for all of them to be satisfied.
+        Note that once a predicate is satisfied, it will not be called again.
+        If no ``pred`` is provided, ``wait`` behaves like ``sleep``.
+    :param sleep: the number of seconds to sleep between calls to ``pred``.
+        it can be a callable, or a ``(first, max)`` tuple, in which case the sleep duration will grow
         exponentially from ``first`` up to ``max``.
-    :param message: message to use for a TimeoutException. can be a callable. if ``None``
-        then a default message is used. cannot be None when ``pred`` is given
-        (default is uninformative). can be False to force using default.
-    :param progressbar: if True, show a progress bar while waiting.
+    :param message: message to use for a TimeoutException. can be a callable. To encourage the use of
+        informative TimeoutException messages, the user must provide a value here. If a PredicateNotSatisfied
+        is used in the predicate, pass ``False``.
+    :param progressbar: if True, show an automatic progress bar while waiting.
+    :param caption: message to show in progress bar, and in TimeoutException (if ``message``
+        not given).
     :param throw: if True, throw an exception if ``timeout`` expires.
         if ``pred`` not given, this is always False.
     :param allow_interruption: if True, the user can end the wait prematurely by hitting ESC.
-    :param caption: message to show in progress bar, and in TimeoutException (if ``message``
-        not given).
     :param log_interval: interval for printing thrown ``PredicateNotSatisfied``s to the log.
         Set to ``None`` to disable this logging. If the predicate returns ``False`` instead
         of throwing this argument will be ignored. Defaults to 10 minutes.
