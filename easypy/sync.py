@@ -125,7 +125,6 @@ def async_raise_in_main_thread(exc, use_concurrent_loop=True):
 
 
 THREADING_MODULE_PATHS = [threading.__file__]
-MAX_THREAD_POOL_SIZE = 50
 
 
 if is_module_patched("threading"):

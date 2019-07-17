@@ -7,6 +7,7 @@ This module helps you run things concurrently
 from concurrent.futures import ThreadPoolExecutor, CancelledError, as_completed, Future, wait as futures_wait
 from concurrent.futures import TimeoutError as FutureTimeoutError
 
+import os
 from collections import defaultdict
 from contextlib import contextmanager, ExitStack
 from functools import partial, wraps
@@ -22,14 +23,16 @@ from datetime import datetime
 
 from easypy.exceptions import PException
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
-from easypy.humanize import IndentableTextBuffer, time_duration, compact
-from easypy.humanize import format_thread_stack
+from easypy.humanize import IndentableTextBuffer, time_duration, compact, format_thread_stack, yesno_to_bool
 from easypy.threadtree import iter_thread_frames
 from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize_by_patterns
-from easypy.sync import SynchronizationCoordinator, ProcessExiting, THREADING_MODULE_PATHS, MAX_THREAD_POOL_SIZE, raise_in_main_thread
+from easypy.sync import SynchronizationCoordinator, ProcessExiting, THREADING_MODULE_PATHS, raise_in_main_thread
 
+
+MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
+DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
 this_module = import_module(__name__)
 
