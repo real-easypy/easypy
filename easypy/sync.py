@@ -704,9 +704,10 @@ class RWLock(object):
         return self
 
     def __enter__(self):
+        while not self.cond.acquire(timeout=15):
+            _logger.debug("%s - waiting...", self)
+
         try:
-            while not self.cond.acquire(timeout=15):
-                _logger.debug("%s - waiting...", self)
             self.owners[_get_my_ident()] += 1
             _verbose_logger.debug("%s - acquired (non-exclusively)", self)
             return self
@@ -714,9 +715,10 @@ class RWLock(object):
             self.cond.release()
 
     def __exit__(self, *args):
+        while not self.cond.acquire(timeout=15):
+            _logger.debug("%s - waiting...", self)
+
         try:
-            while not self.cond.acquire(timeout=15):
-                _logger.debug("%s - waiting...", self)
             my_ident = _get_my_ident()
             self.owners[my_ident] -= 1
             if not self.owners[my_ident]:
