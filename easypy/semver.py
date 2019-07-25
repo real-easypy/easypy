@@ -84,11 +84,11 @@ class SemVer(namedtuple("SemVer", "major minor patch build tag")):
 
     def __lt__(self, other):
         assert isinstance(other, self.__class__)
-        return self._to_tuple() < other._to_tuple()
+        return (self._to_tuple(), self.tag) < (other._to_tuple(), other.tag)
 
     def __gt__(self, other):
         assert isinstance(other, self.__class__)
-        return self._to_tuple() > other._to_tuple()
+        return (self._to_tuple(), self.tag) > (other._to_tuple(), other.tag)
 
     def __ge__(self, other):
         return not self.__lt__(other)
