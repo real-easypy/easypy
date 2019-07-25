@@ -22,6 +22,19 @@ class SemVer(namedtuple("SemVer", "major minor patch build tag")):
 
     @classmethod
     def loads(cls, string, *, separator='.', tag_separator='-', raise_on_failure=True):
+        """
+        Load a string into a SemVer object.
+
+        :param string: The string representing the semantic version. Must adhere to semver format.
+        :type string: str
+        :param separator: Use a different version part separator.
+        :type separator: str, optional
+        :param tag_separator: Use a different tag separator.
+        :type tag_separator: str, optional
+        :param raise_on_failure: Whether to raise on failure or just return None
+        :type raise_on_failure: bool, optional
+        """
+
         string, _, tag = string.partition(tag_separator)
         parts = string.split(separator)
         try:
@@ -34,7 +47,12 @@ class SemVer(namedtuple("SemVer", "major minor patch build tag")):
 
     @classmethod
     def loads_fuzzy(cls, string):
-        """Loads a version string where separators cab be either '.' or '-'"""
+        """
+        Load a string into a SemVer without enforcing semver format.
+
+        :param string: The string representing the semantic version. Must adhere to semver format.
+        :type string: str
+        """
 
         regex = re.compile(r"((?:\d+[.-])+)(.*)")
         string, tag = regex.fullmatch(string).groups()
@@ -79,6 +97,15 @@ class SemVer(namedtuple("SemVer", "major minor patch build tag")):
         return not self.__gt__(other)
 
     def dumps(self, *, separator='.', tag_separator='-'):
+        """
+        Dump SemVer into a string representation.
+
+        :param separator: Use a different version part separator.
+        :type separator: str, optional
+        :param tag_separator: Use a different tag separator.
+        :type tag_separator: str, optional
+        """
+
         template = "{self.major}{separator}{self.minor}"
         if self.patch is not None:
             template += "{separator}{self.patch}"
@@ -90,24 +117,62 @@ class SemVer(namedtuple("SemVer", "major minor patch build tag")):
         return template.format(**locals())
 
     def copy(self, **kw):
+        """
+        Copy this SemVer object to a new one with optional changes.
+
+        :param kw: Change some of the object's attributes
+            (Any of major, minor, patch, build, tag).
+        """
+
         return self.__class__(**dict(self._asdict(), **kw))
 
     def bump_build(self, clear_tag=True):
+        """
+        Return a copy of this object with the build part incremented by one
+
+        :param clear_tag: Whether to clear the SemVer tag part
+        :type clear_tag: bool, optional
+        """
+
         return self.copy(
             build=(0 if self.build is None else self.build) + 1,
             tag='' if clear_tag else self.tag)
 
     def bump_patch(self, clear_tag=True):
+        """
+        Return a copy of this object with the patch part incremented by one
+        Bumping patch resets build part.
+
+        :param clear_tag: Whether to clear the SemVer tag part
+        :type clear_tag: bool, optional
+        """
+
         return self.copy(
             build=0, patch=self.patch + 1,
             tag='' if clear_tag else self.tag)
 
     def bump_minor(self, clear_tag=True):
+        """
+        Return a copy of this object with the minor part incremented by one
+        Bumping minor resets build and patch parts.
+
+        :param clear_tag: Whether to clear the SemVer tag part
+        :type clear_tag: bool, optional
+        """
+
         return self.copy(
             build=0, patch=0, minor=self.minor + 1,
             tag='' if clear_tag else self.tag)
 
     def bump_major(self, clear_tag=True):
+        """
+        Return a copy of this object with the major part incremented by one
+        Bumping major resets build, patch and minor parts.
+
+        :param clear_tag: Whether to clear the SemVer tag part
+        :type clear_tag: bool, optional
+        """
+
         return self.copy(
             build=0, patch=0, minor=0, major=self.major + 1,
             tag='' if clear_tag else self.tag)
