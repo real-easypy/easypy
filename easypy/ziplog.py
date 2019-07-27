@@ -155,7 +155,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='ZipLog - merge logs by timestamps')
     parser.add_argument(
         'logs', metavar='N', type=str, nargs='+',
-        help='log files')
+        help='Log files; Use "-" for STDIN')
     parser.add_argument(
         '-i', '--interval', dest='interval', default=None,
         help="Show interval by seconds (s), or milliseconds (ms)")
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         help="A prefix to prepend to timestamped lines")
     ns = parser.parse_args(sys.argv[1:])
 
-    files = map(open, ns.logs)
+    files = [sys.stdin if f == "-" else open(f) for f in ns.logs]
     try:
         for line in iter_zipped_logs(*files, show_intervals=ns.interval, prefix=ns.prefix):
             print(line, end="")
