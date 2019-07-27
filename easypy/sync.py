@@ -15,16 +15,15 @@ import atexit
 import signal
 import os
 from collections import Counter
-from .bunch import Bunch
 
-import easypy._multithreading_init
+import easypy._multithreading_init  # noqa
+from .bunch import Bunch
 from .gevent import is_module_patched
 from .decorations import wrapper_decorator, parametrizeable_decorator
 from .caching import locking_cache
 from .exceptions import PException, TException
 from .units import NEVER, MINUTE, HOUR
 from .misc import Hex
-from .timing import Timer
 from .humanize import time_duration  # due to interference with jrpc
 from .misc import kwargs_resilient
 
@@ -1170,3 +1169,6 @@ def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf")
 
     progress.finished = True
     yield progress  # indicate success
+
+
+from .timing import Timer  # noqa; avoid import cycle
