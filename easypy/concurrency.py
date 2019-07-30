@@ -92,7 +92,6 @@ from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_mai
 MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
 DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
 
-
 this_module = import_module(__name__)
 THREADING_MODULE_PATHS = [threading.__file__]
 
