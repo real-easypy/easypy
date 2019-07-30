@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2019-07-30
+
+### Added
+- ci: run tests in random order
+- collections: added unittest
+
+### Fixed
+- sync: Don't release unacquired lock
+- caching: Don't leak open db, as it is concurrent access which has undefined behavior
+- concurrency
+	- refactor to fix stalling of main-thread after Futures.executor breaks on exception
+	- Update max number of threads
+- logging: set default host in thread logging context
+
+
 ## [0.3.0] - 2019-06-10
 
 ### Added
