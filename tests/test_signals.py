@@ -3,13 +3,14 @@ import pytest
 from contextlib import contextmanager
 
 from easypy.signals import register_object, unregister_object, MissingIdentifier, PRIORITIES
-from easypy.signals import on_test
+from easypy.signals import on_test, on_async_test
 from easypy.signals import on_test_identifier
 from easypy.signals import on_ctx_test
 from easypy.signals import on_ctx_test_identifier
 
 on_test_identifier.identifier = 'obj'
 on_ctx_test_identifier.identifier = 'obj'
+on_async_test.asynchronous = True
 
 
 def test_simple_signal_registration():
@@ -162,25 +163,20 @@ def test_async():
 
     main = get_ident()
 
-    @on_test.register(asynchronous=True)
+    @on_async_test.register(asynchronous=True)
     def a1():
         assert get_ident() != main
 
-    @on_test.register()
+    @on_async_test.register()  # follows the current setting
     def a2():
-        assert get_ident() == main
-
-    on_test()
-
-    on_test.asynchronous = True
-
-    @on_test.register()  # follows the current setting
-    def a3():
         assert get_ident() != main
 
-    on_test()
+    with pytest.raises(AssertionError):
+        @on_async_test.register(asynchronous=False)
+        def xx():
+            assert get_ident() == main
 
-    on_test.asynchronous = False
+    on_async_test()
 
 
 def test_ctx():
