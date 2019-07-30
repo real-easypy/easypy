@@ -12,12 +12,12 @@ env:
   - GEVENT=false
 
 install:
-  - pip install gevent PyYaml
+  - pip install gevent PyYaml pytest-random-order
   - pip install sphinx==1.7.9 ghp-import
 
 script:
-  - python -m pytest -vv tests
-  - python -m pytest -vv --doctest-modules easypy
+  - python -m pytest --random-order-bucket=package -vv tests
+  - python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
 
 notifications:
     email:
