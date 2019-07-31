@@ -34,3 +34,11 @@ after_success: |-
   export PATH=$HOME/.local/bin:$PATH &&
   ghp-import -n _build &&
   git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
+
+deploy:
+  provider: pypi
+  user: "Ofer.Koren"
+  password:
+    secure: qWtk95KHG1Hf+iDPGFtgU5pwkMiZN2TL5dU2e7QN3DY6rRdHHgG8rPVlT/ZRDbwGHdmjJ3P5GZ5VybfclZk+FxYQuViacDLrRtB9ivf6+tgs1hflj30T8m4bad7uxLpKX82T2Sf/Z3bOdy1g+0Cp/Gzr6j7mpluOprcZhgsiW1xABOtH4TdY7ZceGC+caGFjS7Tjjj75T274pP8vqSCgrPclHUR+m1XWfWupOndS0lnCA0yrmoAwOmzIt03aS8Ye92ukzAPgj0hbUYvRhHPfouk45D83R4ERCJt3uMd4S2IO4nDUOUenQI6DZtaEEtkABv8wagMsUlAWd/OxTqcBboV16QjBt0uFnlI1GdAKAXt6Etc5XLbkafJ5H/FaoWdI2R3qrbu0r3FgTQIKh6msTb+2EsfAEyDrIiHpJ2BX7plcsx5liEDw5TZ3CELpnJJjMMJG1CW3R7YOmpziR+IVyqqHqDPS0aOe/FM+Dk18FXsvArMAmuO+CXLsQE1OYdgGztLhmz2tLXmMolukJOyCcCrXCah17TbUtgKV8NHpHs/wSgKCLLTcfPAwCEQnt15ciQywuSAqeg2Rk9K524XHZkWoj136vIc3+B9MhHo0XKNP3Z6SrRExV8wZZfSxELsmVhytMG1z5JxIuIEwO3bsSiazJTlRcfTWIiSOTTr9aRg=
+  on:
+    tags: true
