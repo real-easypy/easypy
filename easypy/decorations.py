@@ -5,6 +5,9 @@ This module is about making it easier to create decorators
 from functools import wraps, partial, update_wrapper
 from operator import attrgetter
 from abc import ABCMeta, abstractmethod
+import inspect
+
+from .tokens import AUTO
 
 
 def parametrizeable_decorator(deco):
@@ -138,3 +141,60 @@ def lazy_decorator(decorator_factory, cached=False):
     def wrapper(func):
         return LazyDecoratorDescriptor(decorator_factory, func, cached)
     return wrapper
+
+
+def mirror_defaults(mirrored):
+    """
+    Copy the default values of arguments from another function.
+
+    Set an argument's default to ``AUTO`` to copy the default value from the
+    mirrored function.
+
+    >>> from easypy.decorations import mirror_defaults
+
+    >>> def foo(a=1, b=2, c=3):
+    ...     print(a, b, c)
+
+    >>> @mirror_defaults(foo)
+    ... def bar(a=AUTO, b=4, c=AUTO):
+    ...     foo(a, b, c)
+
+    >>> bar()
+    1 4 3
+    """
+    defaults = {
+        p.name: p.default
+        for p in inspect.signature(mirrored).parameters.values()
+        if p.default is not inspect._empty}
+
+    def new_params_generator(params, defaults_to_override):
+        for param in params:
+            if param.default is AUTO:
+                try:
+                    default_value = defaults[param.name]
+                except KeyError:
+                    raise TypeError('%s has no default value for %s' % (mirrored.__name__, param.name))
+                defaults_to_override.add(param.name)
+                yield param.replace(default=default_value)
+            else:
+                yield param
+
+    def outer(func):
+        orig_signature = inspect.signature(func)
+        defaults_to_override = set()
+        new_parameters = new_params_generator(orig_signature.parameters.values(), defaults_to_override)
+        new_signature = orig_signature.replace(parameters=new_parameters)
+
+        @wraps(func)
+        def inner(*args, **kwargs):
+            binding = new_signature.bind(*args, **kwargs)
+
+            # NOTE: `apply_defaults` was added in Python 3.5, so we cannot use it
+            for name in defaults_to_override - binding.arguments.keys():
+                binding.arguments[name] = defaults[name]
+
+            return func(*binding.args, **binding.kwargs)
+        inner.signature = new_signature
+
+        return inner
+    return outer

@@ -2,8 +2,9 @@ import pytest
 
 from functools import wraps
 
-from easypy.decorations import lazy_decorator
+from easypy.decorations import lazy_decorator, mirror_defaults
 from easypy.misc import kwargs_resilient
+from easypy.tokens import AUTO
 
 
 def test_kwargs_resilient():
@@ -136,3 +137,26 @@ def test_lazy_decorator_with_timecache():
     foo2.ts += 1
     assert [foo1.inc(), foo2.inc()] == [2, 2]
     assert [foo1.counter, foo2.counter] == [1, 2]  # foo1 was not updated since last sync - only foo2
+
+
+def test_mirror_defaults():
+    def foo(a, b, c=1, d=2, *args, e=3, f=4, **kwargs):
+        return locals()
+
+    @mirror_defaults(foo)
+    def bar(a, b=100, c=AUTO, d=20, *args, e=AUTO, f=40, **kwargs):
+        return foo(a, b, c, d, *args, e=e, f=f, **kwargs)
+
+    assert bar(300) == dict(
+        a=300, b=100,
+        c=1, d=20,
+        args=(),
+        e=3, f=40,
+        kwargs={})
+
+    assert bar(300, 400, 500, 600, 700, e=800, f=900, g=1000) == dict(
+        a=300, b=400,
+        c=500, d=600,
+        args=(700,),
+        e=800, f=900,
+        kwargs=dict(g=1000))
