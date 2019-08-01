@@ -155,7 +155,7 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
             time.sleep(sleep_for)
 
 
-def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=logging.DEBUG, pred=None):
+def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
     """Try running the decorated function, retrying if an acceptable exception caught.
 
     times - limit number of attempts before errors are propagated instead of suppressed.
@@ -178,16 +178,16 @@ def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=lo
         @wraps(func)
         def impl(*args, **kwargs):
             return retry(
-                times, func, args, kwargs,
-                sleep=sleep, max_sleep=max_sleep,
-                acceptable=acceptable, log_level=log_level,
-                pred=pred)
+                times, func, args, kwargs, sleep=sleep, max_sleep=max_sleep, acceptable=acceptable,
+                log_level=log_level, pred=pred, unacceptable=unacceptable)
         return impl
     return wrapper
 
 
 class _Retry(Exception):
     pass
+
+
 retrying.Retry = _Retry
 
 retrying.debug = partial(retrying, log_level=logging.DEBUG)
