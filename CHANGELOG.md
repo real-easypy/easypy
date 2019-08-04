@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 	- refactor to fix stalling of main-thread after Futures.executor breaks on exception
 	- Update max number of threads
 - logging: set default host in thread logging context
+- resilience: match ``retry`` and ``retrying`` function signature
 
 
 ## [0.3.0] - 2019-06-10
