@@ -1,6 +1,6 @@
 import pytest
 from easypy.collections import separate
-from easypy.collections import ListCollection, SimpleObjectCollection, partial_dict, UNIQUE, ObjectNotFound
+from easypy.collections import ListCollection, SimpleObjectCollection, partial_dict, UNIQUE, ObjectNotFound, TooManyObjectsFound
 from easypy.bunch import Bunch
 from collections import Counter
 
@@ -80,6 +80,12 @@ def test_collection_sample_too_much():
     len(L.select(name='a', id='2').sample(100)) == 100
     with pytest.raises(ObjectNotFound):
         L.select(name='a', id='2').sample(101)
+
+
+def test_collection_sample_too_many():
+    len(L.select(name='a', id='2').sample(100)) == 100
+    with pytest.raises(TooManyObjectsFound):
+        L.get(name='a', id='2')
 
 
 def test_collection_sample_unique0():

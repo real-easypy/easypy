@@ -81,6 +81,12 @@ def test_thread_context_stacks():
             pass
 
 
+def test_multiobject_0():
+    x = MultiObject([]).foo()
+    assert len(x) == 0
+    assert x.__class__.CONCESTOR is object
+
+
 def test_multiobject_1():
     m = MultiObject(range(10))
 
