@@ -29,6 +29,17 @@ class PException(Exception):
         self._params = {}
         self.add_params(**params)
 
+    def __reduce__(self):
+        return (self.__class__.__new__, (self.__class__,), self.__getstate__())
+
+    def __getstate__(self):
+        return (self.message, self.context, self.traceback, self.timestamp, self._params)
+
+    def __setstate__(self, state):
+        self.message, self.context, self.traceback, self.timestamp, params = state
+        self._params = {}
+        self.add_params(**params)
+
     def add_params(self, **params):
         for k, v in params.items():
             setattr(self, k, v)
