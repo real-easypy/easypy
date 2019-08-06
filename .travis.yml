@@ -16,6 +16,7 @@ install:
   - pip install sphinx==1.7.9 ghp-import
 
 script:
+  - python -m pytest --random-order-bucket=package -vv test_package.py  # separate, since it mucks with imports
   - python -m pytest --random-order-bucket=package -vv tests
   - python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
 

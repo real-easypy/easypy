@@ -76,6 +76,7 @@ import time
 import os
 from collections import namedtuple
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import easypy._multithreading_init  # noqa; make it initialize the threads tree
 from easypy.exceptions import PException

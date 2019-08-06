@@ -570,10 +570,21 @@ def log_context(method=None, **ctx):
 #=====================#=====================#=====================#
 # This monkey-patch tricks logging's findCaller into skipping over
 # this module when looking for the caller of a logger.log function
+
+try:
+    # restore, in case we've already mocked this, as when running unit-tests
+    logging._srcfile = logging._orig_srcfile
+except AttributeError:
+    logging._orig_srcfile = logging._srcfile
+
+
 class _SrcFiles:
     _srcfiles = {logging._srcfile, __file__}
+
     def __eq__(self, fname):
         return fname in self.__class__._srcfiles
+
+
 logging._srcfile = _SrcFiles()
 #=====================#=====================#=====================#
 
