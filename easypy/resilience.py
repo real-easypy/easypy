@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 from functools import partial, wraps
 from contextlib import contextmanager
+from typing import Union
 from easypy.timing import Timer
 from easypy.units import Duration
 import random
@@ -97,12 +98,15 @@ class ExpiringCounter(object):
         return self.times
 
 
-def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
+def retry(times: Union[int, Duration, Timer], func, args=[], kwargs={}, acceptable=Exception, sleep=1,
           max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
     """
     Runs a function again and again until it finishes without throwing.
 
-    :param times: How many times to retry the function.
+    :param times: Limit number of attempts before errors are propagated instead of suppressed.
+                  If an `int`, the execution is retried at most `times` times.
+                  If a `Timer`, retries until the `times` expires.
+                  If a `Duration`, retires for the specified duarion.
     :param func: The function to run.
     :param list args: Positional arguments for the function.
     :param dict kwargs: Keyword arguments for the function.
@@ -155,7 +159,7 @@ def retry(times, func, args=[], kwargs={}, acceptable=Exception, sleep=1,
             time.sleep(sleep_for)
 
 
-def retrying(times, acceptable=Exception, sleep=1, max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
+def retrying(times: Union[int, Duration, Timer], acceptable=Exception, sleep=1, max_sleep=False, log_level=logging.DEBUG, pred=None, unacceptable=()):
     """Try running the decorated function, retrying if an acceptable exception caught.
 
     times - limit number of attempts before errors are propagated instead of suppressed.
