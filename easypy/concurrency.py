@@ -933,12 +933,19 @@ class concurrent(object):
         self.kwargs = kwargs
         self.throw = kwargs.pop('throw', True)
         self.daemon = kwargs.pop('daemon', True)
-        self.threadname = kwargs.pop('threadname', 'anon-%X' % id(self))
         self.stopper = kwargs.pop('stopper', threading.Event())
         self.sleep = kwargs.pop('sleep', 1)
         self.loop = kwargs.pop('loop', False)
         self.timer = None
         self.console_logging = kwargs.pop('console_logging', True)
+        self.threadname = kwargs.pop('threadname', None)
+        if not self.threadname:
+            current_thread_name = threading.current_thread().name
+            if current_thread_name:
+                current_thread_name = current_thread_name.split('::')[0]  # We want to see only the context
+                self.threadname = "%s::%X" % (current_thread_name, id(self))
+            else:
+                self.threadname = "anon-%X" % id(self)
 
         real_thread_no_greenlet = kwargs.pop('real_thread_no_greenlet', False)
         if is_module_patched("threading"):
