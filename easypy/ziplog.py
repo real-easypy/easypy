@@ -95,7 +95,7 @@ class TimestampedStream(object):
         return 0
 
 
-def iter_zipped_logs(*log_streams, prefix="DARK_GRAY@{> }@", show_intervals=None):
+def iter_zipped_logs(*log_streams, prefix="> ", show_intervals=None):
     """
     Line iterator that merges lines from different log streams based on their timestamp.
     Timestamp patterns are found in the TIMESTAMP_GETTERS list in this module.
