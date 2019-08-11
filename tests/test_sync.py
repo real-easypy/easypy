@@ -19,7 +19,7 @@ from easypy.sync import LoggedRLock, LockLeaseExpired
 from easypy.sync import SynchronizedSingleton
 from easypy.sync import LoggedCondition
 
-from .test_logging import get_log
+from .test_logging import get_log  # noqa; pytest fixture
 
 
 def test_shared_contextmanager():
