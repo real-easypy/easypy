@@ -21,6 +21,12 @@ setuptools.setup(
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
+    entry_points={
+        'console_scripts': [
+            'eziplog=easypy.ziplog:main',
+            'ezcolorize=easypy.colors:main',
+        ]
+    },
 )
 
 

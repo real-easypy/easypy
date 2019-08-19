@@ -455,10 +455,17 @@ def register_colorizers(**styles):
 globals().update((name.upper(), Colorizer(color=name, name=name)) for name in COLORS)
 
 
-if __name__ == '__main__':
+def main():
     """
     Colorize lines from stdin
     """
     import fileinput
-    for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
-        print(colorize(line), end="", flush=True)
+    try:
+        for line in fileinput.input(openhook=functools.partial(open, errors='replace')):
+            print(colorize(line), end="", flush=True)
+    except BrokenPipeError:
+        pass
+
+
+if __name__ == "__main__":
+    main()
