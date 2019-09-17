@@ -45,12 +45,14 @@ class Bunch(dict):
         else:
             dict.__setattr__(self, "__stop_recursing__", True)
             try:
-                items = sorted("%s=%r" % (k, v) for k, v in self.items()
-                               if isinstance(k, str) and not k.startswith("__"))
-                attrs = ", ".join(items)
+                attrs = self.render()
             finally:
                 dict.__delattr__(self, "__stop_recursing__")
         return "%s(%s)" % (self.__class__.__name__, attrs)
+
+    def render(self):
+        items = sorted("%s=%r" % (k, v) for k, v in self.items() if isinstance(k, str) and not k.startswith("__"))
+        return ", ".join(items)
 
     def _repr_pretty_(self, *args, **kwargs):
         from easypy.humanize import ipython_mapping_repr
