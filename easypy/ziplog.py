@@ -31,8 +31,9 @@ TIMESTAMP_GETTERS = [
      lambda ts: datetime.strptime(ts, '%Y-%m-%dT%H:%M:%S%z').timestamp()),
 
     # 2018-12-15T02:11:06.123456+02:00
-    (re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6})(\+\d{2}):(\d{2})"),
-     lambda *args: datetime.strptime("{}{}{}".format(*args), '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()),
+    # 2019-10-09T10:58:45,929228489+03:00
+    (re.compile(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})[.,](\d{6})\d*(\+\d{2}):(\d{2})"),
+     lambda *args: datetime.strptime("{}.{}{}{}".format(*args), '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()),
 
     # 2018-04-06 17:13:40,955
     # 2018-04-23 04:48:11,811|
