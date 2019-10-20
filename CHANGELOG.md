@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- units: Added a Percentage class
+
+
 ## [0.3.1] - 2019-07-30
 
 ### Added

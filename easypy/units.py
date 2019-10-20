@@ -5,6 +5,30 @@ import numbers
 from easypy.exceptions import TException
 
 
+class Percentage(float):
+
+    def __repr__(self):
+        return "{:.1f}%".format(self * 100)
+
+    def __format__(self, spec):
+        width, precision, name = re.match(r"(?:(\d+))?(?:\.(\d*))?(\w+)?", spec).groups()
+        precision = int(precision) if precision else 1
+        if name in ("f", None):
+            ret = "{:.{precision}f}%".format(self * 100, precision=precision)
+        elif name == "d":
+            ret = "{}%".format(round(self * 100))
+        return "{:>{width}}".format(ret, width=width or "")
+
+    def _repr_pretty_(self, p, cycle):
+        # used by IPython
+        from easypy.colors import MAGENTA
+        from easypy.humanize import vertbar
+        if cycle:
+            p.text('Percentage(...)')
+            return
+        p.text(MAGENTA("{1}:{0!r}".format(self, vertbar(self))))
+
+
 class UnknownDataSizeError(TException):
     template = 'Could not parse size {}'
 
