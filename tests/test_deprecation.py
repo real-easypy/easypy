@@ -2,6 +2,7 @@ import pytest
 from easypy.deprecation import deprecated_arguments
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_deprecated_arguments():
     @deprecated_arguments(foo='bar')
     def func(bar):
