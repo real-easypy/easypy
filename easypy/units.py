@@ -306,7 +306,7 @@ class Duration(float):
 
     def render(self, unit=None, precision=None):
         if self == NEVER:
-            return "Never"
+            return "Eternity"
 
         if not unit:
             for unit_size in self.SORTED_UNITS:
@@ -362,7 +362,7 @@ DAY = Duration(24 * HOUR)
 WEEK = Duration(7 * DAY)
 MONTH = Duration(31 * DAY)
 YEAR = Duration(365 * DAY)
-NEVER = Duration("inf")
+ETERNITY = NEVER = Duration("inf")
 
 # ------
 

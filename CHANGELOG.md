@@ -6,8 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- units: Duration(inf) is now 'Eternity' instead of 'Never'
+- timing: The Timer class now renders the duration using the Duration's repr, instead of as a float
+
 ### Added
 - units: Added a Percentage class
+- timing: Added a TimeInterval class, for use for timestamp comparisons. Can be converted to/from the Timer class
 
 
 ## [0.3.1] - 2019-07-30

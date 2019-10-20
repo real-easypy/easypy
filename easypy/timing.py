@@ -6,6 +6,94 @@ from .decorations import parametrizeable_decorator
 from .units import Duration
 
 
+inf = float("inf")  # same as math.inf, but compatible with 3.4
+
+
+def to_timestamp(t):
+    return t.timestamp() if isinstance(t, datetime) else t
+
+
+class TimeInterval(object):
+    __slots__ = ("t0", "t1")
+
+    NO_START = -inf
+    NO_END = inf
+
+    def __init__(self, from_time=NO_START, to_time=NO_END):
+        self.t0 = self.NO_START if from_time is None else to_timestamp(from_time)
+        self.t1 = self.NO_END if to_time is None else to_timestamp(to_time)
+
+    @property
+    def start_time(self):
+        if self.t0 > self.NO_START:
+            return datetime.fromtimestamp(self.t0)
+
+    @property
+    def end_time(self):
+        if self.t1 < self.NO_END:
+            return datetime.fromtimestamp(self.t1)
+
+    @property
+    def duration_delta(self):
+        return timedelta(seconds=self.duration) if self.duration < inf else None
+
+    @property
+    def duration(self):
+        return Duration(self.t1 - self.t0)
+
+    def __contains__(self, t):
+        """
+        check if timestamp is within the timer's interval
+        """
+
+        if isinstance(t, Timer):
+            t = t.to_interval()
+
+        if isinstance(t, TimeInterval):
+            return self.t0 <= t.t0 and t.t1 <= self.t1
+
+        t = to_timestamp(t)
+        return self.t0 <= t <= self.t1
+
+    def to_timer(self):
+        assert self.t0 > self.NO_START, "Can't convert a start-less TimeInterval to a Timer"
+        t = Timer(self.t0)
+        t.t1 = self.t1 if self.t1 < self.NO_END else None
+        return t
+
+    def render(self):
+        t0, duration, t1 = self.t0, self.duration, self.t1
+        if (t0, t1) == (self.NO_START, self.NO_END):
+            return "Eternity"
+
+        parts = [".", "."]
+
+        if t0 > self.NO_START:
+            parts[0] = time.strftime("%T", time.localtime(t0))
+
+        if t1 < self.NO_END:
+            parts[-1] = time.strftime("%T", time.localtime(self.t1))
+
+        if duration < inf:
+            parts.insert(1, "({})".format(duration))
+
+        return "..".join(parts)
+
+    def __str__(self):
+        return "<TI %s>" % self.render()
+
+    def __repr__(self):
+        return "TimeInterval(%s)" % self.render()
+
+    def _repr_pretty_(self, p, cycle):
+        # used by IPython
+        from easypy.colors import MAGENTA
+        if cycle:
+            p.text('TimeInterval(...)')
+            return
+        p.text(MAGENTA(self.render()))
+
+
 class Timer(object):
 
     """
@@ -26,10 +114,12 @@ class Timer(object):
             # do something ...
     """
 
+    __slots__ = ("t0", "t1", "expiration")
+
     def __init__(self, now=None, expiration=None):
         self.reset(now)
         self.t1 = None
-        self.expiration = expiration
+        self.expiration = None if expiration is None else Duration(expiration)
 
     def reset(self, now=None):
         self.t0 = now or time.time()
@@ -43,6 +133,22 @@ class Timer(object):
             time.sleep(sleep)
             yield self.remain
 
+    def to_interval(self):
+        return TimeInterval(self.t0, self.t1)
+
+    def __contains__(self, timestamp):
+        """
+        check if timestamp is within the timer's interval
+        """
+        timestamp = to_timestamp(timestamp)
+        if timestamp < self.t0:
+            return False
+        if not self.t1:
+            return True
+        if timestamp > self.t1:
+            return False
+        return True
+
     __iter__ = iter
 
     @property
@@ -51,11 +157,11 @@ class Timer(object):
 
     @property
     def duration_delta(self):
-        return timedelta(seconds=(self.t1 or time.time()) - self.t0)
+        return timedelta(seconds=self.duration)
 
     @property
     def duration(self):
-        return Duration(self.duration_delta.total_seconds())
+        return Duration((self.t1 or time.time()) - self.t0)
 
     @property
     def elapsed_delta(self):
@@ -88,9 +194,7 @@ class Timer(object):
         t0, duration, elapsed, expired, stopped = self.t0, self.duration, self.elapsed, self.expired, self.stopped
         st = time.strftime("%T", time.localtime(t0))
         if expired:
-            duration = "{:0.1f}+{:0.2f}".format(self.expiration, expired)
-        else:
-            duration = "{:0.2f}".format(duration)
+            duration = "{}+{}".format(self.expiration, expired)
         if stopped:
             et = time.strftime("%T", time.localtime(self.t1))
             fmt = "{st}..({duration})..{et}"
@@ -105,6 +209,14 @@ class Timer(object):
 
     def __repr__(self):
         return "Timer(%s)" % self.render()
+
+    def _repr_pretty_(self, p, cycle):
+        # used by IPython
+        from easypy.colors import MAGENTA, RED
+        if cycle:
+            p.text('Timer(...)')
+            return
+        p.text((RED if self.expired else MAGENTA)(self.render()))
 
 
 class BackoffTimer(Timer):
