@@ -303,6 +303,14 @@ class Field(object):
             preprocess=self.preprocess,
             meta=deepcopy(self.meta))
 
+    def _as_json_schema_(self):
+        from .json_schema import as_json_schema
+        type_schema = as_json_schema(self.type)
+        if self.collection_type is None:
+            return type_schema
+        else:
+            return self.collection_type._as_json_collection_schema_for_(type_schema)
+
 
 class TypedCollection(object):
     def __init__(self, owner, field):
@@ -340,6 +348,10 @@ class TypedList(TypedCollection, ListCollection):
     def extend(self, iterable):
         iterable = map(self._field._process_new_value, iterable)
         return super().extend(iterable)
+
+    @classmethod
+    def _as_json_collection_schema_for_(cls, type_schema):
+        return dict(type='array', items=type_schema)
 
     # TODO: We may decide to override these methods in the future. They don't
     # need to validate members, but do change the collection - so if we want to
@@ -393,6 +405,10 @@ class TypedDict(TypedCollection, dict):
 
         for k, v in kwargs.items():
             self[k] = v
+
+    @classmethod
+    def _as_json_collection_schema_for_(cls, type_schema):
+        return dict(type='object', additionalProperties=type_schema)
 
     # TODO: We may decide to override these methods in the future. They don't
     # need to validate members, but do change the collection - so if we want to
@@ -586,3 +602,18 @@ class TypedStruct(dict, metaclass=TypedStructMeta):
 
     def __ne__(self, other):
         return not self == other
+
+    @classmethod
+    def _as_json_schema_(cls):
+        return dict(
+            type='object',
+            additionalProperties=False,
+            properties={
+                field.name: field._as_json_schema_()
+                for field in cls._fields
+            },
+            required=[
+                field.name
+                for field in cls._fields
+                if field.default is MANDATORY
+            ])
