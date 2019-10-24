@@ -353,6 +353,11 @@ class ObjectCollectionBase(object):
         except ObjectNotFound:
             return None
 
+    def menu(self, multiselect=False):
+        """Open termenu to interactively select item(s) from the collection"""
+        from termenu import show_menu
+        return show_menu(self.name, list(self), multiselect=multiselect)
+
     def filtered(self, *preds, **filters):
         return FilterCollection(self, preds, filters)
 
