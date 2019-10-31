@@ -71,9 +71,9 @@ class SignalHandler(object):
         else:
             self.identifier = None
 
-        # backwards compatibility
-        assert not kw
+        # Backwards compatibility
         self.asynchronous = kw.pop("async", asynchronous)
+        assert not kw, "SignalHandler's kwargs should contain only 'async' argument for backwards compatibility"
 
         self.priority = priority
         self.times = times
