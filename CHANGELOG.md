@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - units: Added a Percentage class
 - timing: Added a TimeInterval class, for use for timestamp comparisons. Can be converted to/from the Timer class
+- concurrency: Add `done()` function to `concurrent` to check if the thread is finished.
 
 
 ## [0.3.1] - 2019-07-30
