@@ -322,3 +322,22 @@ def test_multiexception_types():
 
     with pytest.raises(MultiException[OK]):
         MultiObject([OKBAD]).call(raise_it)
+
+
+@pytest.mark.parametrize('throw', [False, True])
+def test_concurrent_done_status(throw):
+    from threading import Event
+
+    continue_func = Event()
+
+    def func():
+        continue_func.wait()
+        if throw:
+            raise Exception()
+
+    with concurrent(func, throw=False) as c:
+        assert not c.done()
+        continue_func.set()
+        sleep(0.1)
+        assert c.done()
+    assert c.done()

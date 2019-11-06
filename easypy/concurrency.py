@@ -1021,6 +1021,12 @@ class concurrent(object):
             raise self.exc
         return self._result
 
+    def done(self):
+        """
+        Return ``True`` if the thread is done (successfully or not)
+        """
+        return hasattr(self, '_result') or getattr(self, 'exc', None) is not None
+
     @contextmanager
     def paused(self):
         self.stop()
