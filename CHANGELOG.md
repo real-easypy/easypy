@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
+## [0.4.0] - 2019-11-14
 
 ### Changed
 - units: DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
