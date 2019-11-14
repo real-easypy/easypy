@@ -6,15 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+
 ### Changed
+- units: DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
 - units: Duration(inf) is now 'Eternity' instead of 'Never'
 - timing: The Timer class now renders the duration using the Duration's repr, instead of as a float
 
 ### Added
-- units: Added a Percentage class
-- timing: Added a TimeInterval class, for use for timestamp comparisons. Can be converted to/from the Timer class
+- CLI: expose 'colorize' and 'ziplog' as clis
+- units: Added a `Percentage` class
+- timing: Added a `TimeInterval` class, for use for timestamp comparisons. Can be converted to/from the `Timer` class
+- colors: Added '@[..]@' as coloring markup delimiter
+- concurrency: Add parent's name to new thread's name, to show hierarchy
 - concurrency: Add `done()` function to `concurrent` to check if the thread is finished.
+- collections: Add `.menu()` to `ObjectCollectionBase`, integrating with `termenu`
+- semver: Added a module and class for parsing and comparing semver-styled version strings
+- random: Added 'perchance', for a common random use-case
+- bunch: Added `.render()` to render the data cleanly
+- exceptions: support pickling
+- CI: Add python 3.7 and 3.8
 
+### Fixed
+- sync: prevent an import cycle
+- colors/ziplog: swallow BrokenPipeError when parsing from cmdline
+- aliasing: bug fix for 'Cannot create a consistent method resolution', add unittest
+- collections: workaround python bug (3.6.8+) importing 'test.support'
 
 ## [0.3.1] - 2019-07-30
 
