@@ -135,9 +135,9 @@ class Colorized(str):
                 continue
             match = RE_PARSE_COLOR_MARKUP.match(part)
             if match:
-                stl, part1, part2 = match.groups()
+                stl, *parts = match.groups()
                 stl = stl.strip("_")
-                part = part1 or part2 or ""
+                part = next(filter(None, parts))
                 for l in part.splitlines():
                     self.tokens.append(self.ColoredToken(l, stl))
                     self.tokens.append(self.Token("\n"))
@@ -323,7 +323,7 @@ def uncolored(text, ansi=True, markup=True):
     if ansi:
         text = re.sub(re.escape(ANSI_BEGIN) + '.+?m', "", text)
     if markup:
-        text = RE_PARSE_COLOR_MARKUP.sub(lambda m: m.group(2) or m.group(3), text)
+        text = RE_PARSE_COLOR_MARKUP.sub(lambda m: next(filter(None, m.groups()[1:])), text)
     return text
 
 
