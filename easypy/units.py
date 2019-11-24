@@ -72,6 +72,8 @@ class DataSize(int):
     __rmul__ = __mul__
 
     def __floordiv__(self, div):
+        if not isinstance(div, numbers.Number):
+            return NotImplemented
         res = int.__floordiv__(self, div)
         if not isinstance(div, self.__class__):
             # if div is not a datasize, return a datasize
@@ -80,6 +82,8 @@ class DataSize(int):
         return res
 
     def __rfloordiv__(self, div):
+        if not isinstance(div, numbers.Number):
+            return NotImplemented
         res = int.__rfloordiv__(self, div)
         if not isinstance(div, self.__class__):
             # if div is not a datasize, return a datasize
