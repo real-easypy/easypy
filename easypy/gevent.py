@@ -144,11 +144,11 @@ def detect_hogging():
                 continue  # dont dump too much warnings - decay exponentialy until exploding after FAIL_BLOCK_TIME_SEC
             for thread in threading.enumerate():
                 if getattr(thread, '_greenlet', None) == current_running_greenlet:
-                    _logger.info('RED<<greentlet hogger detected (%s seconds):>>', current_blocker_time)
+                    _logger.info('RED<<greenlet hogger detected (%s seconds):>>', current_blocker_time)
                     _logger.debug('thread stuck: %s', thread)
                     break
             else:
-                _logger.info('RED<<unknown greentlet hogger detected (%s seconds):>>', current_blocker_time)
+                _logger.info('RED<<unknown greenlet hogger detected (%s seconds):>>', current_blocker_time)
                 _logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
                 _logger.debug('hub is: %s', HUB)
             _logger.debug("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
