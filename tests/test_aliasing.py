@@ -41,3 +41,24 @@ def test_aliasing_inherit():
     f = Foo("5")
     assert f.get("a") == 1
     assert f == 5
+
+
+def test_aliasing_infinite_recursion_exception():
+    @aliases('bar', static=False)
+    class Foo:
+        def __init__(self):
+            self.bar = Bar(self)
+
+        def __repr__(self):
+            return 'Foo()'
+
+    class Bar:
+        def __init__(self, foo):
+            self.foo = foo
+
+        def baz(self):
+            return self.foo.baz()
+
+    with pytest.raises(getattr(__builtins__, 'RecursionError', RuntimeError)) as e:
+        Foo().baz()
+    assert str(e.value) == "Infinite recursion trying to access 'baz' on Foo() (via Foo.bar.baz)"
