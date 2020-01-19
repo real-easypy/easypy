@@ -14,7 +14,14 @@ env:
   - GEVENT=false
 
 install:
-  - pip install gevent PyYaml pytest-random-order
+  - pip install gevent pytest-random-order
+  # PyYaml 5.3 removed support for Python 3.4
+  - |-
+    if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
+      pip install PyYaml==5.2
+    else
+      pip install PyYaml
+    fi
   - pip install sphinx==1.7.9 ghp-import
 
 before_script:
