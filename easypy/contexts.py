@@ -107,3 +107,27 @@ _ctxm_code_samples = {
 
 def is_contextmanager(func):
     return getattr(func, "__code__", None) in _ctxm_code_samples
+
+
+@contextmanager
+def breakable_section():
+    """
+    Useful for getting out of some deep nesting, as an alternative to a closure:
+
+        item = None
+        with breakable_section() as Break:
+            if alpha:
+                item = alpha.value
+                raise Break
+
+            if beta:
+                for opt in beta.items:
+                    if opt.is_the_one:
+                        item = opt.value
+                        raise Break
+    """
+    Break = type("Break", (Exception,), {})
+    try:
+        yield Break
+    except Break:
+        pass
