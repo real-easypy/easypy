@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - units: DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
 - units: Duration(inf) is now 'Eternity' instead of 'Never'
 - timing: The Timer class now renders the duration using the Duration's repr, instead of as a float
+- aliasing: Improved `RecursionError` for aliasing-induced infinite recursion
 
 ### Added
 - CLI: expose 'colorize' and 'ziplog' as clis
