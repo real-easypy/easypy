@@ -1,5 +1,5 @@
 import pytest
-from easypy.contexts import contextmanager
+from easypy.contexts import contextmanager, breakable_section
 
 
 X = []
@@ -47,3 +47,21 @@ def test_ctx():
         assert X == [1]
 
     assert not X
+
+
+def test_breakable_section():
+
+    a = []
+    with breakable_section() as Break1:
+        with breakable_section() as Break2:
+            with breakable_section() as Break3:
+                raise Break2()
+                a += [1]  # this will be skipped
+            a += [2]  # this will be skipped
+        a += [3]  # landing here
+    a += [4]
+
+    assert Break1 is not Break2
+    assert Break2 is not Break3
+    assert Break3 is not Break1
+    assert a == [3, 4]
