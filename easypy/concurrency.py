@@ -76,10 +76,9 @@ import time
 import os
 from collections import namedtuple
 from datetime import datetime
-from unittest.mock import MagicMock
 
 import easypy._multithreading_init  # noqa; make it initialize the threads tree
-from easypy.exceptions import PException
+from easypy.exceptions import PException, apply_timestamp
 from easypy.gevent import is_module_patched, non_gevent_sleep, defer_to_thread
 from easypy.humanize import IndentableTextBuffer, time_duration, compact
 from easypy.humanize import format_thread_stack, yesno_to_bool
@@ -96,8 +95,10 @@ DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"
 this_module = import_module(__name__)
 THREADING_MODULE_PATHS = [threading.__file__]
 
+IS_GEVENT = False
 
 if is_module_patched("threading"):
+    IS_GEVENT = True
     import gevent
     MAX_THREAD_POOL_SIZE *= 100  # these are not threads anymore, but greenlets. so we allow a lot of them
     THREADING_MODULE_PATHS.append(gevent.__path__[0])
@@ -948,7 +949,7 @@ class concurrent(object):
                 self.threadname = "anon-%X" % id(self)
 
         real_thread_no_greenlet = kwargs.pop('real_thread_no_greenlet', False)
-        if is_module_patched("threading"):
+        if IS_GEVENT:
             # in case of using apply_gevent_patch function - use this option in order to defer some jobs to real threads
             self.real_thread_no_greenlet = real_thread_no_greenlet
         else:
@@ -990,13 +991,14 @@ class concurrent(object):
         except ProcessExiting as exc:
             _logger.debug(exc)
             raise
-        except (KeyboardInterrupt, Exception) as exc:
+        except KeyboardInterrupt as exc:
+            _logger.silent_exception("KeyboardInterrupt in thread running %s:", self.func)
+            self.exc = apply_timestamp(exc)
+            if IS_GEVENT:
+                raise  # in gevent we should let this exception propagate to the main greenlet
+        except Exception as exc:
             _logger.silent_exception("Exception in thread running %s: %s (traceback can be found in debug-level logs)", self.func, type(exc))
-            self.exc = exc
-            try:
-                exc.timestamp = time.time()
-            except Exception:
-                pass
+            self.exc = apply_timestamp(exc)
         finally:
             stack.close()
 
