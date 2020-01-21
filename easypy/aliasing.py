@@ -13,6 +13,13 @@ def super_dir(obj):
     return sorted(set(chain(dir(type(obj)), obj.__dict__)))
 
 
+# Python 3.4 does not have RecursionError - it throws a RuntimeError instead
+try:
+    _RecursionError = RecursionError
+except NameError:
+    _RecursionError = RuntimeError
+
+
 class AliasingMixin():
     @property
     def _aliased(self):
@@ -29,7 +36,16 @@ class AliasingMixin():
     def __getattr__(self, attr):
         if attr.startswith("_"):
             raise AttributeError(attr)
-        return getattr(self._aliased, attr)
+        try:
+            return getattr(self._aliased, attr)
+        except _RecursionError as e:
+            if type(e) is RuntimeError and str(e) != 'maximum recursion depth exceeded':
+                raise
+            raise _RecursionError('Infinite recursion trying to access {attr!r} on {obj!r} (via {type_name}.{alias}.{attr})'.format(
+                attr=attr,
+                obj=self,
+                type_name=type(self).__name__,
+                alias=self._ALIAS))
 
 
 def aliases(name, static=True):
