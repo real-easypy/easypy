@@ -2,7 +2,7 @@ import pytest
 
 from contextlib import contextmanager
 
-from easypy.signals import register_object, unregister_object, MissingIdentifier, PRIORITIES
+from easypy.signals import signal, register_object, unregister_object, MissingIdentifier, PRIORITIES
 from easypy.signals import on_test, on_async_test
 from easypy.signals import on_test_identifier
 from easypy.signals import on_ctx_test
@@ -419,3 +419,112 @@ def test_signal_weakref_context_manager_delete_during_with_identifier():
         gc.collect()
     # The context manager should keep the signal handler alive
     assert result == [1, 2, 3, 4]
+
+
+def test_signal_decorator():
+    @signal
+    def on_test_signal_decorator(value): ...
+
+    result = {}
+
+    on_test_signal_decorator.register(lambda value: result.update(a=value))
+    on_test_signal_decorator.register(lambda value: result.update(b=value))
+
+    on_test_signal_decorator(value=1)
+    assert result == {'a': 1, 'b': 1}
+
+    on_test_signal_decorator(value=2)
+    assert result == {'a': 2, 'b': 2}
+
+
+def test_signal_decorator_contextmanager():
+    result = []
+
+    @signal
+    @contextmanager
+    def on_test_signal_decorator_contextmanager(before, after):
+        yield
+
+    @on_test_signal_decorator_contextmanager.register
+    @contextmanager
+    def handler1(before, after):
+        result.append(before)
+        yield
+        result.append(after)
+
+    assert result == []
+    with on_test_signal_decorator_contextmanager(before=1, after=2):
+        assert result == [1]
+    assert result == [1, 2]
+
+
+def test_signal_decorator_type_verification():
+    @signal
+    def on_test_signal_decorator_type_verification(a, b: int, c): ...
+
+    on_test_signal_decorator_type_verification(a=1, b=2, c=3)
+    on_test_signal_decorator_type_verification(a='hi', b=2, c='bye')
+
+    with pytest.raises(TypeError) as err:
+        on_test_signal_decorator_type_verification()
+    assert 'missing' in str(err.value)
+
+    with pytest.raises(TypeError) as err:
+        on_test_signal_decorator_type_verification(a=1, b='two', c=3)
+    assert 'Expected b:' in str(err.value)
+
+    with pytest.raises(TypeError) as err:
+        on_test_signal_decorator_type_verification(a=1, b=2, c=3, d=4)
+    assert 'unexpected keyword argument' in str(err.value)
+
+    @on_test_signal_decorator_type_verification.register
+    def all_arguments(a, b, c):
+        pass
+
+    @on_test_signal_decorator_type_verification.register
+    def less_arguments_in_different_order(c, a):
+        pass
+
+    with pytest.raises(TypeError) as err:
+        @on_test_signal_decorator_type_verification.register
+        def var_args(*args):
+            pass
+    assert 'illegal parameters' in str(err.value)
+
+    with pytest.raises(TypeError) as err:
+        @on_test_signal_decorator_type_verification.register
+        def extra_parameters(a, b, c, d):
+            pass
+    assert 'parameters not in signal' in str(err.value)
+
+    @on_test_signal_decorator_type_verification.register
+    def extra_parameters_with_default(a, b, c, d=1):
+        pass
+
+    @on_test_signal_decorator_type_verification.register
+    def extra_parameters_kwargs(a, b, c, **kwargs):
+        pass
+
+    on_test_signal_decorator_type_verification(a=1, b=2, c=3)
+
+
+def test_signal_duplicate():
+    from easypy.signals import DuplicateDecoratorDefinedSignal
+    from easypy.signals import ImportedSignalRecreatedWithDecorator
+    from easypy.signals import DecoratedSignalRecreatedWithImport
+
+    from easypy.signals import on_test_signal_duplicate_from_import
+
+    with pytest.raises(ImportedSignalRecreatedWithDecorator):
+        @signal
+        def on_test_signal_duplicate_from_import(): ...
+
+    @signal
+    def on_test_signal_duplicate_decorated(): ...
+
+    with pytest.raises(DuplicateDecoratorDefinedSignal):
+        @signal
+        def on_test_signal_duplicate_decorated(): ...
+
+    with pytest.raises(DecoratedSignalRecreatedWithImport):
+        from easypy.signals import on_test_signal_duplicate_decorated

@@ -26,6 +26,18 @@ class MissingIdentifier(TException):
     template = "signal handler {_signal_name} must be called with a '{_identifier}' argument"
 
 
+class DuplicateDecoratorDefinedSignal(TException):
+    template = '{signal} was already defined with a decorator - cannot redefine'
+
+
+class ImportedSignalRecreatedWithDecorator(TException):
+    template = '{signal} was already created by importing from easypy.signals - cannot recreate with decorator'
+
+
+class DecoratedSignalRecreatedWithImport(TException):
+    template = '{signal} was already created by with decorator - cannot recreate by importing from easypy.signals'
+
+
 def make_id(name):
     # from md5 import md5
     # id = md5(name).hexdigest()[:5].upper()
@@ -146,11 +158,15 @@ class Signal:
 
     ALL = {}
 
-    def __new__(cls, name, asynchronous=None, swallow_exceptions=False, log=True):
+    def __new__(cls, name, asynchronous=None, swallow_exceptions=False, log=True, signature=None):
         try:
-            return cls.ALL[name]
+            signal = cls.ALL[name]
         except KeyError:
             pass
+        else:
+            if signature is None and signal.signature is not None:
+                raise DecoratedSignalRecreatedWithImport(signal=signal)
+            return signal
         assert threading.main_thread() is threading.current_thread(), "Can only create Signal objects from the MainThread"
         signal = object.__new__(cls)
         # we use this to track the calling of various callbacks. we use this short id so it doesn't overflow the logs
@@ -161,6 +177,7 @@ class Signal:
         signal.asynchronous = asynchronous
         signal.identifier = None
         signal.log = log
+        signal.signature = signature
         return cls.ALL.setdefault(name, signal)
 
     def iter_handlers(self):
@@ -188,6 +205,9 @@ class Signal:
 
         if not func:
             return functools.partial(self.register, asynchronous=asynchronous, priority=priority)
+
+        self._verify_handler_func(func)
+
         if asynchronous is None:
             asynchronous = False if self.asynchronous is None else self.asynchronous
         elif self.asynchronous is not None:
@@ -215,7 +235,41 @@ class Signal:
         finally:
             self.unregister(func)
 
+    def _verify_handler_func(self, handler_func):
+        handler_signature = inspect.signature(handler_func)
+        bad_parameters = ', '.join(
+            '%s is %s' % (p, p.kind)
+            for p in handler_signature.parameters.values()
+            if p.kind in (p.POSITIONAL_ONLY, p.VAR_POSITIONAL))
+        if bad_parameters:
+            raise TypeError('%s has illegal parameters for signal handler: %s' % (handler_func, bad_parameters))
+        if self.signature is None:
+            return
+        extra_parameters = ', '.join(
+            parameter.name
+            for parameter in handler_signature.parameters.values()
+            if parameter.kind is not parameter.VAR_KEYWORD
+            and parameter.default is parameter.empty
+            and parameter.name not in self.signature.parameters)
+        if extra_parameters:
+            raise TypeError('%s has parameters not in signal: %s' % (handler_func, extra_parameters))
+
+    def _verify_call_args(self, kwargs):
+        if self.signature is None:
+            return
+        binding = self.signature.bind(**kwargs)
+        for parameter in self.signature.parameters.values():
+            if parameter.annotation is parameter.empty:
+                continue
+            if isinstance(parameter.annotation, type):
+                value = binding.arguments[parameter.name]
+                if not isinstance(value, parameter.annotation):
+                    raise TypeError('Expected {parameter.name}: {parameter.annotation}, got {value_type}'.format(
+                        parameter=parameter,
+                        value_type=type(value)))
+
     def __call__(self, **kwargs):
+        self._verify_call_args(kwargs)
         if not self.identifier:
             pass
         elif self.identifier in kwargs:
@@ -333,6 +387,47 @@ class ContextManagerSignal(Signal):
             yield
 
         self.remove_handlers_if_exist(handlers_to_remove)
+
+
+@parametrizeable_decorator
+def signal(func, asynchronous=None, swallow_exceptions=False, log=True):
+    """
+    Define a signal
+
+    :param func: The (decorated) function that defines the signal name and signature.
+    :param bool asynchronous: Set to enforce synchronous/asynchronous for all handlers.
+    :param bool swallow_exceptions: Ignore exceptions in handlers (ensures all handlers will run)
+    :param bool log: Log signal registration and invocation.
+
+    Example::
+
+        @signal
+        def my_signal(a, b: int): ...
+
+    Handlers registered on the signal will fail if they arguments no in the
+    signal. Calls to the signal will fail if they have arguments not declared
+    in the signal, or arguments with wrong types if the signal annotates the
+    argument.
+    """
+    if is_contextmanager(func):
+        cls = ContextManagerSignal
+    else:
+        cls = Signal
+
+    try:
+        signal = Signal.ALL[func.__name__]
+    except KeyError:
+        return cls(
+            func.__name__,
+            asynchronous=asynchronous,
+            swallow_exceptions=swallow_exceptions,
+            log=log,
+            signature=inspect.signature(func))
+    else:
+        if signal.signature is None:
+            raise ImportedSignalRecreatedWithDecorator(signal=signal)
+        else:
+            raise DuplicateDecoratorDefinedSignal(signal=signal)
 
 
 ####################################

@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bunch: Added `.render()` to render the data cleanly
 - exceptions: support pickling
 - CI: Add python 3.7 and 3.8
+- signals: Added decorator-based signal definition
 
 ### Fixed
 - sync: prevent an import cycle
