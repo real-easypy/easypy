@@ -13,7 +13,7 @@ from easypy.decorations import parametrizeable_decorator
 from easypy.exceptions import TException
 from easypy.contexts import is_contextmanager
 from easypy.misc import kwargs_resilient, WeakMethodDead
-from easypy.collections import separate
+from easypy.collections import separate, collect_with
 
 PRIORITIES = Enum("PRIORITIES", "FIRST NONE LAST")
 _logger = logging.getLogger(__name__)
@@ -24,18 +24,6 @@ ids = set()
 
 class MissingIdentifier(TException):
     template = "signal handler {_signal_name} must be called with a '{_identifier}' argument"
-
-
-class DuplicateDecoratorDefinedSignal(TException):
-    template = '{signal} was already defined with a decorator - cannot redefine'
-
-
-class ImportedSignalRecreatedWithDecorator(TException):
-    template = '{signal} was already created by importing from easypy.signals - cannot recreate with decorator'
-
-
-class DecoratedSignalRecreatedWithImport(TException):
-    template = '{signal} was already created by with decorator - cannot recreate by importing from easypy.signals'
 
 
 def make_id(name):
@@ -159,14 +147,12 @@ class Signal:
     ALL = {}
 
     def __new__(cls, name, asynchronous=None, swallow_exceptions=False, log=True, signature=None):
-        try:
-            signal = cls.ALL[name]
-        except KeyError:
-            pass
-        else:
-            if signature is None and signal.signature is not None:
-                raise DecoratedSignalRecreatedWithImport(signal=signal)
-            return signal
+        if signature is None:
+            # Two signals without a signature that have the same name are identical
+            try:
+                return cls.ALL[name]
+            except KeyError:
+                pass
         assert threading.main_thread() is threading.current_thread(), "Can only create Signal objects from the MainThread"
         signal = object.__new__(cls)
         # we use this to track the calling of various callbacks. we use this short id so it doesn't overflow the logs
@@ -178,7 +164,10 @@ class Signal:
         signal.identifier = None
         signal.log = log
         signal.signature = signature
-        return cls.ALL.setdefault(name, signal)
+        if signature is None:
+            return cls.ALL.setdefault(name, signal)
+        else:
+            return signal
 
     def iter_handlers(self):
         return chain(*(self.handlers[k] for k in PRIORITIES))
@@ -197,6 +186,20 @@ class Signal:
         handlers = set(handlers)
         for priority in {h.priority for h in handlers}:
             self.handlers[priority][:] = (handler for handler in self.handlers[priority] if handler not in handlers)
+
+    def handler(self, func=None, asynchronous=None, priority=PRIORITIES.NONE, **kw):
+        def wrapper(func):
+            signal_handler_for = func.__dict__.setdefault('_signal_handler_for', weakref.WeakKeyDictionary())
+            signal_handler_for[self] = dict(
+                asynchronous=asynchronous,
+                priority=priority,
+                **kw)
+            return func
+
+        if func is None:
+            return wrapper
+        else:
+            return wrapper(func)
 
     def register(self, func=None, asynchronous=None, priority=PRIORITIES.NONE, times=None, **kw):
         # backwards compatibility
@@ -414,20 +417,12 @@ def signal(func, asynchronous=None, swallow_exceptions=False, log=True):
     else:
         cls = Signal
 
-    try:
-        signal = Signal.ALL[func.__name__]
-    except KeyError:
-        return cls(
-            func.__name__,
-            asynchronous=asynchronous,
-            swallow_exceptions=swallow_exceptions,
-            log=log,
-            signature=inspect.signature(func))
-    else:
-        if signal.signature is None:
-            raise ImportedSignalRecreatedWithDecorator(signal=signal)
-        else:
-            raise DuplicateDecoratorDefinedSignal(signal=signal)
+    return cls(
+        func.__name__,
+        asynchronous=asynchronous,
+        swallow_exceptions=swallow_exceptions,
+        log=log,
+        signature=inspect.signature(func))
 
 
 ####################################
@@ -471,9 +466,16 @@ run_sync = _set_handler_params(asynchronous=False)
 
 
 @functools.lru_cache(None)
+@collect_with(set)
 def get_signals_for_type(typ):
-    return {n for typ in inspect.getmro(typ)
-            for n in dir(typ) if n.startswith("on_")}
+    for base in inspect.getmro(typ):
+        for name in dir(base):
+            if name.startswith("on_"):
+                yield name
+        # Only look at "real" attributes, to avoid triggering code in actual classes
+        for name, value in base.__dict__.items():
+            if hasattr(value, '_signal_handler_for'):
+                yield name
 
 
 class __FakeCode:
@@ -500,10 +502,7 @@ def register_object(obj, **kwargs):
         # in the system.
         assert method is not getattr(type(obj), method_name, None), "'%s' is a static/class method" % method
 
-        params = getattr(method, '_signal_handler_params', {})
-        intersection = set(params).intersection(kwargs)
-        assert not intersection, "parameter conflict in signal object registration (%s)" % (intersection)
-        params.update(kwargs)
+        signal_handler_for = getattr(method, '_signal_handler_for', None)
 
         method_name, *_ = method_name.partition("__")  # allows multiple methods for the same signal
 
@@ -525,12 +524,34 @@ def register_object(obj, **kwargs):
         except UnboundLocalError:
             pass
 
-        register_signal(method_name, method, **params)
+        def params_with_kwargs(params):
+            if kwargs:
+                intersection = set(params).intersection(kwargs)
+                assert not intersection, "parameter conflict in signal object registration (%s)" % (intersection)
+                params = dict(params)
+                params.update(kwargs)
+            return params
+
+        if signal_handler_for is None:  # import style signal
+            params = getattr(method, '_signal_handler_params', {})
+            register_signal(method_name, method, **params_with_kwargs(params))
+
+        else:  # decoration style signals
+            for signal, params in signal_handler_for.items():
+                signal.register(method, **params_with_kwargs(params))
 
 
 def unregister_object(obj):
-    for signal_name in {method_name.split('__', 1)[0] for method_name in get_signals_for_type(type(obj))}:
-        for handlers in Signal.ALL[signal_name].handlers.values():
+    signals = set()
+    for method_name in get_signals_for_type(type(obj)):
+        method = getattr(obj, method_name)
+        signal_handler_for = getattr(method, '_signal_handler_for', None)
+        if signal_handler_for is None:  # import style signal
+            signals.add(Signal.ALL[method_name.split('__', 1)[0]])
+        else:
+            signals.update(signal_handler_for.keys())
+    for signal in signals:
+        for handlers in signal.handlers.values():
             handlers[:] = (handler for handler in handlers if handler.bound_object is not obj)
 
 

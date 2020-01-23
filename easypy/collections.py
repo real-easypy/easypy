@@ -7,7 +7,7 @@ from __future__ import absolute_import
 import collections
 from numbers import Integral
 from itertools import chain, islice
-from functools import partial
+from functools import partial, wraps
 import inspect
 import random
 from .predicates import make_predicate
@@ -959,6 +959,30 @@ class SlidingWindow(list):
             self.pop(0)
 
 
+def collect_with(aggregator):
+    """
+    Collect the result of a generator.
+
+    For when writing a generator is more elegant::
+
+    >>> @collect_with(sum)
+    ... def g():
+    ...     yield 2
+    ...     yield 1
+    ...     yield from range(2)
+    >>> g()
+    4
+
+    """
+
+    def wrapper(generator):
+        @wraps(generator)
+        def inner(*args, **kwargs):
+            return aggregator(generator(*args, **kwargs))
+        return inner
+    return wrapper
+
+
 @parametrizeable_decorator
 def as_list(generator, sort_by=None):
     """
@@ -976,12 +1000,10 @@ def as_list(generator, sort_by=None):
 
     """
 
-    def inner(*args, **kwargs):
-        l = list(generator(*args, **kwargs))
-        if sort_by:
-            l.sort(key=sort_by)
-        return l
-    return inner
+    if sort_by:
+        return collect_with(partial(sorted, key=sort_by))(generator)
+    else:
+        return collect_with(list)(generator)
 
 
 def takesome(generator, max=None, min=0):

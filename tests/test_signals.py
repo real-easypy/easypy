@@ -508,23 +508,41 @@ def test_signal_decorator_type_verification():
     on_test_signal_decorator_type_verification(a=1, b=2, c=3)
 
 
-def test_signal_duplicate():
-    from easypy.signals import DuplicateDecoratorDefinedSignal
-    from easypy.signals import ImportedSignalRecreatedWithDecorator
-    from easypy.signals import DecoratedSignalRecreatedWithImport
-
-    from easypy.signals import on_test_signal_duplicate_from_import
-
-    with pytest.raises(ImportedSignalRecreatedWithDecorator):
-        @signal
-        def on_test_signal_duplicate_from_import(): ...
+def test_signal_handler_registration_from_object_for_decorated_signals():
+    from easypy.signals import on_test as on_test_by_import
 
     @signal
-    def on_test_signal_duplicate_decorated(): ...
+    def on_test(): ...
 
-    with pytest.raises(DuplicateDecoratorDefinedSignal):
-        @signal
-        def on_test_signal_duplicate_decorated(): ...
+    assert on_test is not on_test_by_import
 
-    with pytest.raises(DecoratedSignalRecreatedWithImport):
-        from easypy.signals import on_test_signal_duplicate_decorated
+    class Foo:
+        def __init__(self):
+            self.result = []
+
+        def on_test__by_import(self):
+            self.result.append('i')
+
+        @on_test.handler
+        def on_test__by_decoration(self):
+            self.result.append('d')
+
+
+    foo = Foo()
+    register_object(foo)
+
+    assert foo.result == []
+
+    on_test_by_import()
+    assert foo.result == ['i']
+
+    on_test()
+    assert foo.result == ['i', 'd']
+
+    unregister_object(foo)
+
+    on_test_by_import()
+    assert foo.result == ['i', 'd']
+
+    on_test()
+    assert foo.result == ['i', 'd']
