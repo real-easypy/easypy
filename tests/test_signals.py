@@ -550,7 +550,7 @@ def test_signal_handler_registration_from_object_for_decorated_signals():
 
 def test_signal_handler_marking_methods_with_wrong_signature():
     @signal
-    def my_signal(a, b: int): ...
+    def my_signal(a, b): ...
 
     with pytest.raises(TypeError) as err:
         @my_signal.handler
@@ -567,6 +567,41 @@ def test_signal_handler_marking_methods_with_wrong_signature():
     with pytest.raises(TypeError) as err:
         class Foo:
             @my_signal.handler
-            def my_handler(self, d):
+            def my_handler(self, c):
                 pass
     assert 'parameters not in signal' in str(err.value)
+
+
+def test_multiple_signals_on_the_same_handler():
+    @signal
+    def signal1(a, b): ...
+
+    @signal
+    def signal2(b, c): ...
+
+    result = []
+
+    @signal1.register
+    @signal2.register
+    def my_handler(b):
+        result.append(b)
+
+    signal1(a=1, b=2)
+    signal2(b=3, c=4)
+    assert result == [2, 3]
+
+    signal1.unregister(my_handler)
+    signal2.unregister(my_handler)
+
+    class Foo:
+        @signal1.handler
+        @signal2.handler
+        def handler_in_foo(self, b):
+            result.append(b)
+
+    foo = Foo()
+    register_object(foo)
+    signal1(a=5, b=6)
+    signal2(b=7, c=8)
+    assert result == [2, 3, 6, 7]
+    unregister_object(foo)
