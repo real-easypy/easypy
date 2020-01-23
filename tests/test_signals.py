@@ -546,3 +546,27 @@ def test_signal_handler_registration_from_object_for_decorated_signals():
 
     on_test()
     assert foo.result == ['i', 'd']
+
+
+def test_signal_handler_marking_methods_with_wrong_signature():
+    @signal
+    def my_signal(a, b: int): ...
+
+    with pytest.raises(TypeError) as err:
+        @my_signal.handler
+        def no_args_handler():
+            pass
+    assert 'has no arguments' in str(err.value)
+
+    with pytest.raises(TypeError) as err:
+        @my_signal.handler
+        def no_args_handler(a, b):
+            pass
+    assert 'not the `self` argument' in str(err.value)
+
+    with pytest.raises(TypeError) as err:
+        class Foo:
+            @my_signal.handler
+            def my_handler(self, d):
+                pass
+    assert 'parameters not in signal' in str(err.value)

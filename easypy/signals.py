@@ -189,6 +189,16 @@ class Signal:
 
     def handler(self, func=None, asynchronous=None, priority=PRIORITIES.NONE, **kw):
         def wrapper(func):
+            handler_signature = inspect.signature(func)
+            try:
+                bound_arg, *free_args = handler_signature.parameters.values()
+            except ValueError:
+                raise TypeError('%s cannot be signal handler - it has no arguments and cannot be a method' % (func,))
+            if bound_arg.name in self.signature.parameters:
+                raise TypeError(
+                    '%s cannot be signal handler - first argument is %s, a parameter of %s and not the `self` argument' % (
+                        func, bound_arg, self))
+            self._verify_handler_func(func, handler_signature.replace(parameters=free_args))
             signal_handler_for = func.__dict__.setdefault('_signal_handler_for', weakref.WeakKeyDictionary())
             signal_handler_for[self] = dict(
                 asynchronous=asynchronous,
@@ -238,8 +248,9 @@ class Signal:
         finally:
             self.unregister(func)
 
-    def _verify_handler_func(self, handler_func):
-        handler_signature = inspect.signature(handler_func)
+    def _verify_handler_func(self, handler_func, handler_signature=None):
+        if handler_signature is None:
+            handler_signature = inspect.signature(handler_func)
         bad_parameters = ', '.join(
             '%s is %s' % (p, p.kind)
             for p in handler_signature.parameters.values()
