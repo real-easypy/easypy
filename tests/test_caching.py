@@ -5,12 +5,12 @@ from uuid import uuid4
 import random
 import weakref
 import gc
+from collections import Counter
 
 import pytest
 
 from easypy.bunch import Bunch
-from easypy.caching import timecache, PersistentCache, cached_property, locking_cache
-from easypy.units import DAY
+from easypy.caching import timecache, PersistentCache, cached_property
 from easypy.resilience import resilient
 
 _logger = getLogger(__name__)
@@ -273,3 +273,30 @@ def test_resilient_between_timecaches():
         raise ExceptionLeakedThroughResilient()
 
     assert foo() == 'default'
+
+
+def test_cache_hints():
+    ts = 0
+    counter = Counter()
+
+    @timecache(1, get_ts_func=lambda: ts)
+    def foo(a):
+        counter[a] += 1
+        foo.return_value(a, skip_cache=a == 0, expiration=a, clear_cache=a < 0)
+
+    assert list(range(5)) == list(map(foo, range(5)))
+    assert list(range(5)) == list(map(foo, range(5)))
+    assert counter.pop(0) == 2
+    assert set(counter.values()) == {1}  # make sure we reached the cache on all but '0'
+    counter.clear()
+
+    ts = 1
+    assert list(range(5)) == list(map(foo, range(5)))
+    assert counter.pop(0) == 1
+    assert counter.pop(1) == 1
+    assert not counter
+
+    assert set(foo.cache.keys()) == {1, 2, 3, 4}
+
+    foo(-1)
+    assert set(foo.cache.keys()) == {-1}

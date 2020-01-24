@@ -215,6 +215,20 @@ else:
 
 
 class _TimeCache(DecoratingDescriptor):
+
+    class CacheHint(BaseException):
+        # inheriting from BaseException so we don't get accidentally caught by `try/except Exception`
+
+        def __init__(self, value, **kwargs):
+            self.value = value
+            self.__dict__.update(kwargs)
+
+        def __getattr__(self, name):
+            # this help keeping the list of hint parameters 'DRY', in 'return_value'
+            if name.startswith("_"):
+                raise AttributeError(name)
+            return None
+
     def __init__(self, func, **kwargs):
         update_wrapper(self, func)  # this needs to be first to avoid overriding attributes we set
         super().__init__(func=func, cached=True)
@@ -267,7 +281,7 @@ class _TimeCache(DecoratingDescriptor):
                 pass  # nothing to fuss with, cache does not expire
             elif result is self.NOT_FOUND:
                 pass  # cache is empty
-            elif self.get_ts_func() - ts >= self.expiration:
+            elif self.get_ts_func() >= ts:
                 # cache expired
                 result = self.NOT_FOUND
                 del self.cache[key]
@@ -275,10 +289,45 @@ class _TimeCache(DecoratingDescriptor):
             if result is self.NOT_FOUND:
                 if self.log_recalculation:
                     _logger.debug('time cache expired, calculating new value for %s', self.__name__)
-                result = self.func(*args, **kwargs)
-                self.cache[key] = result, self.get_ts_func()
+                try:
+                    hint = self.func(*args, **kwargs)
+                except self.CacheHint as exc:
+                    hint = exc
+                else:
+                    if not isinstance(hint, self.CacheHint):
+                        hint = self.CacheHint(hint)
+                if hint.clear_cache:
+                    self.cache_clear()
+                result = hint.value
+                if not hint.skip_cache:
+                    ts = self.get_ts_func() + (self.expiration if hint.expiration is None else hint.expiration)
+                    self.cache[key] = result, ts
+                elif hint.expiration:
+                    raise Exception("Can't both 'skip_cache' AND set 'expiration'")
 
             return result
+
+    @classmethod
+    def return_value(cls, value, skip_cache=False, expiration=None, clear_cache=False):
+        """
+        Provide hints to the caching mechanism:
+
+        :param value: The value to return
+        :param skip_cache: If True, skip caching this value
+        :param expiration: Set an alternate expiration for this value
+        :param clear_cache: If True, clears the cache before caching this value
+
+        This method raises a 'CacheHint' exception in order to mimic the behavior of `return`::
+
+            @timecache(5)
+            def fib(n):
+                if n <= 1:
+                    fib.return_value(n, skip_cache=True)
+                skip_cache = (n % 10) != 0  # cache every 10
+                fib.return_value(fib(n-2) + fib(n-1), skip_cache=skip_cache)
+                print("This line will not be executed")
+        """
+        raise cls.CacheHint(value, skip_cache=skip_cache, expiration=expiration, clear_cache=clear_cache)
 
     def cache_clear(self):
         with self.main_lock:
@@ -311,6 +360,17 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
     :type ignored_keywords: iterable, optional
     :param key_func: The function to use in order to create the item key, defaults to functools._make_key
     :type key_func: callable, optional
+
+    The decorated function may use the 'func.return_value(...)' to provide some hints to the caching mechanism::
+
+            @timecache(5)
+            def fib(n):
+                if n <= 1:
+                    fib.return_value(n, skip_cache=True)
+                skip_cache = (n % 10) != 0  # cache every 10
+                fib.return_value(fib(n-2) + fib(n-1), skip_cache=skip_cache)
+                print("This line will not be executed")
+
     """
 
     def deco(func):
@@ -324,9 +384,6 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
             key_func=key_func)
 
     return deco
-
-
-timecache.__doc__ = _TimeCache.__doc__
 
 
 @parametrizeable_decorator
