@@ -125,6 +125,16 @@ def breakable_section():
                     if opt.is_the_one:
                         item = opt.value
                         raise Break
+
+    Note that each 'Break' class this context-manager yield is unique,
+    i.e it will only be caught by the context-manager that created it:
+
+        with breakable_section() as Break1:
+
+            with breakable_section() as Break2:
+                raise Break1
+
+            assert False  # will not reach here
     """
     Break = type("Break", (Exception,), {})
     try:

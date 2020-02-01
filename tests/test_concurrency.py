@@ -190,7 +190,7 @@ def test_multiobject_concurrent_find_not_found():
 
     m = MultiObject([0] * 5)
     ret = m.concurrent_find(lambda n: n)
-    assert ret is 0
+    assert ret == 0
 
 
 def test_multiobject_concurrent_find_proper_shutdown():

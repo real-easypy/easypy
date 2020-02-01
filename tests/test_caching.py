@@ -151,7 +151,7 @@ def persistent_cache_path():
     finally:
         try:
             os.unlink("%s.db" % cache_path)
-        except:
+        except:  # noqa
             pass
 
 
@@ -171,7 +171,7 @@ def test_persistent_cache(persistent_cache_path):
 
     # Default values
     assert ps.get(TEST_KEY, default=None) is None, "Wrong default value returnen(not None)"
-    assert ps.get(TEST_KEY, default="1") is "1", "Wrong default value returned"
+    assert ps.get(TEST_KEY, default="1") == "1", "Wrong default value returned"
 
     # Cached func should be called only once
     value_generated = False
