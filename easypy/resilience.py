@@ -205,6 +205,7 @@ def resilient(func=None, default=None, **kw):
     """Suppress exceptions raised from the decorated function.
 
     default - value to return if an exception is suppressed.
+              use pass `resilient.CAPTURE` to return the suppress exception.
     kw      - see `resilience`
 
     >>> @resilient(default=0)
@@ -217,9 +218,10 @@ def resilient(func=None, default=None, **kw):
 
     @wraps(func)
     def inner(*args, **kwargs):
-        with resilience(**kw):
+        with resilience(**kw) as container:
             return func(*args, **kwargs)
-        return default  # we reach here only if an exception was caught and handled by resilience
+        # we reach here only if an exception was caught and handled by resilience
+        return container.exception if (default is resilient.CAPTURE) else default
     return inner
 
 
@@ -241,19 +243,24 @@ def resilience(msg="ignoring error {type}", acceptable=Exception, unacceptable=(
     ...     print('after')
     before
     """
+    from .bunch import Bunch
+
     if unacceptable is None:
         unacceptable = ()
     elif isinstance(unacceptable, tuple):
         unacceptable += UNACCEPTABLE_EXCEPTIONS
     else:
         unacceptable = (unacceptable,) + UNACCEPTABLE_EXCEPTIONS
+
+    container = Bunch(exception=None)
     try:
-        yield
-    except unacceptable as exc:
+        yield container
+    except unacceptable:
         raise
     except acceptable as exc:
         if pred and not pred(exc):
             raise
+        container.exception = exc
         raise_if_async_exception(exc)
         _logger.log(log_level, msg.format(exc=exc, type=exc.__class__.__qualname__))
         if log_level > logging.DEBUG:
@@ -264,11 +271,13 @@ resilient.debug = partial(resilient, log_level=logging.DEBUG)
 resilient.info = partial(resilient, log_level=logging.INFO)
 resilient.warning = partial(resilient, log_level=logging.WARNING)
 resilient.error = partial(resilient, log_level=logging.ERROR)
+resilient.CAPTURE = object()
 
 resilience.debug = partial(resilience, log_level=logging.DEBUG)
 resilience.info = partial(resilience, log_level=logging.INFO)
 resilience.warning = partial(resilience, log_level=logging.WARNING)
 resilience.error = partial(resilience, log_level=logging.ERROR)
+resilience.CAPTURE = resilient.CAPTURE
 
 
 def raise_if_async_exception(exc):
