@@ -87,7 +87,8 @@ from easypy.timing import Timer
 from easypy.units import MINUTE, HOUR
 from easypy.colors import colorize, uncolored
 from easypy.sync import SynchronizationCoordinator, ProcessExiting, raise_in_main_thread
-
+from easypy.misc import kwargs_resilient
+from easypy.tokens import AUTO
 
 MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
 DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
@@ -307,12 +308,12 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         return buff
 
 
-def _submit_execution(executor, func, args, kwargs, ctx, funcname=None):
+def _submit_execution(executor, func, args, kwargs, ctx, exception_handler=None, funcname=None):
     """
     This helper takes care of submitting a function for asynchronous execution, while wrapping and storing
     useful information for tracing it in logs (for example, by ``Futures.dump_stacks``)
     """
-    future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
+    future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx, exception_handler)
     future.ctx = ctx
     future.funcname = funcname or _get_func_name(func)
     return future
@@ -401,11 +402,11 @@ class Futures(list):
 
             killed = False
 
-            def submit(self, func, *args, log_ctx={}, **kwargs):
+            def submit(self, func, *args, log_ctx={}, exception_handler=None, **kwargs):
                 "Submit a new asynchronous task to this executor"
 
                 _ctx = dict(ctx, **log_ctx)
-                future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
+                future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx, exception_handler)
                 future.ctx = _ctx
                 future.funcname = _get_func_name(func)
                 self.append(future)
@@ -515,7 +516,7 @@ class Futures(list):
                 self.dump_stacks(pending, verbose=global_timer.elapsed >= HOUR)
 
 
-def _run_with_exception_logging(func, args, kwargs, ctx):
+def _run_with_exception_logging(func, args, kwargs, ctx, exception_handler):
     """
     Use as a wrapper for functions that run asynchronously, setting up a logging context and
     recording the thread in-which they are running, so that we can later log their progress
@@ -534,9 +535,12 @@ def _run_with_exception_logging(func, args, kwargs, ctx):
             _logger.debug(exc)
             raise
         except Exception as exc:
-            _logger.silent_exception(
-                "Exception (%s) in thread running %s (traceback in debug logs)",
-                exc.__class__.__qualname__, func)
+            if not exception_handler:
+                _logger.silent_exception(
+                    "Exception (%s) in thread running %s (traceback in debug logs)",
+                    exc.__class__.__qualname__, func)
+            else:
+                kwargs_resilient(exception_handler)(exc=exc, func=func)
             try:
                 exc.timestamp = time.time()
             except:  # noqa - sometimes exception objects are immutable
@@ -625,19 +629,39 @@ def asynchronous(func, params=None, workers=None, log_contexts=None, final_timeo
         yield futures
 
 
-def concurrent_find(func, params, **kw):
+def concurrent_find(func, params, concurrent_timeout=None, raise_all=True, exception_handler=AUTO, **kw):
     assert not DISABLE_CONCURRENCY, "concurrent_find runs only with concurrency enabled"
-    timeout = kw.pop("concurrent_timeout", None)
-    with asynchronous(func, list(params), **kw) as futures:
+    timeout = concurrent_timeout
+
+    if exception_handler is AUTO:
+        def exception_handler(exc, func):
+            _logger.debug("Exception (%s) in thread running %s", exc.__class__.__qualname__, func, exc_info=True)
+
+    with asynchronous(func, list(params), exception_handler=exception_handler, **kw) as futures:
         future = None
+        any_result = None
         try:
             for future in futures.as_completed(timeout=timeout):
-                if not future.exception() and future.result():
+                if future.exception():
+                    continue
+                any_result = True
+                if future.result():
                     futures.kill()
                     return future.result()
             else:
-                if future:
+                # we get here if we timed out or all futures raised an exception
+                if not future:
+                    # must be a timeout
+                    return None
+                elif any_result:
+                    # return from the last future that completed
                     return future.result()
+                elif raise_all:
+                    # will raise a MultiException
+                    futures.result()
+                else:
+                    # will raise from the last future that completed
+                    future.result()
         except FutureTimeoutError as exc:
             if not timeout:
                 # ??
@@ -646,7 +670,7 @@ def concurrent_find(func, params, **kw):
             _logger.warning("Concurrent future timed out (%s)", exc)
 
 
-def nonconcurrent_map(func, params, log_contexts=None, **kw):
+def nonconcurrent_map(func, params, log_contexts=None, exception_handler=None, **kw):
     futures = Futures()
     log_contexts = _to_log_contexts(params, log_contexts)
     has_exceptions = False
@@ -654,7 +678,7 @@ def nonconcurrent_map(func, params, log_contexts=None, **kw):
         future = Future()
         futures.append(future)
         try:
-            result = _run_with_exception_logging(func, args, kw, ctx)
+            result = _run_with_exception_logging(func, args, kw, ctx, exception_handler)
         except Exception as exc:
             has_exceptions = True
             future.set_exception(exc)

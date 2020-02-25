@@ -202,6 +202,23 @@ def test_multiobject_concurrent_find_proper_shutdown():
     assert max(executed) <= 2
 
 
+def test_multiobject_concurrent_find_exceptions_logged():
+    m = MultiObject("123ab")
+
+    # we'll mock the logger so we can ensure it logged
+    with patch("easypy.concurrency._logger") as _logger:
+        ret = m.concurrent_find(int)
+
+    assert ret in (1, 2, 3)
+    assert _logger.debug.call_count == 2
+
+    exceptions = []
+    ret = m.concurrent_find(int, exception_handler=lambda exc: exceptions.append(exc))
+
+    assert ret in (1, 2, 3)
+    assert all(isinstance(exc, ValueError) for exc in exceptions)
+
+
 def test_multiobject_zip_with():
     m = MultiObject(range(4))
 
