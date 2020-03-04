@@ -12,6 +12,7 @@ from easypy.bunch import Bunch
 from easypy.units import Duration
 
 from easypy.sync import iter_wait, wait, iter_wait_progress, Timer, TimeoutException, PredicateNotSatisfied
+from easypy.sync import waiting, iter_waiting
 from easypy.sync import SynchronizationCoordinator, SYNC
 from easypy.sync import shared_contextmanager
 from easypy.sync import TagAlongThread
@@ -798,3 +799,59 @@ def test_wait_log_predicate(get_log):
     durations = re.findall('Still waiting after (.*?): bad attempt', get_log())
     rounded_durations = [round(Duration(d), 2) for d in durations]
     assert rounded_durations == [0.2, 0.4], 'expected logs at 200ms and 400ms, got %s' % (durations,)
+
+
+def test_waiting():
+    class TimedOut(PredicateNotSatisfied):
+        pass
+
+    i = 0
+
+    @waiting
+    def do_wait(target):
+        nonlocal i
+        i += 1
+        if i < target:
+            raise TimedOut(a=1, b=2)
+        return False
+
+    with pytest.raises(TimedOut):
+        # due to the short timeout and long sleep, the pred would called exactly twice
+        do_wait(3, timeout=.1, sleep=1)
+
+    assert i == 2
+    assert do_wait(3, timeout=.1) is False
+
+    with pytest.raises(TimedOut):
+        # due to the short timeout and long sleep, the pred would called exactly twice
+        do_wait(6, timeout=.1, sleep=1)
+
+    assert i == 5
+    do_wait(6, timeout=.1)
+
+
+def test_iter_waiting():
+    class TimedOut(PredicateNotSatisfied):
+        pass
+
+    i = 0
+
+    @iter_waiting(timeout=0.1, sleep=1)
+    def do_iter_wait():
+        nonlocal i
+        i += 1
+        if i < 3:
+            raise TimedOut(a=1, b=2)
+        return i
+
+    with pytest.raises(TimedOut):
+        for ret in do_iter_wait():
+            assert isinstance(ret, Duration)
+
+    for ret in do_iter_wait():
+        pass
+    assert ret == 3
+
+    i = 0
+    for ret in do_iter_wait(timeout=0.2, sleep=0.1):
+        pass

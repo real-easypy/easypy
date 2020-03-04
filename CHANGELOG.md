@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `ensure_same_defaults` decorator for setting one function's defaults as source of truth for other function
+- Decorator versions of the various wait functions (`waiting`, `iter_waiting`, `waiting_progress` and `iter_waiting_progress`)
 
 ## [0.4.0] - 2019-11-14
 
