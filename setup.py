@@ -6,12 +6,12 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name='weka-easypy',
+    name='real-easypy',
     version='0.4.0',
     description='easypy is a collection of python modules that makes developers happy',
     author='Ofer Koren',
     author_email='koreno@gmail.com',
-    url='https://github.com/weka-io/easypy',
+    url='https://github.com/real-easypy/easypy',
     license='BSD',
     long_description=long_description,
     long_description_content_type="text/markdown",
