@@ -14,7 +14,7 @@ env:
   - GEVENT=false
 
 install:
-  - pip install gevent pytest-random-order
+  - pip install gevent\<1.5.0 pytest-random-order
   # PyYaml 5.3 removed support for Python 3.4
   - |-
     if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
