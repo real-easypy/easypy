@@ -169,7 +169,8 @@ def defer_to_thread(func, threadname):
     def run():
         _set_thread_uuid(threading.get_ident(), parent_uuid)
         _logger.debug('Starting job in real thread: %s', threadname or "<anonymous>")
-        func()
+        gevent.spawn(func)  # running via gevent ensures we have a Hub
+        gevent.wait()
         _logger.debug('ready for the next job')
 
     from .threadtree import get_thread_uuid
