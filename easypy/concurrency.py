@@ -1041,7 +1041,7 @@ class concurrent(object):
             yield self
             return
 
-        if self.real_thread_no_greenlet:
+        if self.real_thread_no_greenlet and IS_GEVENT:
             _logger.debug('sending job to a real OS thread')
             self._join = defer_to_thread(func=self._logged_func, threadname=self.threadname)
         else:
