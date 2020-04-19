@@ -452,7 +452,6 @@ class Futures(list):
         the necessary information.
         """
         frames = dict(iter_thread_frames())
-
         for i, future in enumerate(futures, 1):
             try:
                 frame = frames[future.ctx['thread_ident']]
