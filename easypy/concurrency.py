@@ -453,7 +453,6 @@ class Futures(list):
         the necessary information.
         """
         frames = dict(iter_thread_frames())
-
         for i, future in enumerate(futures, 1):
             try:
                 frame = frames[future.ctx['thread_ident']]
@@ -1009,11 +1008,11 @@ class concurrent(object):
     def wait(self, timeout=None):
         if self.real_thread_no_greenlet:
             # we can't '.wait' on this gevent event object, so instead we test it and sleep manually:
-            if self.stopper.is_set():
-                return True
-            non_gevent_sleep(timeout)
-            if self.stopper.is_set():
-                return True
+            timer = Timer(expiration=timeout)
+            while not timer.expired:
+                if self.stopper.is_set():
+                    return True
+                non_gevent_sleep(0.1)
             return False
         return self.stopper.wait(timeout)
 
@@ -1042,7 +1041,7 @@ class concurrent(object):
             yield self
             return
 
-        if self.real_thread_no_greenlet:
+        if self.real_thread_no_greenlet and IS_GEVENT:
             _logger.debug('sending job to a real OS thread')
             self._join = defer_to_thread(func=self._logged_func, threadname=self.threadname)
         else:

@@ -14,7 +14,7 @@ env:
   - GEVENT=false
 
 install:
-  - pip install gevent pytest-random-order
+  - pip install gevent\<1.5.0 pytest-random-order
   # PyYaml 5.3 removed support for Python 3.4
   - |-
     if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
@@ -48,12 +48,11 @@ after_success: |-
   export PATH=$HOME/.local/bin:$PATH &&
   ghp-import -n _build &&
   git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
-
 deploy:
   provider: pypi
-  user: "Ofer.Koren"
+  user: __token__
   password:
-    secure: qWtk95KHG1Hf+iDPGFtgU5pwkMiZN2TL5dU2e7QN3DY6rRdHHgG8rPVlT/ZRDbwGHdmjJ3P5GZ5VybfclZk+FxYQuViacDLrRtB9ivf6+tgs1hflj30T8m4bad7uxLpKX82T2Sf/Z3bOdy1g+0Cp/Gzr6j7mpluOprcZhgsiW1xABOtH4TdY7ZceGC+caGFjS7Tjjj75T274pP8vqSCgrPclHUR+m1XWfWupOndS0lnCA0yrmoAwOmzIt03aS8Ye92ukzAPgj0hbUYvRhHPfouk45D83R4ERCJt3uMd4S2IO4nDUOUenQI6DZtaEEtkABv8wagMsUlAWd/OxTqcBboV16QjBt0uFnlI1GdAKAXt6Etc5XLbkafJ5H/FaoWdI2R3qrbu0r3FgTQIKh6msTb+2EsfAEyDrIiHpJ2BX7plcsx5liEDw5TZ3CELpnJJjMMJG1CW3R7YOmpziR+IVyqqHqDPS0aOe/FM+Dk18FXsvArMAmuO+CXLsQE1OYdgGztLhmz2tLXmMolukJOyCcCrXCah17TbUtgKV8NHpHs/wSgKCLLTcfPAwCEQnt15ciQywuSAqeg2Rk9K524XHZkWoj136vIc3+B9MhHo0XKNP3Z6SrRExV8wZZfSxELsmVhytMG1z5JxIuIEwO3bsSiazJTlRcfTWIiSOTTr9aRg=
+    secure: 2oP26YXbVKFDpIxdsPdzXoYSIFSK3VjSShPEAbRkIm/Y31Es/FepRx71dJwub+/r5ITrWh/zsEUpT2CvfLAnDp1MVMW3X0cwNn9S8Y+hPbC8tol1IZolD3ai60T2rDb8WMxq7gKhXuK6imWQx1zxQgaU1R4CZEg3xOEvQXP2LiBVL4bgVbyLyhTkARUDeWc7DXWKMX0xApr5Xq54mEL6erLSByXrjKTojp0jV5RBLoJ1DoTHzEvkR7+aXlKqkuN0mHCRWkrITE3yS2m/zdWuHRP8GNhuaet73mGPfE8jI/cMXwNXJKgfgnCMw7652dTFJCBDTlk58n5IrZo5dKO7fAEX/707ZZc9b9vfUGUUrlZPyHnxfM/al0aOIL1qhYy77yZ6BE5n8Ne0JwKgvEEK2KdeUqW7zL5tVrwaF3Q3ppL8DFME6vO6E/IUmp3DqIAtGLOPb/mqbx49yRsBnKlV4wPEehhQN1eX6O6QkamWiEy5JQP3titoGm9lwhArEx7NOk7GgTVD5rvVH9/eCBhhs/YHXcIHbWai0qykAi27MGw8Qub/UqoGsKsTETuw0HDWPniQDAwYDoF5TxAnFZZipjbj34tYrXYVtb5NnChitTQPpOeqypSlE5mzmfz7EMsxgCmmezbLzMsafwNPYMAqNON07uY60YkSVUvkvUxr4pk=
   on:
     tags: true
   skip_existing: true

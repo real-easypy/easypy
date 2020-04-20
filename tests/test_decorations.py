@@ -3,6 +3,7 @@ import pytest
 from functools import wraps
 
 from easypy.decorations import lazy_decorator
+from easypy.decorations import ensure_same_defaults, DefaultsMismatch
 from easypy.misc import kwargs_resilient
 
 
@@ -136,3 +137,56 @@ def test_lazy_decorator_with_timecache():
     foo2.ts += 1
     assert [foo1.inc(), foo2.inc()] == [2, 2]
     assert [foo1.counter, foo2.counter] == [1, 2]  # foo1 was not updated since last sync - only foo2
+
+
+def test_ensure_same_defaults():
+    def foo(a=1, b=2, c=3):
+        return a, b, c
+
+
+    @ensure_same_defaults(foo)
+    def bar(a=1, b=2, c=3):
+        return a, b, c
+
+    # Test we did not change the actual function
+    assert foo() == bar()
+    assert foo(4, 5, 6) == bar(4, 5, 6)
+
+
+    with pytest.raises(DefaultsMismatch) as exc:
+        @ensure_same_defaults(foo)
+        def baz(a=1, b=3, c=2):
+            pass
+    assert exc.value.param_names == ['b', 'c']
+
+
+def test_ensure_same_defaults_skipping_params_with_no_default():
+    @ensure_same_defaults(lambda a=1, b=2: ...)
+    def foo(a, b=2):
+        pass
+
+    @ensure_same_defaults(lambda a, b=2: ...)
+    def foo(a=1, b=2):
+        pass
+
+    @ensure_same_defaults(lambda a, b=2: ...)
+    def foo(a=1, c=3):
+        pass
+
+    with pytest.raises(DefaultsMismatch) as exc:
+        @ensure_same_defaults(lambda a, b=2: ...)
+        def foo(a, b=4):
+            pass
+    assert exc.value.param_names == ['b']
+
+
+def test_ensure_same_defaults_ignore():
+    @ensure_same_defaults(lambda a=1, b=2: ..., ignore=('b',))
+    def foo(a=1, b=3):
+        pass
+
+    with pytest.raises(DefaultsMismatch) as exc:
+        @ensure_same_defaults(lambda a=1, b=2: ..., ignore=('b',))
+        def foo(a=2, b=3):
+            pass
+    assert exc.value.param_names == ['a']

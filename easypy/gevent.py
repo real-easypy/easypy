@@ -39,6 +39,8 @@ def apply_patch(hogging_detection=False, real_threads=1):
     import gevent
     import gevent.monkey
 
+    assert gevent.version_info < (1, 5), "easpy does not yet support gevent 1.5"
+
     for m in ["easypy.threadtree", "easypy.concurrency"]:
         assert m not in sys.modules, "Must apply the gevent patch before importing %s" % m
 
@@ -86,19 +88,28 @@ def _patch_module_locks():
 def _unpatch_logging_handlers_lock():
     # we dont want to use logger locks since those are used by both real thread and gevent greenlets
     # switching from one to the other will cause gevent hub to throw an exception
-    import logging
 
     RLock = gevent.monkey.saved['threading']['_CRLock']
-
-    for handler in logging._handlers.values():
-        if handler.lock:
-            handler.lock = RLock()
 
     def create_unpatched_lock_for_handler(handler):
         handler.lock = RLock()
 
+    import logging
     # patch future handlers
     logging.Handler.createLock = create_unpatched_lock_for_handler
+    for handler in logging._handlers.values():
+        if handler.lock:
+            handler.lock = RLock()
+
+    try:
+        import logbook.handlers
+    except ImportError:
+        pass
+    else:
+        # patch future handlers
+        logbook.handlers.new_fine_grained_lock = RLock
+        for handler in logbook.handlers.Handler.stack_manager.iter_context_objects():
+            handler.lock = RLock()
 
 
 def _greenlet_trace_func(event, args):
@@ -167,7 +178,8 @@ def defer_to_thread(func, threadname):
     def run():
         _set_thread_uuid(threading.get_ident(), parent_uuid)
         _logger.debug('Starting job in real thread: %s', threadname or "<anonymous>")
-        func()
+        gevent.spawn(func)  # running via gevent ensures we have a Hub
+        gevent.wait()
         _logger.debug('ready for the next job')
 
     from .threadtree import get_thread_uuid

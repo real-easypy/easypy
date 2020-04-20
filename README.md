@@ -1,5 +1,5 @@
-[![Build Status](https://api.travis-ci.org/weka-io/easypy.svg?branch=master)](https://travis-ci.org/weka-io/easypy)
-[![Documentation](https://img.shields.io/badge/api-sphinx-blue.svg)](https://weka-io.github.io/easypy/)
+[![Build Status](https://api.travis-ci.org/real-easypy/easypy.svg?branch=master)](https://travis-ci.org/real-easypy/easypy)
+[![Documentation](https://img.shields.io/badge/api-sphinx-blue.svg)](https://real-easypy.github.io/easypy/)
 
 # easypy
 easypy makes python even easier!

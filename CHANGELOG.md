@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Examples
     - a skeleton for initializing logging with easypy
 
+### Added
+- `ensure_same_defaults` decorator for setting one function's defaults as source of truth for other function
+
 ## [0.4.0] - 2019-11-14
 
 ### Changed
