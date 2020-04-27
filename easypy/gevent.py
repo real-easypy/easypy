@@ -39,8 +39,6 @@ def apply_patch(hogging_detection=False, real_threads=1):
     import gevent
     import gevent.monkey
 
-    assert gevent.version_info < (1, 5), "easpy does not yet support gevent 1.5"
-
     for m in ["easypy.threadtree", "easypy.concurrency"]:
         assert m not in sys.modules, "Must apply the gevent patch before importing %s" % m
 

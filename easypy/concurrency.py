@@ -454,9 +454,11 @@ class Futures(list):
         """
         frames = dict(iter_thread_frames())
         for i, future in enumerate(futures, 1):
+            thread_ident = future.ctx['thread_ident']
             try:
-                frame = frames[future.ctx['thread_ident']]
+                frame = frames[thread_ident]
             except KeyError:
+                assert False, frames
                 frame = None  # this might happen in race-conditions with a new thread starting
             if not verbose or not frame:
                 if frame:
