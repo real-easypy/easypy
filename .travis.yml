@@ -1,42 +1,35 @@
 language: python
 python:
-  - "3.5"
-  - "3.5-dev" # 3.5 development branch
-  - "3.6"
-  - "3.6-dev" # 3.6 development branch
-  - "3.7"
-  - "3.7-dev" # 3.7 development branch
-  - "3.8"
-  - "3.8-dev" # 3.7 development branch
+- '3.5'
+- 3.5-dev
+- '3.6'
+- 3.6-dev
+- '3.7'
+- 3.7-dev
+- '3.8'
+- 3.8-dev
 env:
-  - GEVENT=true
-  - GEVENT=false
-
+- GEVENT=true
+- GEVENT=false
 install:
-  - pip install gevent\<1.5.0 pytest-random-order
-  # PyYaml 5.3 removed support for Python 3.4
-  - |-
-    if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
-      pip install PyYaml==5.2
-    else
-      pip install PyYaml
-    fi
-  - pip install sphinx==1.7.9 ghp-import
-
+- pip install gevent\<1.5.0 pytest-random-order
+- |-
+  if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
+    pip install PyYaml==5.2
+  else
+    pip install PyYaml
+  fi
+- pip install sphinx==1.7.9 ghp-import
 before_script:
-  # we need this for test_ziplog, which parses ambiguous timestamps
-  - export TZ=Asia/Jerusalem
-
+- export TZ=Asia/Jerusalem
 script:
-  - python -m pytest --random-order-bucket=package -vv test_package.py  # separate, since it mucks with imports
-  - python -m pytest --random-order-bucket=package -vv tests
-  - python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
-
+- python -m pytest --random-order-bucket=package -vv test_package.py
+- python -m pytest --random-order-bucket=package -vv tests
+- python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
 notifications:
-    email:
-        on_success: change
-        on_failure: change
-
+  email:
+    on_success: change
+    on_failure: change
 after_success: |-
   [[ $TRAVIS_JOB_NUMBER = *.1 ]] &&
   [ $TRAVIS_BRANCH = master ] &&
@@ -51,7 +44,7 @@ deploy:
   provider: pypi
   user: __token__
   password:
-    secure: 2oP26YXbVKFDpIxdsPdzXoYSIFSK3VjSShPEAbRkIm/Y31Es/FepRx71dJwub+/r5ITrWh/zsEUpT2CvfLAnDp1MVMW3X0cwNn9S8Y+hPbC8tol1IZolD3ai60T2rDb8WMxq7gKhXuK6imWQx1zxQgaU1R4CZEg3xOEvQXP2LiBVL4bgVbyLyhTkARUDeWc7DXWKMX0xApr5Xq54mEL6erLSByXrjKTojp0jV5RBLoJ1DoTHzEvkR7+aXlKqkuN0mHCRWkrITE3yS2m/zdWuHRP8GNhuaet73mGPfE8jI/cMXwNXJKgfgnCMw7652dTFJCBDTlk58n5IrZo5dKO7fAEX/707ZZc9b9vfUGUUrlZPyHnxfM/al0aOIL1qhYy77yZ6BE5n8Ne0JwKgvEEK2KdeUqW7zL5tVrwaF3Q3ppL8DFME6vO6E/IUmp3DqIAtGLOPb/mqbx49yRsBnKlV4wPEehhQN1eX6O6QkamWiEy5JQP3titoGm9lwhArEx7NOk7GgTVD5rvVH9/eCBhhs/YHXcIHbWai0qykAi27MGw8Qub/UqoGsKsTETuw0HDWPniQDAwYDoF5TxAnFZZipjbj34tYrXYVtb5NnChitTQPpOeqypSlE5mzmfz7EMsxgCmmezbLzMsafwNPYMAqNON07uY60YkSVUvkvUxr4pk=
+    secure: PPWP5YWgZxtRZck54RtS2dw5g3u1IrjaNVZLErqoONimIVq+Kn9CYZgAg/mZcmOUNYcG72Q/Y/00dY/hh9zC3jLMdcPssWRvJOaVvhJHZrCNlT/LO4XW8ZJ2H5bKFdRin+XLoz3QYjPQdXEc2QJoeP9/2ypa58oNYdbOo6mhqOSKWNNeLPeo6by84bg15heiSTVOE+vVVxuck+BxCympLDfZf0VMw1iEAtSpTmc0ICiP6qDzsVdKtbj4Za75fIDf1Ee41ZseVBkkSmDzBpPVHJmniivlNi5HRxPs0rZLvcBNWml5Mb8A2JZVgaUNpobh1kvGPNiBmkeVFO+31ZMPEyzLzSdZMJT/7Kz15S0rSfM4UjGsMsteg3hDWW+qm6/pQ8KH/Z9ej7SBB+2+vojdxUe31Vlp0LXvbltlR2T+94obpM67b7F+GFrfaKRwkhgbN79w4VPKiAvqk7l4suK74JwjzZmkxuDmqf38fiqdSXpY1T0aks4R/IlNbicbr3168dnmpKldKcZHtg9KzhjEvHPtsx0UUCAoZMA9aOy1AUkhkRFSAK38HykjTmYXkUBK04d9cNVTBnaFZhwmX70Q3D5NNG7aB/56u+mdRW+1i4go+Rtt4FHPIRN6fwLmdX9p7tPGWj4Tjm9FN87EcbPuhqdPMrr0rNFoDcG8aTAg0w0=
   on:
     tags: true
   skip_existing: true
