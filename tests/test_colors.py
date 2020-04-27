@@ -19,6 +19,23 @@ def test_colors():
 
     assert len(opts) == 1
     [ret] = opts
-
     assert ret == "\x1b[1;44;31mXXX\x1b[0m"
     assert uncolored(ret) == "XXX"
+
+
+def test_empty_markup():
+    from easypy.colors import Colorized, colorize
+
+    opts = {
+        colorize("BLUE<<>>"),
+        colorize("BLUE@[]@"),
+        colorize("BLUE@{}@"),
+        str(Colorized("BLUE<<>>")),
+        str(Colorized("BLUE@[]@")),
+        str(Colorized("BLUE@{}@")),
+    }
+
+    assert len(opts) == 1
+    [ret] = opts
+
+    assert ret == ""

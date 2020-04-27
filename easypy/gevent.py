@@ -6,14 +6,11 @@ except ImportError:
         return False
 
 
-from logging import getLogger, DEBUG
+from logging import getLogger
 import threading   # this will be reloaded after patching
 
-from queue import Queue
 import time
 import sys
-from functools import partial
-from itertools import count
 
 
 from easypy.humanize import format_thread_stack
@@ -36,9 +33,6 @@ def apply_patch(hogging_detection=False, real_threads=1):
     # real_threads is 1 by default so it will be possible to run watch_threads concurrently
     if hogging_detection:
         real_threads += 1
-
-    if real_threads:
-        _RealThreadsPool(real_threads)
 
     _patch_module_locks()
 
@@ -94,19 +88,28 @@ def _patch_module_locks():
 def _unpatch_logging_handlers_lock():
     # we dont want to use logger locks since those are used by both real thread and gevent greenlets
     # switching from one to the other will cause gevent hub to throw an exception
-    import logging
 
     RLock = gevent.monkey.saved['threading']['_CRLock']
-
-    for handler in logging._handlers.values():
-        if handler.lock:
-            handler.lock = RLock()
 
     def create_unpatched_lock_for_handler(handler):
         handler.lock = RLock()
 
+    import logging
     # patch future handlers
     logging.Handler.createLock = create_unpatched_lock_for_handler
+    for handler in logging._handlers.values():
+        if handler.lock:
+            handler.lock = RLock()
+
+    try:
+        import logbook.handlers
+    except ImportError:
+        pass
+    else:
+        # patch future handlers
+        logbook.handlers.new_fine_grained_lock = RLock
+        for handler in logbook.handlers.Handler.stack_manager.iter_context_objects():
+            handler.lock = RLock()
 
 
 def _greenlet_trace_func(event, args):
@@ -146,14 +149,15 @@ def detect_hogging():
                 continue  # dont dump too much warnings - decay exponentialy until exploding after FAIL_BLOCK_TIME_SEC
             for thread in threading.enumerate():
                 if getattr(thread, '_greenlet', None) == current_running_greenlet:
-                    _logger.info('RED<<greentlet hogger detected (%s seconds):>>', current_blocker_time)
+                    _logger.info('RED<<greenlet hogger detected (%s seconds):>>', current_blocker_time)
                     _logger.debug('thread stuck: %s', thread)
                     break
             else:
-                _logger.info('RED<<unknown greentlet hogger detected (%s seconds):>>', current_blocker_time)
+                _logger.info('RED<<unknown greenlet hogger detected (%s seconds):>>', current_blocker_time)
                 _logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
                 _logger.debug('hub is: %s', HUB)
-            _logger.debug("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
+            func = _logger.debug if current_blocker_time < 5 * HOGGING_TIMEOUT else _logger.info
+            func("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
             last_warning_time = current_blocker_time
             continue
 
@@ -169,48 +173,16 @@ def non_gevent_sleep(timeout):
         time.sleep(timeout)
 
 
-class _RealThreadsPool():
-    # We use this object to manage a pool of real OS threads, alongside the gevent thread and its greenlets
-
-    POOL = None
-    _job_id = count()
-
-    def __init__(self, pool_size):
-        assert not self.__class__.POOL, "Can't create more than one: %s" % self.__class__
-        self.__class__.POOL = self
-        self.active_jobs = set()
-        self.pool_size = pool_size
-        self.jobs_queue = Queue()
-
-        def work():
-            while True:
-                func, name, job_id, parent_uuid = self.jobs_queue.get()
-                _set_thread_uuid(threading.get_ident(), parent_uuid)
-                _logger.debug('Starting job in real thread: %s', name or "<anonymous>")
-                func()
-                self.active_jobs.remove(job_id)
-                _logger.debug('ready for the next job')
-
-        for i in range(self.pool_size):
-            name = 'real-thread-%s' % i
-            thread = threading.Thread(target=work, name=name, daemon=True)
-            thread.start()
-
-    def _get_next_job_id(self):
-        return next(self._job_id)
-
-    def send_job(self, func, threadname=None):
-        from .threadtree import get_thread_uuid
-        parent_uuid = get_thread_uuid(threading.current_thread())
-        job_id = self._get_next_job_id()
-        self.jobs_queue.put((func, threadname, job_id, parent_uuid))
-        self.active_jobs.add(job_id)
-        return partial(self.join, job_id=job_id)
-
-    def join(self, job_id):
-        while job_id in self.active_jobs:
-            non_gevent_sleep(0.5)
-
-
 def defer_to_thread(func, threadname):
-    return _RealThreadsPool.POOL.send_job(func, threadname)
+
+    def run():
+        _set_thread_uuid(threading.get_ident(), parent_uuid)
+        _logger.debug('Starting job in real thread: %s', threadname or "<anonymous>")
+        gevent.spawn(func)  # running via gevent ensures we have a Hub
+        gevent.wait()
+        _logger.debug('ready for the next job')
+
+    from .threadtree import get_thread_uuid
+    parent_uuid = get_thread_uuid(threading.current_thread())
+    pool = gevent.get_hub().threadpool
+    return pool.spawn(run).wait

@@ -5,6 +5,9 @@ This module is about making it easier to create decorators
 from functools import wraps, partial, update_wrapper
 from operator import attrgetter
 from abc import ABCMeta, abstractmethod
+import inspect
+
+from easypy.exceptions import TException
 
 
 def parametrizeable_decorator(deco):
@@ -137,4 +140,51 @@ def lazy_decorator(decorator_factory, cached=False):
 
     def wrapper(func):
         return LazyDecoratorDescriptor(decorator_factory, func, cached)
+    return wrapper
+
+
+class DefaultsMismatch(TException):
+    template = 'The defaults of {func} differ from those of {source_of_truth} in params {param_names}'
+
+
+def ensure_same_defaults(source_of_truth, ignore=()):
+    """
+    Ensure the decorated function has the same default as the source of truth in optional parameters shared by both
+
+    :param source_of_truth: A function to check the defaults against.
+    :param ignore: A list of parameters to ignore even if they exist and have defaults in both functions.
+    :raises DefaultsMismatch: When the defaults are different.
+
+    >>> def foo(a=1, b=2, c=3):
+    ...     ...
+    >>> @ensure_same_defaults(foo)
+    ... def bar(a=1, b=2, c=3):  # these defaults are verified by the decorator
+    ...         ...
+    """
+
+    sot_signature = inspect.signature(source_of_truth)
+    params_with_defaults = [
+        param for param in sot_signature.parameters.values()
+        if param.default is not param.empty
+        and param.name not in ignore]
+
+    def gen_mismatches(func):
+        signature = inspect.signature(func)
+        for sot_param in params_with_defaults:
+            param = signature.parameters.get(sot_param.name)
+            if param is None:
+                continue
+            if param.default is param.empty:
+                continue
+            if sot_param.default != param.default:
+                yield sot_param.name
+
+    def wrapper(func):
+        mismatches = list(gen_mismatches(func))
+        if mismatches:
+            raise DefaultsMismatch(
+                func=func,
+                source_of_truth=source_of_truth,
+                param_names=mismatches)
+        return func
     return wrapper

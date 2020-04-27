@@ -137,12 +137,13 @@ class Colorized(str):
             if match:
                 stl, *parts = match.groups()
                 stl = stl.strip("_")
-                part = next(filter(None, parts))
-                for l in part.splitlines():
-                    self.tokens.append(self.ColoredToken(l, stl))
-                    self.tokens.append(self.Token("\n"))
-                if not part.endswith("\n"):
-                    del self.tokens[-1]
+                part = next(filter(None, parts), "")  # default to "", in case there's no text in the token
+                if part:
+                    for l in part.splitlines():
+                        self.tokens.append(self.ColoredToken(l, stl))
+                        self.tokens.append(self.Token("\n"))
+                    if not part.endswith("\n"):
+                        del self.tokens[-1]
             else:
                 self.tokens.append(self.Token(part))
         self.uncolored = "".join(str.__str__(token) for token in self.tokens)
@@ -336,7 +337,8 @@ def colorize(text):
 
     def _subfunc(match_obj):
         colorizer = Colorizer.from_markup(match_obj.group(1))
-        return colorizer(next(filter(None, match_obj.groups()[1:])))
+        token = next(filter(None, match_obj.groups()[1:]), "")
+        return colorizer(token) if token else ""
 
     return RE_PARSE_COLOR_MARKUP.sub(_subfunc, text)
 

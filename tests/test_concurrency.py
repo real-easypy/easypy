@@ -190,7 +190,7 @@ def test_multiobject_concurrent_find_not_found():
 
     m = MultiObject([0] * 5)
     ret = m.concurrent_find(lambda n: n)
-    assert ret is 0
+    assert ret == 0
 
 
 def test_multiobject_concurrent_find_proper_shutdown():
@@ -341,3 +341,53 @@ def test_concurrent_done_status(throw):
         sleep(0.1)
         assert c.done()
     assert c.done()
+
+
+def test_concurrent_real_thread():
+    from easypy.concurrency import IS_GEVENT
+    from gevent.monkey import get_original
+    import logging
+
+    sleep = get_original("time", "sleep")
+    current_thread = get_original("threading", "get_ident")
+    main_thread = current_thread()
+
+    ran = 0
+
+    def log_and_sleep():
+        nonlocal ran
+        logging.info("test")
+        sleep(.1)
+        ran += 1
+        return current_thread()
+
+    if IS_GEVENT:
+        before = ran
+        with concurrent(log_and_sleep, real_thread_no_greenlet=True) as c:
+            pass
+        result = c.result()
+        assert ran == before + 1
+        assert main_thread != result
+
+        before = ran
+        with concurrent(log_and_sleep) as c:
+            pass
+        result = c.result()
+        assert ran == before + 1
+        assert main_thread == result
+    else:
+        before = ran
+        with concurrent(log_and_sleep, real_thread_no_greenlet=True) as c:
+            pass
+        result = c.result()
+        assert ran == before + 1
+        assert main_thread != result
+
+        before = ran
+        with concurrent(log_and_sleep) as c:
+            pass
+        result = c.result()
+        assert ran == before + 1
+        assert main_thread != result
+
+    assert ran

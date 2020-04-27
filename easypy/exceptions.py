@@ -149,3 +149,13 @@ def convert_traceback_to_list(tb):
     traceback_list = [dict(file=file, line_no=line_no, function=function)
                       for file, line_no, function, _ in traceback.extract_tb(tb)]
     return traceback_list
+
+
+def apply_timestamp(exc, now=None):
+    timestamp = now or time()
+    if getattr(exc, "timestamp", "__missing__") == "__missing__":
+        try:
+            exc.timestamp = timestamp
+        except Exception:
+            pass
+    return exc
