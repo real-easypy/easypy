@@ -7,7 +7,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='real-easypy',
-    version='0.4.0',
+    version='0.4.3',
     description='easypy is a collection of python modules that makes developers happy',
     author='Ofer Koren',
     author_email='koreno@gmail.com',

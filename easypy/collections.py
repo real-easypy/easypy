@@ -444,6 +444,11 @@ class ObjectCollectionBase(object):
         return AggregateCollection([self, collection])
 
 
+def ObjectCollectionBaseMethod(func):
+    setattr(ObjectCollectionBase, func.__name__, func)
+    return func
+
+
 class AggregateCollection(ObjectCollectionBase):
     """
     Dynamically aggregate other collections into one chained collection
@@ -790,6 +795,7 @@ class IndexedObjectCollection(SimpleObjectCollection):
         return filtered(objects, preds, filters)
 
 
+@ObjectCollectionBaseMethod
 def grouped(sequence, key=None, transform=None):
     """
     Parse the sequence into groups, according to key:
@@ -812,6 +818,7 @@ def grouped(sequence, key=None, transform=None):
     return groups
 
 
+@ObjectCollectionBaseMethod
 def separate(sequence, key=None):
     """
     Partition the sequence into items that match and items that don't:
@@ -860,6 +867,7 @@ def listify(obj):
     return list(ilistify(obj))
 
 
+@ObjectCollectionBaseMethod
 def chunkify(sequence, size):
     """
     Chunk a sequence into equal-size chunks (except for the last chunk):
@@ -984,6 +992,7 @@ def as_list(generator, sort_by=None):
     return inner
 
 
+@ObjectCollectionBaseMethod
 def takesome(generator, max=None, min=0):
     """
     Take between ``min`` and ``max`` items from the generator.
@@ -1007,19 +1016,22 @@ def takesome(generator, max=None, min=0):
     if max is not None and max < min:
         raise ValueError("'max' must be great than 'min'")
 
-    items = [p for p, _ in zip(generator, range(min))]
+    generator = iter(generator)  # just in case it ain't a generator
 
-    if len(items) < min:
-        raise ValueError("Not enough items in sequence (wanted {}, got {})".format(min, len(items)))
+    min_items = [p for _, p in zip(range(min), generator)]
 
-    yield from items
+    if len(min_items) < min:
+        raise ValueError("Not enough items in sequence (wanted {}, got {})".format(min, len(min_items)))
+
+    yield from min_items
 
     if max is None:
+        # yield the rest
         yield from generator
         return
 
     remain = max - min
-    for p, _ in zip(generator, range(remain)):
+    for _, p in zip(range(remain), generator):
         yield p
 
 

@@ -19,8 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Examples
     - a skeleton for initializing logging with easypy
 
+## [0.4.3] - 2020-04-28
+
+### Added
+- collections: make `separate`, `grouped`, `chunkify` and `takesome` methods of the ObjectCollection classes
+
+### Fixed
+- support for gevent 1.5
+
+## [0.4.2] - 2020-04-28
+
 ### Added
 - `ensure_same_defaults` decorator for setting one function's defaults as source of truth for other function
+- contexts: added `breakable_section()`, which allows breaking out of a context manager as if it were a loop
+- gevent: use gevent's native-threads instead of easypy's
+
+### Fixed
+- aliasing: Improve `RecursionError` for aliasing-induced infinite recursion
+- concurrency: don't swallow `KeyboardInterrupt` when running under gevent
+- colors: bug fix in handling markups with no text
+- units: fix `__rfloordiv__` handling of unsupported operands
+
+## [0.4.1] - 2020-04-27
+
+Project renamed as 'real-easypy'
 
 ## [0.4.0] - 2019-11-14
 

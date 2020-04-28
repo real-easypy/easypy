@@ -41,6 +41,7 @@ def get_thread_uuid(thread=None):
     return uuid
 
 
+_REGISTER_GREENLETS = False
 _orig_start_new_thread = _thread.start_new_thread
 
 
@@ -54,6 +55,8 @@ def start_new_thread(target, *args, **kwargs):
         thread = threading.current_thread()
         uuid = get_thread_uuid(thread)
         UUIDS_TREE[uuid] = parent_uuid
+        if _REGISTER_GREENLETS:
+            IDENT_TO_GREENLET[thread.ident] = gevent.getcurrent()
         try:
             return target(*args, **kwargs)
         finally:
@@ -123,10 +126,13 @@ threading.Thread.parent = property(get_thread_parent)
 threading.Thread.uuid = property(get_thread_uuid)
 
 if is_module_patched("threading"):
+    _REGISTER_GREENLETS = True
     import gevent.monkey
     gevent.monkey.saved['threading']['Thread'].parent = property(get_thread_parent)
     gevent.monkey.saved['threading']['Thread'].uuid = property(get_thread_uuid)
     IDENT_TO_UUID[main_thread_ident_before_patching] = get_thread_uuid()
+    from weakref import WeakValueDictionary
+    IDENT_TO_GREENLET = WeakValueDictionary()
 
     def iter_thread_frames():
         current_thread_ident = threading.current_thread().ident
@@ -145,11 +151,12 @@ if is_module_patched("threading"):
             yield fix(ident, frame)
 
         for thread in threading.enumerate():
-            if not getattr(thread, '_greenlet', None):
+            greenlet = IDENT_TO_GREENLET.get(thread.ident)
+            if not greenlet:
                 # some inbetween state, before greenlet started or after it died?...
                 pass
-            elif thread._greenlet.gr_frame:
-                yield fix(thread.ident, thread._greenlet.gr_frame)
+            elif greenlet.gr_frame:
+                yield fix(thread.ident, greenlet.gr_frame)
             else:
                 # a thread with greenlet but without gr_frame will be fetched from sys._current_frames
                 # If we switch to another greenlet by the time we get there we will get inconsistent dup of threads.

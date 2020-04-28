@@ -1,58 +1,44 @@
+stages:
+  - name: test
+    if: tag IS blank
+  - name: deploy
+    if: tag IS present
 language: python
 python:
-  - "3.4"
-  - "3.5"
-  - "3.5-dev" # 3.5 development branch
-  - "3.6"
-  - "3.6-dev" # 3.6 development branch
-  - "3.7"
-  - "3.7-dev" # 3.7 development branch
-  - "3.8"
-  - "3.8-dev" # 3.7 development branch
+- '3.8'
+- '3.7'
+- '3.6'
+- '3.5'
+- 3.8-dev
+- 3.7-dev
+- 3.6-dev
+- 3.5-dev
 env:
-  - GEVENT=true
-  - GEVENT=false
-
+- GEVENT=true
+- GEVENT=false
 install:
-  - pip install gevent\<1.5.0 pytest-random-order
-  # PyYaml 5.3 removed support for Python 3.4
-  - |-
-    if [[ $TRAVIS_PYTHON_VERSION = 3.4 ]]; then
-      pip install PyYaml==5.2
-    else
-      pip install PyYaml
-    fi
-  - pip install sphinx==1.7.9 ghp-import
-
+- pip install PyYaml gevent pytest-random-order
 before_script:
-  # we need this for test_ziplog, which parses ambiguous timestamps
-  - export TZ=Asia/Jerusalem
-
+- export TZ=Asia/Jerusalem
 script:
-  - python -m pytest --random-order-bucket=package -vv test_package.py  # separate, since it mucks with imports
-  - python -m pytest --random-order-bucket=package -vv tests
-  - python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
-
+- python -m pytest --random-order-bucket=package -vv test_package.py
+- python -m pytest --random-order-bucket=package -vv tests
+- python -m pytest --random-order-bucket=package -vv --doctest-modules easypy
 notifications:
-    email:
-        on_success: change
-        on_failure: change
-
-after_success: |-
-  [[ $TRAVIS_JOB_NUMBER = *.1 ]] &&
-  [ $TRAVIS_BRANCH = master ] &&
-  [ $TRAVIS_PULL_REQUEST = false ] &&
-  sphinx-apidoc -o _static easypy &&
-  PYTHONPATH=`pwd`:$PYTHONPATH sphinx-build -M html "." "_build" &&
-  echo "<meta http-equiv=refresh content=0;url=html/_static/easypy.html>" > _build/index.html &&
-  export PATH=$HOME/.local/bin:$PATH &&
-  ghp-import -n _build &&
-  git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
-deploy:
-  provider: pypi
-  user: __token__
-  password:
-    secure: 2oP26YXbVKFDpIxdsPdzXoYSIFSK3VjSShPEAbRkIm/Y31Es/FepRx71dJwub+/r5ITrWh/zsEUpT2CvfLAnDp1MVMW3X0cwNn9S8Y+hPbC8tol1IZolD3ai60T2rDb8WMxq7gKhXuK6imWQx1zxQgaU1R4CZEg3xOEvQXP2LiBVL4bgVbyLyhTkARUDeWc7DXWKMX0xApr5Xq54mEL6erLSByXrjKTojp0jV5RBLoJ1DoTHzEvkR7+aXlKqkuN0mHCRWkrITE3yS2m/zdWuHRP8GNhuaet73mGPfE8jI/cMXwNXJKgfgnCMw7652dTFJCBDTlk58n5IrZo5dKO7fAEX/707ZZc9b9vfUGUUrlZPyHnxfM/al0aOIL1qhYy77yZ6BE5n8Ne0JwKgvEEK2KdeUqW7zL5tVrwaF3Q3ppL8DFME6vO6E/IUmp3DqIAtGLOPb/mqbx49yRsBnKlV4wPEehhQN1eX6O6QkamWiEy5JQP3titoGm9lwhArEx7NOk7GgTVD5rvVH9/eCBhhs/YHXcIHbWai0qykAi27MGw8Qub/UqoGsKsTETuw0HDWPniQDAwYDoF5TxAnFZZipjbj34tYrXYVtb5NnChitTQPpOeqypSlE5mzmfz7EMsxgCmmezbLzMsafwNPYMAqNON07uY60YkSVUvkvUxr4pk=
-  on:
-    tags: true
-  skip_existing: true
+  email:
+    on_success: change
+    on_failure: change
+jobs:
+  include:
+    - stage: deploy
+      python: '3.8'
+      env: GEVENT=false
+      script: skip
+      install: skip
+      deploy:
+        provider: pypi
+        user: __token__
+        on:
+          tags: true
+          branch: master
+        skip_existing: true
