@@ -444,6 +444,11 @@ class ObjectCollectionBase(object):
         return AggregateCollection([self, collection])
 
 
+def ObjectCollectionBaseMethod(func):
+    setattr(ObjectCollectionBase, func.__name__, func)
+    return func
+
+
 class AggregateCollection(ObjectCollectionBase):
     """
     Dynamically aggregate other collections into one chained collection
@@ -790,6 +795,7 @@ class IndexedObjectCollection(SimpleObjectCollection):
         return filtered(objects, preds, filters)
 
 
+@ObjectCollectionBaseMethod
 def grouped(sequence, key=None, transform=None):
     """
     Parse the sequence into groups, according to key:
@@ -812,6 +818,7 @@ def grouped(sequence, key=None, transform=None):
     return groups
 
 
+@ObjectCollectionBaseMethod
 def separate(sequence, key=None):
     """
     Partition the sequence into items that match and items that don't:
@@ -860,6 +867,7 @@ def listify(obj):
     return list(ilistify(obj))
 
 
+@ObjectCollectionBaseMethod
 def chunkify(sequence, size):
     """
     Chunk a sequence into equal-size chunks (except for the last chunk):
@@ -984,6 +992,7 @@ def as_list(generator, sort_by=None):
     return inner
 
 
+@ObjectCollectionBaseMethod
 def takesome(generator, max=None, min=0):
     """
     Take between ``min`` and ``max`` items from the generator.
