@@ -30,6 +30,7 @@ jobs:
       deploy:
         provider: pypi
         user: __token__
+        if: branch = master
         on:
           tags: true
           branch: master

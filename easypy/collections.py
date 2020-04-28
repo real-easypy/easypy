@@ -1016,19 +1016,22 @@ def takesome(generator, max=None, min=0):
     if max is not None and max < min:
         raise ValueError("'max' must be great than 'min'")
 
-    items = [p for p, _ in zip(generator, range(min))]
+    generator = iter(generator)  # just in case it ain't a generator
 
-    if len(items) < min:
-        raise ValueError("Not enough items in sequence (wanted {}, got {})".format(min, len(items)))
+    min_items = [p for _, p in zip(range(min), generator)]
 
-    yield from items
+    if len(min_items) < min:
+        raise ValueError("Not enough items in sequence (wanted {}, got {})".format(min, len(min_items)))
+
+    yield from min_items
 
     if max is None:
+        # yield the rest
         yield from generator
         return
 
     remain = max - min
-    for p, _ in zip(generator, range(remain)):
+    for _, p in zip(range(remain), generator):
         yield p
 
 
