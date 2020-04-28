@@ -4,6 +4,7 @@ python:
 - '3.7'
 - '3.6'
 - '3.5'
+- 3.9-dev
 - 3.8-dev
 - 3.7-dev
 - 3.6-dev
@@ -23,10 +24,12 @@ notifications:
   email:
     on_success: change
     on_failure: change
+if: branch != master
 jobs:
   include:
     - stage: deploy
       python: 3.8
+      if: branch = master
       deploy:
         provider: pypi
         user: __token__
