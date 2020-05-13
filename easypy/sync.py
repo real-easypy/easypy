@@ -1124,10 +1124,13 @@ def wait_progress(*args, **kwargs):
 
 
 def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf"), state_threshold=0, sleep=0.5, throw=True,
-                       allow_regression=True, advancer_name=None, progressbar=True):
+                       allow_regression=True, advancer_name='', progressbar=True):
 
-    ADVANCE_TIMEOUT_MESSAGE = "did not advance for {duration: .1f} seconds"
-    TOTAL_TIMEOUT_MESSAGE = "advanced but failed to finish in {duration: .1f} seconds"
+    if advancer_name:
+        advancer_name += ' '
+
+    advance_timeout_message = advancer_name + "did not advance for {duration: .1f} seconds"
+    total_timeout_message = advancer_name + "advanced but failed to finish in {duration: .1f} seconds"
 
     state = state_getter()  # state_getter should return a number, represent current state
 
@@ -1149,22 +1152,26 @@ def iter_wait_progress(state_getter, advance_timeout, total_timeout=float("inf")
     min_sleep = None
 
     while progress.state > state_threshold:
-        progress.timeout, message = min(
-            (progress.total_timer.remain, TOTAL_TIMEOUT_MESSAGE),
-            (progress.advance_timer.remain, ADVANCE_TIMEOUT_MESSAGE))
-        if advancer_name:
-            message = advancer_name + ' ' + message
+
+        if progress.total_timer.expired:
+            raise TimeoutException(total_timeout_message, duration=progress.total_timer.duration)
+
+        progress.timeout, message, timer = min(
+            (progress.total_timer.remain, total_timeout_message, progress.total_timer),
+            (progress.advance_timer.remain, advance_timeout_message, progress.advance_timer))
 
         if min_sleep:
             wait(min_sleep.remain)
         min_sleep = Timer(expiration=sleep)
 
-        result = wait(progress.timeout, pred=did_advance, sleep=sleep, message=message, throw=throw, progressbar=progressbar)
-        if not result:  # if wait times out without throwing
+        result = wait(progress.timeout, pred=did_advance, sleep=sleep, throw=False, progressbar=progressbar)
+        if result:
+            pass
+        elif not throw:
+            # wait timed out without throwing
             return
-
-        if progress.total_timer.expired:
-            raise TimeoutException(message, duration=progress.total_timer.duration)
+        else:
+            raise TimeoutException(message, duration=timer.duration)
 
         progress.advance_timer.reset()
         yield progress
