@@ -717,9 +717,18 @@ def test_iter_wait_progress_total_timeout():
         return data.a
 
     with pytest.raises(TimeoutException) as exc:
-        for state in iter_wait_progress(get, advance_timeout=1, sleep=.05, total_timeout=.1):
+        for state in iter_wait_progress(get, advance_timeout=1, sleep=.05, total_timeout=1):
             pass
     assert exc.value.message.startswith("advanced but failed to finish")
+    assert float(exc.value.duration) == pytest.approx(1, 0.05)
+
+
+def test_iter_wait_progress_adv_timeout():
+    with pytest.raises(TimeoutException) as exc:
+        for state in iter_wait_progress(lambda: 100, advance_timeout=.1, sleep=.05, total_timeout=1):
+            pass
+    assert exc.value.message.startswith("did not advance")
+    assert float(exc.value.duration) == pytest.approx(0.1, 0.05)
 
 
 def test_wait_long_predicate():
