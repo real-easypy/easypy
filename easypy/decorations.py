@@ -12,11 +12,11 @@ from easypy.exceptions import TException
 
 def parametrizeable_decorator(deco):
     @wraps(deco)
-    def inner(func=None, **kwargs):
+    def inner(func=None, *args, **kwargs):
         if func is None:
-            return partial(deco, **kwargs)
+            return partial(deco, *args, **kwargs)
         else:
-            return wraps(func)(deco(func, **kwargs))
+            return wraps(func)(deco(func, *args, **kwargs))
     return inner
 
 
