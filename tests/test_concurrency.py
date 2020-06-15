@@ -24,6 +24,18 @@ def test_thread_stacks():
         print(get_thread_stacks().render())
 
 
+def test_call_concurrent():
+    func = lambda a, b: a + b
+    c = concurrent(func, 1, b=2, threadname='add')
+    assert c() == 3
+
+
+def test_call_concurrent_timeout():
+    c = concurrent(sleep, 1, threadname='sleep')
+    with pytest.raises(TimeoutError):
+        c(timeout_=0.1)
+
+
 def test_thread_contexts_counters():
     TC = ThreadContexts(counters=('i', 'j'))
     assert TC.i == TC.j == 0
