@@ -210,6 +210,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
     :param complete: ``True`` if all threads failed on exception
     """
 
+    COMMON_TYPE = BaseException  # the fallback common type
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
     def __reduce__(self):
