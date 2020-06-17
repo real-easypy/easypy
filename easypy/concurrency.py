@@ -974,8 +974,9 @@ class _concurrent(object):
             flags += 'T'
         return "<%s[%s] '%s'>" % (self.__class__.__name__, self.threadname, flags)
 
-    def _logged_func(self, kwargs=None):
-        kwargs = {**self.kwargs, **(kwargs or {})}
+    def _logged_func(self, *args, **kwargs):
+        args = self.args + args
+        kwargs = {**self.kwargs, **kwargs}
         stack = ExitStack()
         self.exc = None
         self.timer = Timer()
@@ -986,7 +987,7 @@ class _concurrent(object):
                 stack.enter_context(_logger.suppressed())
             _logger.debug("%s - starting", self)
             while True:
-                self._result = self.func(*self.args, **kwargs)
+                self._result = self.func(*args, **kwargs)
                 if not self.loop:
                     return
                 if self.wait(self.sleep):
@@ -1046,10 +1047,10 @@ class _concurrent(object):
 
     @contextmanager
     def _running(self, *args, **kwargs):
-        func = lambda *args, **kwargs: self._logged_func(*args, **kwargs)
+        func = lambda: self._logged_func(*args, **kwargs)
 
         if DISABLE_CONCURRENCY:
-            self._logged_func(*args, **kwargs)
+            func()
             yield self
             return
 
