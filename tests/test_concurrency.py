@@ -25,9 +25,18 @@ def test_thread_stacks():
 
 
 def test_call_concurrent():
-    func = lambda a, b: a + b
+    func = lambda a, b: a * 10 + b
     c = concurrent(func, 1, b=2, threadname='add')
-    assert c() == 3
+    assert c() == 12
+
+    c = concurrent(func, 1, 2, threadname='add')
+    assert c() == 12
+
+    c = concurrent(func, 1, threadname='add')
+    assert c(2) == 12
+
+    c = concurrent(func, threadname='add')
+    assert c(1, 2) == 12
 
 
 def test_call_concurrent_timeout():
