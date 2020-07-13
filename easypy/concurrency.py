@@ -1079,6 +1079,8 @@ class _concurrent(object):
     def join(self):
         self.__exit__(None, None, None)
 
+    _ctx = None
+
     __enter__ = start
 
     def __exit__(self, *args):
