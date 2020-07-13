@@ -941,6 +941,7 @@ class _concurrent(object):
         self.sleep = kwargs.pop('sleep', 1)
         self.loop = kwargs.pop('loop', False)
         self.timer = None
+        self.exc = None
         self.console_logging = kwargs.pop('console_logging', True)
         self.threadname = kwargs.pop('threadname', None)
         if not self.threadname:
