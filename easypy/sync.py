@@ -684,7 +684,10 @@ class RWLock(object):
         self._lease_timer = None
 
     def __repr__(self):
-        owners = ", ".join(map(str, sorted(self.owners.keys())))
+        owners = ", ".join(sorted(map(str, self.owners.keys())))
+        if not owners:
+            return "<{}, unowned>".format(self.name)
+
         lease_timer = self._lease_timer  # touch once to avoid races
         if lease_timer:
             mode = "exclusively ({})".format(lease_timer.elapsed)
@@ -700,27 +703,49 @@ class RWLock(object):
         return self
 
     def __enter__(self):
+        self.acquire()
+        return self
+
+    def acquire(self, identifier=None):
+        """
+        Acquire the lock as a reader.
+        Optionally specify the identity of the reader (defaults to thready identity).
+        """
         while not self.cond.acquire(timeout=15):
             _logger.debug("%s - waiting...", self)
 
+        if not identifier:
+            identifier = _get_my_ident()
+
         try:
-            self.owners[_get_my_ident()] += 1
-            _verbose_logger.debug("%s - acquired (non-exclusively)", self)
+            self.owners[identifier] += 1
+            _verbose_logger.debug("%s - acquired (as reader)", self)
             return self
         finally:
             self.cond.release()
 
     def __exit__(self, *args):
+        self.release()
+
+    def release(self, identifier=None):
+        """
+        Release the lock as a reader.
+        Optionally specify the identity of the reader (defaults to thready identity).
+        """
+
         while not self.cond.acquire(timeout=15):
             _logger.debug("%s - waiting...", self)
 
+        if not identifier:
+            identifier = _get_my_ident()
         try:
-            my_ident = _get_my_ident()
-            self.owners[my_ident] -= 1
-            if not self.owners[my_ident]:
-                self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
+            if not self.owners[identifier]:
+                raise RuntimeError("cannot release un-acquired lock")
+            self.owners[identifier] -= 1
+            if not self.owners[identifier]:
+                self.owners.pop(identifier)
             self.cond.notify()
-            _verbose_logger.debug("%s - released (non-exclusive)", self)
+            _verbose_logger.debug("%s - released (as reader)", self)
         finally:
             self.cond.release()
 
@@ -739,11 +764,11 @@ class RWLock(object):
         my_ident = _get_my_ident()
         self.owners[my_ident] += 1
         self._lease_timer = Timer()
-        _verbose_logger.debug("%s - acquired (exclusively)", self)
+        _verbose_logger.debug("%s - acquired (as writer)", self)
         try:
             yield
         finally:
-            _verbose_logger.debug('%s - releasing (exclusive)', self)
+            _verbose_logger.debug('%s - releasing (as writer)', self)
             self._lease_timer = None
             self.owners[my_ident] -= 1
             if not self.owners[my_ident]:
