@@ -150,7 +150,8 @@ class DataSize(int):
             return '0 bytes' if humanize else '0'
 
         if self in self.UNIT_NAMES:
-            return self.UNIT_NAMES[self]
+            unit = self.UNIT_NAMES[self]
+            return '1 %s' % (unit,) if humanize else unit
         for unit in self.SORTED_UNITS:
             name = self.UNIT_NAMES[unit]
             many = 'bytes' if name == 'byte' else name
