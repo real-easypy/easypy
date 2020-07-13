@@ -1,6 +1,7 @@
 # encoding: utf-8
 from __future__ import absolute_import
 
+import os
 import logging
 import random
 import sys
@@ -282,18 +283,40 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
         logging.warning("%s is already initialized", __name__)
         return
 
+    # our gevent patching prevents us from safely importing this function
+    # from the parent 'easypy' module. workaround was to de-DRY it... (clone it)
+    def yesno_to_bool(s):
+        s = s.lower()
+        if s not in ("yes", "no", "true", "false", "1", "0"):
+            raise ValueError("Unrecognized boolean value: %r" % (s,))
+        return s in ("yes", "true", "1")
+
     G.IS_A_TTY = sys.stdout.isatty()
 
     # =====================
     # Graphics initialization
 
-    G.GRAPHICAL = if_auto(graphical, G.IS_A_TTY)
+    if graphical is AUTO:
+        graphical = os.getenv('EASYPY_AUTO_GRAPHICAL_LOGGING', '')
+        if graphical:
+            graphical = yesno_to_bool(graphical)
+        else:
+            graphical = G.IS_A_TTY
+
+    G.GRAPHICAL = graphical, G.IS_A_TTY
     G.graphics = Graphics.Graphical if G.GRAPHICAL else Graphics.ASCII
 
     # =====================
     # Coloring indentation
 
-    G.COLORING = if_auto(coloring, G.IS_A_TTY)
+    if coloring is AUTO:
+        coloring = os.getenv('EASYPY_AUTO_COLORED_LOGGING', '')
+        if coloring:
+            coloring = yesno_to_bool(coloring)
+        else:
+            coloring = G.IS_A_TTY
+
+    G.COLORING = coloring
     if G.COLORING:
         from easypy.colors import RED, GREEN, BLUE, WHITE, DARK_GRAY
         G.INDENT_COLORS = [
@@ -383,4 +406,4 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
         obj.logger = _get_logger(name=obj.name)
     DeferredEasypyLogger._pending.clear()
 
-    G.initialized = True
+    G.initialized = framework

@@ -14,10 +14,12 @@ python:
 - 3.6-dev
 - 3.5-dev
 env:
-- GEVENT=true
-- GEVENT=false
+- EASYPY_AUTO_PATCH_GEVENT=true
+- EASYPY_AUTO_PATCH_GEVENT=false
+- EASYPY_AUTO_PATCH_LOGGING=logging
+- EASYPY_AUTO_PATCH_LOGGING=logbook
 install:
-- pip install PyYaml gevent pytest-random-order
+- pip install PyYaml gevent pytest-random-order logbook
 before_script:
 - export TZ=Asia/Jerusalem
 script:

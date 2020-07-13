@@ -43,11 +43,7 @@ def bool_to_yesno(b):
     return "yes" if b else "no"
 
 
-def yesno_to_bool(s):
-    s = s.lower()
-    if s not in ("yes", "no", "true", "false", "1", "0"):
-        raise ValueError("Unrecognized boolean value: %r" % (s,))
-    return s in ("yes", "true", "1")
+from easypy import yesno_to_bool
 
 
 def time_duration(delta, ago=False):

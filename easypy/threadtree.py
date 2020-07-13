@@ -392,6 +392,9 @@ class ThreadContexts():
         self._counters = set(ilistify(counters or []))
         self._stacks = set(ilistify(stacks or []))
 
+    def update_defaults(self, **kwargs):
+        self._defaults.update(kwargs)
+
     def _get_context_data(self, thread_uuid=None, combined=False):
         if not thread_uuid:
             thread_uuid = get_thread_uuid()

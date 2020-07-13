@@ -1,19 +1,18 @@
 import os
-if os.getenv("GEVENT") == "true":
-    from easypy.gevent import apply_patch
-    apply_patch()
+# if os.getenv("GEVENT") == "true":
+#     from easypy.gevent import apply_patch
+#     apply_patch()
 
-use_logbook = bool(os.getenv("LOGBOOK"))
-
-if not use_logbook:
-    import logging
-    logging.addLevelName(logging.WARN, "WARN")  # instead of "WARNING", so that it takes less space...
-    logging.addLevelName(logging.NOTSET, "NA")  # instead of "NOTSET", so that it takes less space...
+# use_logbook = bool(os.getenv("LOGBOOK"))
 
 
-from easypy.logging import initialize
-initialize(patch=True, framework="logbook" if use_logbook else "logging", context=dict(domain='domain'))
 
+from easypy.logging import G, THREAD_LOGGING_CONTEXT, initialize
+if not G.initialized:
+    initialize(patch=True)
+
+use_logbook = G.initialized == "logbook"
+THREAD_LOGGING_CONTEXT.update_defaults(domain='domain')
 
 if use_logbook:
     import logbook
@@ -29,8 +28,11 @@ if use_logbook:
     )
     handler.push_application()
 else:
+    import logging
     from logging import StreamHandler
     from easypy.logging import ConsoleFormatter
+    logging.addLevelName(logging.WARN, "WARN")  # instead of "WARNING", so that it takes less space...
+    logging.addLevelName(logging.NOTSET, "NA")  # instead of "NOTSET", so that it takes less space...
     formatter = ConsoleFormatter('%(levelcolor)s<<%(asctime)s|%(levelname)-5s|%(domain)-15s>>|%(decoration)s%(message)s', datefmt='%H:%M:%S')
     handler = StreamHandler()
     handler.setFormatter(formatter)

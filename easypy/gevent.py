@@ -10,9 +10,11 @@ import threading   # this will be reloaded after patching
 
 import time
 import sys
+import os
 
 
 from ._multithreading_init import _set_thread_uuid, _set_main_uuid
+from . import yesno_to_bool
 
 # can't use easypy's logging since this has to be run before everything,
 # hence the name '_basic_logger', to remind that easypy features are not available
@@ -24,10 +26,15 @@ main_thread_ident_before_patching = threading.main_thread().ident
 
 HUB = None
 
-HOGGING_TIMEOUT = 1
+HOGGING_TIMEOUT = int(os.getenv('EASYPY_GEVENT_HOGGING_DETECTOR_INTERVAL', 0))
 
 
-def apply_patch(hogging_detection=False, real_threads=1):
+def apply_patch(hogging_detection=None, real_threads=None):
+    if real_threads is None:
+        real_threads = int(os.getenv('EASYPY_GEVENT_REAL_THREADS', 1))
+    if hogging_detection is None:
+        hogging_detection = bool(HOGGING_TIMEOUT)
+
     _basic_logger.info('applying gevent patch (%s real threads)', real_threads)
 
     # real_threads is 1 by default so it will be possible to run watch_threads concurrently
