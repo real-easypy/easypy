@@ -986,13 +986,13 @@ class _concurrent(object):
         try:
             if not self.console_logging:
                 stack.enter_context(_logger.suppressed())
-            _logger.debug("%s - starting", self)
+            _logger.trace("%s - starting", self)
             while True:
                 self._result = self.func(*args, **kwargs)
                 if not self.loop:
                     return
                 if self.wait(self.sleep):
-                    _logger.debug("%s - stopped", self)
+                    _logger.trace("%s - stopped", self)
                     return
         except ProcessExiting as exc:
             _logger.debug(exc)
@@ -1010,7 +1010,7 @@ class _concurrent(object):
 
     def stop(self):
         if not self.stopper.is_set():
-            _logger.debug("%s - stopping", self)
+            _logger.trace("%s - stopping", self)
         self.stopper.set()
 
     def wait(self, timeout=None):
@@ -1056,12 +1056,12 @@ class _concurrent(object):
             return
 
         if self.real_thread_no_greenlet and IS_GEVENT:
-            _logger.debug('sending job to a real OS thread')
+            _logger.trace('sending job to a real OS thread')
             self._join = defer_to_thread(func=func, threadname=self.threadname)
         else:
             # threading.Thread could be a real thread or a gevent-patched thread...
             self.thread = threading.Thread(target=func, name=self.threadname, daemon=self.daemon)
-            _logger.debug('sending job to %s', self.thread)
+            _logger.trace('sending job to %s', self.thread)
             self.stopper.clear()
             self.thread.start()
             self._join = self.thread.join

@@ -425,6 +425,9 @@ class ContextLoggerMixin(object):
         self.error(message, *args, **kwargs)
         self.debug('Traceback:', exc_info=True)
 
+    def trace(self, *args, **kwargs):
+        self.log(0, *args, **kwargs)
+
     def __ror__(self, cmd):
         """
         Integration with plumbum's command objects for subprocess execution.
