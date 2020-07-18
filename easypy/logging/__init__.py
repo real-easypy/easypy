@@ -44,6 +44,7 @@ class G:
     COLORING = None
     GRPH = Graphics.ASCII  # graphical elements for generating indentations in the log
     NOTICE = None  # the INFO+1 log-level; in 'logbook' there's a "NOTICE" log-level - we borrow their terminology
+    TRACE = None   # borrowing from logbook's TRACE log evel
     LEVEL_COLORS = None
 
 
@@ -212,6 +213,9 @@ class ContextableLoggerMixin(object):
         self.error(message, *args, **kwargs)
         self.debug('Traceback:', exc_info=True)
 
+    def trace(self, *args, **kwargs):
+        self.log(G.TRACE, *args, **kwargs)
+
     def notice(self, *args, **kwargs):
         """
         Log at 'NOTICE' log level, which is 'INFO1' in logging, and 'NOTICE' in logbook
@@ -355,6 +359,7 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
         logging.INFO1 = logging.INFO + 1
         logging.addLevelName(logging.INFO1, "INFO1")
         G.NOTICE = logging.INFO1
+        G.TRACE = logging.NOTSET
 
         class ContextLoggerMixin(ContextableLoggerMixin, ProgressBarLoggerMixin):
             # for backwards compatibility
@@ -381,6 +386,7 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
         from ._logbook import LoggingToLogbookAdapter
         G.LEVEL_COLORS = LEVEL_COLORS
         G.NOTICE = logbook.NOTICE
+        G.TRACE = logbook.TRACE
 
         class HeartbeatHandler(logbook.Handler, HeartbeatHandlerMixin):
             pass
