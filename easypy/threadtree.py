@@ -16,25 +16,8 @@ import threading
 from easypy.gevent import main_thread_ident_before_patching, is_module_patched
 from easypy.bunch import Bunch
 from easypy.collections import ilistify
-from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID
+from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID, _BOOTSTRAPPERS, get_thread_uuid
 
-
-
-def get_thread_uuid(thread=None):
-    """
-    Assigns and returns a UUID to our thread, since thread.ident can be recycled.
-    The UUID is used in mapping child threads to their parent threads.
-    """
-    if not thread:
-        thread = threading.current_thread()
-
-    ident = thread.ident
-    try:
-        uuid = IDENT_TO_UUID[ident]
-    except KeyError:
-        uuid = IDENT_TO_UUID.setdefault(ident, uuid4())
-        UUID_TO_IDENT[uuid] = ident
-    return uuid
 
 
 _REGISTER_GREENLETS = False
@@ -188,7 +171,7 @@ def walk_frames(thread=None, *, across_threads=False):
 
 
 this_module = import_module(__name__)
-_BOOTSTRAPPERS = {threading, this_module}
+_BOOTSTRAPPERS |= {threading, this_module}
 
 
 def get_thread_trees(including_this=True):

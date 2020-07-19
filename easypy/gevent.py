@@ -13,7 +13,7 @@ import sys
 import os
 
 
-from ._multithreading_init import _set_thread_uuid, _set_main_uuid
+from ._multithreading_init import _set_thread_uuid, _set_main_uuid, _BOOTSTRAPPERS, get_thread_uuid
 from . import yesno_to_bool
 
 # can't use easypy's logging since this has to be run before everything,
@@ -41,8 +41,6 @@ def apply_patch(hogging_detection=None, real_threads=None):
     if hogging_detection:
         real_threads += 1
 
-    _patch_module_locks()
-
     import gevent
     import gevent.monkey
 
@@ -51,6 +49,7 @@ def apply_patch(hogging_detection=None, real_threads=None):
 
     gevent.monkey.patch_all(Event=True, sys=True)
 
+    _patch_module_locks()
     _unpatch_logging_handlers_lock()
 
     global HUB
@@ -63,7 +62,6 @@ def apply_patch(hogging_detection=None, real_threads=None):
     _set_main_uuid()  # the patched threading has a new ident for the main thread
 
     # this will declutter the thread dumps from gevent/greenlet frames
-    from .threadtree import _BOOTSTRAPPERS
     import gevent, gevent.threading, gevent.greenlet
     _BOOTSTRAPPERS.update([gevent, gevent.threading, gevent.greenlet])
 
@@ -75,19 +73,16 @@ def apply_patch(hogging_detection=None, real_threads=None):
 
 def _patch_module_locks():
     # gevent will not patch existing locks (including ModuleLocks) when it's not single threaded
-    # our solution is to monkey patch the release method for ModuleLocks objects
-    # we assume that patching is done early enough so no other locks are present
+    # so we map the ownership of module locks to the greenlets that took over
 
     import importlib
-    _old_release = importlib._bootstrap._ModuleLock.release
+    thread_greenlet_ident = {
+        main_thread_ident_before_patching: threading.main_thread().ident
+    }
 
-    def _release(*args, **kw):
-        lock = args[0]
-        if lock.owner == main_thread_ident_before_patching:
-            lock.owner = threading.main_thread().ident
-        _old_release(*args, **kw)
-
-    importlib._bootstrap._ModuleLock.release = _release
+    for ref in importlib._bootstrap._module_locks.values():
+        lock = ref()
+        lock.owner = thread_greenlet_ident.get(lock.owner, lock.owner)
 
 
 def _unpatch_logging_handlers_lock():
@@ -122,8 +117,6 @@ def _greenlet_trace_func(event, args):
 
 
 def detect_hogging():
-    from easypy.humanize import format_thread_stack
-
     did_switch = True
 
     current_running_greenlet = HUB
@@ -163,6 +156,11 @@ def detect_hogging():
                 _basic_logger.info('RED<<unknown greenlet hogger detected (%s seconds):>>', current_blocker_time)
                 _basic_logger.debug('greenlet stuck (no corresponding thread found): %s', current_running_greenlet)
                 _basic_logger.debug('hub is: %s', HUB)
+            # this is needed by `detect_hogging`, but we must'nt import it
+            # there since it leads to a gevent/native-thread deadlock,
+            # and can't import it at the top since thing must wait for
+            # the gevent patching
+            from easypy.humanize import format_thread_stack
             func = _basic_logger.debug if current_blocker_time < 5 * HOGGING_TIMEOUT else _basic_logger.info
             func("Stack:\n%s", format_thread_stack(sys._current_frames()[main_thread_ident_before_patching]))
             last_warning_time = current_blocker_time
@@ -189,7 +187,6 @@ def defer_to_thread(func, threadname):
         gevent.wait()
         _basic_logger.debug('ready for the next job')
 
-    from .threadtree import get_thread_uuid
     parent_uuid = get_thread_uuid(threading.current_thread())
     pool = gevent.get_hub().threadpool
     return pool.spawn(run).wait
