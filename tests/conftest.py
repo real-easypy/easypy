@@ -22,6 +22,7 @@ if use_logbook:
     handler.formatter = ConsoleFormatter(
         "{record.extra[levelcolor]}<<"
         "{record.time:%Y-%m-%d %H:%M:%S}|"
+        "{record.filename}:{record.lineno}|"
         "{record.level_name:8}>>| "
         "{record.extra[domain]:15}| "
         "{record.extra[decoration]}{record.message}"

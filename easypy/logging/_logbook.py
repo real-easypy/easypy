@@ -122,6 +122,7 @@ class LoggingToLogbookAdapter():
         fmt = args[0]
         fmt = convert_string_template(fmt)
         args = (fmt,) + args[1:]
+        kwargs.update(frame_correction=kwargs.get('frame_correction', 0) + 2)
         return super()._log(level, args, kwargs)
 
 
