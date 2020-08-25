@@ -4,8 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-- resilience: support returning exceptions captured by `resilient` decorator
+## Unreleased
+
+
+## [0.5.0] - 2020-08-25
 
 ### Changed
 - Logging Initialization
@@ -13,9 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - removed `set_width`, `set_coloring`, `set_graphics`
     - the env-var `TERM_COLOR_SUPPORT` is no longer checked
     - the env-var `EASYPY_LOG_INDENTATION` is no longer checked
-- DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB'
+- DataSize - return 'byte' and 'MiB' instead of '1 byte' and '1 MiB', except in `.render(humanize=True)`
 
 ### Added
+- logging: support for `logbook` as the underlying logging framework
+- logging: auto-initialize via env-var `EASYPY_AUTO_PATCH_LOGGING=logging|logbook`
+- logging: env-vars for configuring logging - `EASYPY_AUTO_GRAPHICAL_LOGGING`, `EASYPY_AUTO_COLORED_LOGGING`
+- gevent: auto-patch via env-var `EASYPY_AUTO_PATCH_GEVENT=yes`
+- resilience: support returning exceptions captured by `resilient` decorator
 - Examples
     - a skeleton for initializing logging with easypy
 
