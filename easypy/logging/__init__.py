@@ -353,7 +353,7 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
     if framework == "logging":
         from .progressbar import ProgressBarLoggerMixin
         from ._logging import get_console_handler, LEVEL_COLORS, patched_makeRecord, ConsoleFormatter
-        from ._logbook import ThreadControl
+        from ._logging import ThreadControl
         G.LEVEL_COLORS = LEVEL_COLORS
 
         logging.INFO1 = logging.INFO + 1
