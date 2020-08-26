@@ -8,7 +8,7 @@ import sys
 import threading
 import time
 import inspect
-from functools import wraps
+from functools import wraps, _make_key
 import re
 import logging
 import atexit
@@ -278,7 +278,7 @@ def set_timebomb(timeout, alert_interval=None):
 @wrapper_decorator
 def shared_contextmanager(func):
 
-    @locking_cache
+    @locking_cache(key_func=lambda args, kwargs: _make_key(args, kwargs, False))
     def inner(*args, **kwargs):
 
         class CtxManager():

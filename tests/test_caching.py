@@ -23,10 +23,14 @@ def test_timecache():
     def get_ts():
         return ts
 
-    @timecache(expiration=1, get_ts_func=get_ts, key_func=lambda k: k)
+    @timecache(expiration=1, get_ts_func=get_ts)
     def inc(k, x):
         x += 1
         data[k] += 1
+
+    @inc.key_func
+    def _(k):
+        return k
 
     assert data.a == data.b == 0
     inc('a', random.random())
@@ -76,9 +80,13 @@ def test_timecache_method():
         def __init__(self, prefix):
             self.prefix = prefix
 
-        @timecache(expiration=1, get_ts_func=get_ts, key_func=lambda args: args)
+        @timecache(expiration=1, get_ts_func=get_ts)
         def foo(self, *args):
             return [self.prefix] + list(args)
+
+        @foo.key_func
+        def _(args):
+            return args
 
     foo1 = Foo(1)
     foo2 = Foo(2)
@@ -218,13 +226,17 @@ def test_locking_timecache():
     class UnnecessaryFunctionCall(Exception):
         pass
 
-    @timecache(ignored_keywords='x')
+    @timecache()
     def test(x):
         nonlocal value_generated
         if value_generated:
             raise UnnecessaryFunctionCall()
         value_generated = True
         return True
+
+    @test.key_func
+    def test_key(x):
+        return ()
 
     MultiObject(range(10)).call(lambda x: test(x=x))
 

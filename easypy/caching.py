@@ -146,43 +146,6 @@ class PersistentCache(object):
             db.clear()
 
 
-@deprecated(message="Please use easypy.caching.locking_cache")
-def locking_lru_cache(maxsize=128, typed=False):
-    """
-    DEPRECATED!
-
-    An lru cache decorator with a lock, to prevent concurrent invocations and allow reusing from cache.
-
-    :param maxsize: LRU cache maximum size, defaults to 128
-    :type maxsize: number, optional
-    :param typed: If typed is set to true, function arguments of different types will be cached separately. defaults to False.
-    :type typed: bool, optional
-    """
-
-    def deco(func):
-        caching_func = lru_cache(maxsize, typed)(func)
-        func._main_lock = RLock()
-        func._keyed_locks = defaultdict(RLock)
-
-        @wraps(func)
-        def inner(*args, **kwargs):
-            key = _make_key(args, kwargs, typed=typed)
-            with func._main_lock:
-                key_lock = func._keyed_locks[key]
-            with key_lock:
-                return caching_func(*args, **kwargs)
-
-        @wraps(caching_func.cache_clear)
-        def clear():
-            with func._main_lock:
-                return caching_func.cache_clear()
-
-        inner.cache_clear = clear
-        return inner
-
-    return deco
-
-
 if sys.version_info < (3, 5):
     def _apply_defaults(bound_arguments):
         """
@@ -221,19 +184,15 @@ class _TimeCache(DecoratingDescriptor):
         self.func = func
         self.kwargs = kwargs
         self.expiration = kwargs['expiration']
-        self.typed = kwargs['typed']
         self.get_ts_func = kwargs['get_ts_func']
         self.log_recalculation = kwargs['log_recalculation']
-        self.ignored_keywords = kwargs['ignored_keywords']
+        self.sig = inspect.signature(func)
 
-        if self.ignored_keywords:
-            assert not kwargs['key_func'], "can't specify both `ignored_keywords` AND `key_func`"
-            self.ignored_keywords = set(ilistify(self.ignored_keywords))
-
-            def key_func(**kw):
-                return tuple(v for k, v in sorted(kw.items()) if k not in self.ignored_keywords)
-        else:
-            key_func = kwargs['key_func']
+        key_func = kwargs['key_func']
+        if not key_func:
+            def key_func(*args, **kwargs):
+                return _make_key(args, kwargs, False)
+        self._key_func = key_func
 
         self.NOT_FOUND = object()
         self.NOT_CACHED = self.NOT_FOUND, 0
@@ -242,18 +201,27 @@ class _TimeCache(DecoratingDescriptor):
         self.main_lock = RLock()
         self.keyed_locks = defaultdict(RLock)
 
-        if key_func:
-            sig = inspect.signature(func)
+    def make_key(self, args, kwargs):
+        bound = self.sig.bind(*args, **kwargs)
+        _apply_defaults(bound)
+        return kwargs_resilient(self._key_func)(**bound.arguments)
 
-            def make_key(args, kwargs):
-                bound = sig.bind(*args, **kwargs)
-                _apply_defaults(bound)
-                return kwargs_resilient(key_func)(**bound.arguments)
-        else:
-            def make_key(args, kwargs):
-                return _make_key(args, kwargs, typed=self.typed)
+    def key_func(self, func):
+        """
+        Decorator for setting the key function for this cache.
 
-        self.make_key = make_key
+        Example::
+
+            >>> @timecache()
+            ... def func(a, b):
+            ...     ...
+
+            >>> @func.key_func
+            ... def func_key(*, a, b):
+            ...     return (a, b, type(a))
+        """
+        self._key_func = func
+        return func
 
     def __call__(self, *args, **kwargs):
         key = self.make_key(args, kwargs)
@@ -291,25 +259,44 @@ class _TimeCache(DecoratingDescriptor):
         self.keyed_locks.pop(key, None)
         return self.cache.pop(key, None)
 
+    def cache_push(self, *args, VALUE, TS=None, **kwargs):
+        """
+        Allows populating the cache without calling the wrapped function:
+
+        Example::
+
+            >>> @timecache()
+            ... def func(a, b):
+            ...     pass
+
+            >>> func.cache_push(a=3, b=5, VALUE=8)
+
+        :param VALUE: The value to push into the cache
+        :param TS: The timestamp to associate with the value, for expiration.
+        :type TS: float, optional
+        """
+
+        key = self.make_key(args, kwargs)
+        with self.main_lock:
+            key_lock = self.keyed_locks[key]
+        with key_lock:
+            self.cache[key] = VALUE, self.get_ts_func() if TS is None else TS
+
     def _decorate(self, method, instance, owner):
         return type(self)(method, **self.kwargs)
 
 
-def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculation=False, ignored_keywords=None, key_func=None):
+def timecache(expiration=0, get_ts_func=time.time, log_recalculation=False, key_func=None):
     """
     A thread-safe cache decorator with time expiration.
 
     :param expiration: if a positive number, set an expiration on the cache, defaults to 0
     :type expiration: number, optional
-    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
-    :type typed: bool, optional
     :param get_ts_func: The function to be used in order to get the current time, defaults to time.time
     :type get_ts_func: callable, optional
     :param log_recalculation: Whether or not to log cache misses, defaults to False
     :type log_recalculation: bool, optional
-    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
-    :type ignored_keywords: iterable, optional
-    :param key_func: The function to use in order to create the item key, defaults to functools._make_key
+    :param key_func: A function to use in order to create the item key
     :type key_func: callable, optional
     """
 
@@ -317,11 +304,10 @@ def timecache(expiration=0, typed=False, get_ts_func=time.time, log_recalculatio
         return _TimeCache(
             func=func,
             expiration=expiration,
-            typed=typed,
             get_ts_func=get_ts_func,
             log_recalculation=log_recalculation,
-            ignored_keywords=ignored_keywords,
-            key_func=key_func)
+            key_func=key_func,
+        )
 
     return deco
 
@@ -330,19 +316,17 @@ timecache.__doc__ = _TimeCache.__doc__
 
 
 @parametrizeable_decorator
-def locking_cache(func=None, typed=False, log_recalculation=False, ignored_keywords=False):
+def locking_cache(func=None, log_recalculation=False, key_func=None):
     """
     A syntactic sugar for a locking cache without time expiration.
 
-    :param typed: If typed is set to true, function arguments of different types will be cached separately, defaults to False
-    :type typed: bool, optional
     :param log_recalculation: Whether or not to log cache misses, defaults to False
     :type log_recalculation: bool, optional
-    :param ignored_keywords: Arguments to ignore when caculating item key, defaults to None
-    :type ignored_keywords: iterable, optional
+    :param key_func: A function to use in order to create the item key
+    :type key_func: callable, optional
     """
 
-    return timecache(typed=typed, log_recalculation=log_recalculation, ignored_keywords=ignored_keywords)(func)
+    return timecache(log_recalculation=log_recalculation, key_func=key_func)(func)
 
 
 class cached_property(object):
