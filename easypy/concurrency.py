@@ -408,7 +408,16 @@ class Futures(list):
                 "Submit a new asynchronous task to this executor"
 
                 _ctx = dict(ctx, **log_ctx)
-                future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
+                if DISABLE_CONCURRENCY:
+                    future = Future()
+                    try:
+                        result = _run_with_exception_logging(func, args, kwargs, _ctx)
+                    except Exception as exc:
+                        future.set_exception(exc)
+                    else:
+                        future.set_result(result)
+                else:
+                    future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
                 future.ctx = _ctx
                 future.funcname = _get_func_name(func)
                 self.append(future)
