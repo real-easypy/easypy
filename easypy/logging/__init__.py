@@ -8,6 +8,7 @@ import sys
 import traceback
 from contextlib import ExitStack
 from functools import wraps, partial
+from itertools import chain
 from unittest.mock import MagicMock
 
 
@@ -256,6 +257,34 @@ class ContextableLoggerMixin(object):
                     self.info('%s = %s', name, new_locals[name])
 
         return cm()
+
+    def traced(self, func=None, *, with_params=False, with_rv=False):
+        if not func:
+            return partial(self.traced, with_params=with_params, with_rv=with_rv)
+
+        from easypy.timing import timing as timing_context
+        fullname = f"{func.__module__}:{func.__name__}"
+
+        @wraps(func)
+        def inner(*args, **kwargs):
+            if with_params:
+                params = ", ".join(chain(map(str, args), (f"{k}={v!r}" for k, v in kwargs.items())))
+            else:
+                params = "..."
+            self.trace(f">> DARK_CYAN<<{fullname}>>({params})")
+            with timing_context() as timer:
+                try:
+                    ret = func(*args, **kwargs)
+                except BaseException as e:
+                    self.trace(
+                        f"!! DARK_RED<<{fullname}>> --X ({type(e)}) (MAGENTA<<{timer.elapsed}>>)")
+                    raise
+            rv = repr(ret) if with_rv else "" if ret is None else f"({type(ret)})"
+            self.trace(
+                f"<< DARK_CYAN<<{fullname}>> --> {rv} (MAGENTA<<{timer.elapsed}>>)")
+            return ret
+
+        return inner
 
 
 def log_context(method=None, **ctx):
