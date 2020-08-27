@@ -38,6 +38,8 @@ class AliasingMixin():
             raise AttributeError(attr)
         try:
             return getattr(self._aliased, attr)
+        except AttributeError:
+            raise AttributeError("'%s' object has no attribute '%s'" % (type(self).__name__, attr)) from None
         except _RecursionError as e:
             if type(e) is RuntimeError and str(e) != 'maximum recursion depth exceeded':
                 raise
