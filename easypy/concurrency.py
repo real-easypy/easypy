@@ -387,7 +387,7 @@ class Futures(list):
 
     @classmethod
     @contextmanager
-    def execution(cls, workers=None, ctx={}):
+    def execution(cls, workers=None, ctx={}, initial_log_interval=2 * MINUTE):
         """
         A context-manager for scheduling asynchronous executions and waiting on them as upon exiting the context::
 
@@ -448,6 +448,7 @@ class Futures(list):
                 raise
             else:
                 if not futures.killed:
+                    futures.logged_wait(initial_log_interval=initial_log_interval)
                     # force exceptions to bubble up
                     futures.result()
             finally:
