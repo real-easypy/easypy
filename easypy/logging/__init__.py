@@ -160,7 +160,7 @@ class ContextableLoggerMixin(object):
                     msg = "%s@[%s]@%s (%s)" % (color, title, get_duration(), header)
                     self.log(level, msg, extra=dict(decoration=decoration))
                 else:
-                    self.log(level, "", (), extra=dict(decoration=decoration))
+                    self.log(level, "", extra=dict(decoration=decoration))
 
             try:
                 yield
