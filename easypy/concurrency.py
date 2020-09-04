@@ -315,7 +315,16 @@ def _submit_execution(executor, func, args, kwargs, ctx, funcname=None):
     This helper takes care of submitting a function for asynchronous execution, while wrapping and storing
     useful information for tracing it in logs (for example, by ``Futures.dump_stacks``)
     """
-    future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
+    if DISABLE_CONCURRENCY:
+        future = Future()
+        try:
+            result = _run_with_exception_logging(func, args, kwargs, ctx)
+        except Exception as exc:
+            future.set_exception(exc)
+        else:
+            future.set_result(result)
+    else:
+        future = executor.submit(_run_with_exception_logging, func, args, kwargs, ctx)
     future.ctx = ctx
     future.funcname = funcname or _get_func_name(func)
     return future
@@ -408,18 +417,7 @@ class Futures(list):
                 "Submit a new asynchronous task to this executor"
 
                 _ctx = dict(ctx, **log_ctx)
-                if DISABLE_CONCURRENCY:
-                    future = Future()
-                    try:
-                        result = _run_with_exception_logging(func, args, kwargs, _ctx)
-                    except Exception as exc:
-                        future.set_exception(exc)
-                    else:
-                        future.set_result(result)
-                else:
-                    future = executor.submit(_run_with_exception_logging, func, args, kwargs, _ctx)
-                future.ctx = _ctx
-                future.funcname = _get_func_name(func)
+                future = _submit_execution(executor, func, args, kwargs, _ctx)
                 self.append(future)
                 return future
 
