@@ -465,7 +465,10 @@ class Futures(list):
         """
         frames = dict(iter_thread_frames())
         for i, future in enumerate(futures, 1):
-            thread_ident = future.ctx['thread_ident']
+            thread_ident = future.ctx.get('thread_ident')
+            if not thread_ident:
+                # apparently there's a race condition sometimes?...
+                continue
             try:
                 frame = frames[thread_ident]
             except KeyError:
