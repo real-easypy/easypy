@@ -375,13 +375,13 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
     # =====================
     # Mixin injection
     from .heartbeats import HeartbeatHandlerMixin
-    global HeartbeatHandler, EasypyLogger, get_console_handler, ConsoleFormatter
+    global HeartbeatHandler, EasypyLogger, get_console_handler, ColorizingFormatter, ConsoleFormatter
     global ThreadControl
     global _get_logger
 
     if framework == "logging":
         from .progressbar import ProgressBarLoggerMixin
-        from ._logging import get_console_handler, LEVEL_COLORS, patched_makeRecord, ConsoleFormatter
+        from ._logging import get_console_handler, LEVEL_COLORS, patched_makeRecord, ColorizingFormatter, ConsoleFormatter
         from ._logging import ThreadControl
         G.LEVEL_COLORS = LEVEL_COLORS
 
@@ -411,7 +411,7 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
     elif framework == "logbook":
         import logbook
         from ._logbook import ContextProcessor, ThreadControl, ConsoleHandlerMixin
-        from ._logbook import get_console_handler, LEVEL_COLORS, ConsoleFormatter
+        from ._logbook import get_console_handler, LEVEL_COLORS, ColorizingFormatter, ConsoleFormatter
         from ._logbook import LoggingToLogbookAdapter
         G.LEVEL_COLORS = LEVEL_COLORS
         G.NOTICE = logbook.NOTICE

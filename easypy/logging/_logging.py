@@ -111,14 +111,22 @@ class ThreadControl(logging.Filter):
         return not self.CONTEXT.silenced
 
 
-class ConsoleFormatter(logging.Formatter):
+class ColorizingFormatter(logging.Formatter):
+
     def formatMessage(self, record):
         if not hasattr(record, "levelcolor"):
             record.levelcolor = get_level_color(record.levelno)
         msg = super().formatMessage(record)
-        if G.IS_A_TTY:
-            msg = '\r' + msg + CLEAR_EOL
         return colorize(msg) if G.COLORING else uncolored(msg)
+
+
+class ConsoleFormatter(ColorizingFormatter):
+
+    def formatMessage(self, record):
+        msg = super().formatMessage(record)
+        if G.IS_A_TTY:
+            msg = "\n".join('\r{0}{1}'.format(line, CLEAR_EOL) for line in msg.splitlines())
+        return msg
 
 
 try:
