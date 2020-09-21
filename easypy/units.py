@@ -305,8 +305,10 @@ class Duration(float):
             dir = ">"
         return "{:{dir}{width}}".format(ret, width=width or "", dir=dir)
 
-    # don't override, so it can be converted to json properly
-    # def __str__(self):
+    # we must define __str__ so we don't fallback to __repr__,
+    # and it can be converted to json properly
+    def __str__(self):
+        return super().__repr__()
 
     def render(self, unit=None, precision=None):
         if self == NEVER:
