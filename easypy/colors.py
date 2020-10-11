@@ -325,7 +325,7 @@ def uncolored(text, ansi=True, markup=True):
     if ansi:
         text = re.sub(re.escape(ANSI_BEGIN) + '.+?m', "", text)
     if markup:
-        text = RE_PARSE_COLOR_MARKUP.sub(lambda m: next(filter(None, m.groups()[1:])), text)
+        text = RE_PARSE_COLOR_MARKUP.sub(lambda m: next(s for s in m.groups()[1:] if s is not None), text)
     return text
 
 

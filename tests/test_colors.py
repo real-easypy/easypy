@@ -1,41 +1,52 @@
-def test_colors():
-    from easypy.colors import Colorized, uncolored, colorize, register_colorizers
+import pytest
+from easypy.colors import Colorized, uncolored, colorize, register_colorizers
+register_colorizers(bad=("red", "blue"))
 
-    register_colorizers(bad=("red", "blue"))
 
+@pytest.mark.parametrize("content", ["XXX", ""])
+def test_colors(content):
     opts = {
-        str(Colorized("RED(BLUE)<<XXX>>")),
-        str(Colorized("RED(BLUE)@[XXX]@")),
-        str(Colorized("RED(BLUE)@{XXX}@")),
+        str(Colorized("RED(BLUE)<<%s>>" % content)),
+        str(Colorized("RED(BLUE)@[%s]@" % content)),
+        str(Colorized("RED(BLUE)@{%s}@" % content)),
 
-        str(colorize("RED(BLUE)<<XXX>>")),
-        str(colorize("RED(BLUE)@[XXX]@")),
-        str(colorize("RED(BLUE)@{XXX}@")),
+        str(colorize("RED(BLUE)<<%s>>" % content)),
+        str(colorize("RED(BLUE)@[%s]@" % content)),
+        str(colorize("RED(BLUE)@{%s}@" % content)),
 
-        str(colorize("BAD<<XXX>>")),
-        str(colorize("BAD@[XXX]@")),
-        str(colorize("BAD@{XXX}@")),
+        str(colorize("BAD<<%s>>" % content)),
+        str(colorize("BAD@[%s]@" % content)),
+        str(colorize("BAD@{%s}@" % content)),
     }
 
     assert len(opts) == 1
     [ret] = opts
-    assert ret == "\x1b[1;44;31mXXX\x1b[0m"
-    assert uncolored(ret) == "XXX"
+    assert ret == ("\x1b[1;44;31m%s\x1b[0m" % content if content else '')
+    assert uncolored(ret) == content
 
 
-def test_empty_markup():
-    from easypy.colors import Colorized, colorize
+@pytest.mark.parametrize("content", ["XXX", ""])
+def test_uncolored(content):
+    uncolored(str(Colorized("RED(BLUE)<<%s>>" % content)))
+    uncolored(str(Colorized("RED(BLUE)@[%s]@" % content)))
+    uncolored(str(Colorized("RED(BLUE)@{%s}@" % content)))
 
-    opts = {
-        colorize("BLUE<<>>"),
-        colorize("BLUE@[]@"),
-        colorize("BLUE@{}@"),
-        str(Colorized("BLUE<<>>")),
-        str(Colorized("BLUE@[]@")),
-        str(Colorized("BLUE@{}@")),
-    }
+    uncolored(str(colorize("RED(BLUE)<<%s>>" % content)))
+    uncolored(str(colorize("RED(BLUE)@[%s]@" % content)))
+    uncolored(str(colorize("RED(BLUE)@{%s}@" % content)))
 
-    assert len(opts) == 1
-    [ret] = opts
+    uncolored(str(colorize("BAD<<%s>>" % content)))
+    uncolored(str(colorize("BAD@[%s]@" % content)))
+    uncolored(str(colorize("BAD@{%s}@" % content)))
 
-    assert ret == ""
+    uncolored("RED(BLUE)<<%s>>" % content)
+    uncolored("RED(BLUE)@[%s]@" % content)
+    uncolored("RED(BLUE)@{%s}@" % content)
+
+    uncolored("RED(BLUE)<<%s>>" % content)
+    uncolored("RED(BLUE)@[%s]@" % content)
+    uncolored("RED(BLUE)@{%s}@" % content)
+
+    uncolored("BAD<<%s>>" % content)
+    uncolored("BAD@[%s]@" % content)
+    uncolored("BAD@{%s}@" % content)
