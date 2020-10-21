@@ -644,8 +644,8 @@ class FilterCollection(ObjectCollectionBase):
 
     def _new(self, items):
         if hasattr(self.base, 'ID_ATTRIBUTE'):
-            return self.base.__class__(items, ID_ATTRIBUTE=self.base.ID_ATTRIBUTE)
-        return self.base.__class__(items)
+            return self.base._new(items, ID_ATTRIBUTE=self.base.ID_ATTRIBUTE)
+        return self.base._new(items)
 
     def __repr__(self):
         if self.name and self.base.name:
