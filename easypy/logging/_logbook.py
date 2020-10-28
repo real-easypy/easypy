@@ -131,7 +131,7 @@ class ThreadControl(logbook.Processor):
     Used by ContextLoggerMixin .solo and .suppressed methods to control logging to console
     """
 
-    CONTEXT = ThreadContexts(counters='silenced')
+    CONTEXT = ThreadContexts(defaults=dict(silenced=False))
 
     # we use this ordered-dict to track which thread is currently 'solo-ed'
     # we populate it with some initial values to make the 'filter' method
@@ -162,8 +162,12 @@ class ThreadControl(logbook.Processor):
 
         if selected:
             record.extra['silenced'] = selected != threading.current_thread()
+        elif self.CONTEXT.silenced is False:
+            pass
+        elif self.CONTEXT.silenced is True:
+            record.extra['silenced'] = True
         else:
-            record.extra['silenced'] = self.CONTEXT.silenced
+            record.extra['silenced'] = record.level <= logbook.lookup_level(self.CONTEXT.silenced)
 
 
 class ConsoleHandlerMixin():

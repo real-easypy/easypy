@@ -108,7 +108,12 @@ class ThreadControl(logging.Filter):
 
         if selected:
             return selected == threading.current_thread()
-        return not self.CONTEXT.silenced
+
+        if self.CONTEXT.silenced is False:
+            return False
+        if self.CONTEXT.silenced is True:
+            return True
+        return record.level <= logging._nameToLevel.get(self.CONTEXT.silenced, self.CONTEXT.silenced)
 
 
 class ColorizingFormatter(logging.Formatter):
