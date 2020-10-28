@@ -432,7 +432,7 @@ def initialize(*, graphical=AUTO, coloring=AUTO, indentation=0, context={}, patc
         if patch:
             ContextProcessor().push_application()
             ThreadControl().push_application()
-            logbook.StderrHandler.__bases__ = logbook.StderrHandler.__bases__ + (ConsoleHandlerMixin,)
+            logbook.StderrHandler.__bases__ = (ConsoleHandlerMixin,) + logbook.StderrHandler.__bases__
 
     else:
         raise NotImplementedError("No support for %s as a logging framework" % framework)
