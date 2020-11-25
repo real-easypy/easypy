@@ -87,7 +87,7 @@ class Bunch(dict):
     @classmethod
     def from_yaml(cls, d):
         import yaml
-        return cls.from_dict(yaml.load(d))
+        return cls.from_dict(yaml.safe_load(d))
 
     @classmethod
     def from_xml(cls, d):
