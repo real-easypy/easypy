@@ -10,6 +10,7 @@ import traceback
 from math import ceil
 from collections import namedtuple
 from contextlib import contextmanager
+from inspect import getargspec
 from io import StringIO
 from datetime import datetime, timedelta
 
@@ -702,3 +703,16 @@ class _ReprAsString:
 
     def __repr__(self):
         return str(self.value)
+
+
+def easy_repr(*attributes):
+    def _decorator(cls):
+        assert attributes, 'must provide at least one attribute'
+
+        def _nice_repr(self):
+            attrs = ', '.join('{}: {!r}'.format(attr, getattr(self, attr)) for attr in attributes)
+            return f'<{self.__class__.__name__}: {attrs}>'
+        cls.__repr__ = _nice_repr
+        return cls
+    return _decorator
+
