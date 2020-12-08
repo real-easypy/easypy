@@ -99,7 +99,7 @@ def test_easy_repr():
             self.c = c
             self.d = d
     a = Class1('a', 'b', 1, 2)
-    assert repr(a) == "<Class1: a: 'a', b: 'b', c: 1>"
+    assert repr(a) == "<Class1: a='a', b='b', c=1>"
 
     # change order
     @easy_repr('c', 'a', 'd')
@@ -110,7 +110,7 @@ def test_easy_repr():
             self.c = c
             self.d = d
     a = Class2('a', 'b', 1, 2)
-    assert repr(a) == "<Class2: c: 1, a: 'a', d: 2>"
+    assert repr(a) == "<Class2: c=1, a='a', d=2>"
 
     try:
         @easy_repr()
