@@ -1,4 +1,4 @@
-from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table
+from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table, easy_repr
 
 
 _SAMPLE_DATA = b'J\x9c\xe8Z!\xc2\xe6\x8b\xa0\x01\xcb\xc3.x]\x11\x9bsC\x1c\xb2\xcd\xb3\x9eM\xf7\x13`\xc8\xce\xf8g1H&\xe2\x9b'     \
@@ -88,3 +88,40 @@ def test_format_table_without_titles():
         "{'x': 'x'}|b'bytes'|string\n")
 
     assert output == format_table(table, titles=False)
+
+
+def test_easy_repr():
+    @easy_repr('a', 'b', 'c')
+    class Class1:
+        def __init__(self, a, b, c, d):
+            self.a = a
+            self.b = b
+            self.c = c
+            self.d = d
+    a = Class1('a', 'b', 1, 2)
+    assert repr(a) == "<Class1: a='a', b='b', c=1>"
+
+    # change order
+    @easy_repr('c', 'a', 'd')
+    class Class2:
+        def __init__(self, a, b, c, d):
+            self.a = a
+            self.b = b
+            self.c = c
+            self.d = d
+    a = Class2('a', 'b', 1, 2)
+    assert repr(a) == "<Class2: c=1, a='a', d=2>"
+
+    try:
+        @easy_repr()
+        class Class3:
+            def __init__(self, a, b, c, d):
+                self.a = a
+                self.b = b
+                self.c = c
+                self.d = d
+    except AssertionError:
+        pass
+    else:
+        assert False, 'easy_repr with no attributes should not be allowed'
+
