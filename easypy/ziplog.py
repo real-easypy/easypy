@@ -101,8 +101,10 @@ def iter_zipped_logs(*log_streams, prefix="> ", show_intervals=None):
     Line iterator that merges lines from different log streams based on their timestamp.
     Timestamp patterns are found in the TIMESTAMP_GETTERS list in this module.
 
-    :param prefix: Prepend this prefix to each line where a timestamp was identified
-    :param show_intervals: `s` or `ms` - Prepend the duration since the previous log line
+    :param prefix: Prepend this prefix to each line where a timestamp was identified.
+        This can also be an iterable that can be zipped with the `log_streams`, so that
+        each stream gets a unique prefix.
+    :param show_intervals: `s` or `ms` - Prepend the duration (in secs or msecs) since the previous log line
     """
 
     # A sorted queue of (timestamp, stream) tuples (lowest-timestamp first)
