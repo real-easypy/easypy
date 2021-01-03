@@ -69,7 +69,7 @@ class PException(Exception):
                 lines = tip.splitlines()
                 text += indent("GREEN(BLUE)@{tip = %s}@\n" % lines[0], " " * 4)
                 for line in lines[1:]:
-                    text += indent("GREEN(BLUE)@{      %s}@\n" % lines[0], " " * 4)
+                    text += indent("GREEN(BLUE)@{      %s}@\n" % line, " " * 4)
                 self._params['tip'] = tip  # put it back in params, even though it might've been on the class
 
         if timestamp and self.timestamp:
