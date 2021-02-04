@@ -1,4 +1,4 @@
-from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table, easy_repr
+from easypy.humanize import from_hexdump, hexdump, IndentableTextBuffer, format_table, easy_repr, Histogram
 
 
 _SAMPLE_DATA = b'J\x9c\xe8Z!\xc2\xe6\x8b\xa0\x01\xcb\xc3.x]\x11\x9bsC\x1c\xb2\xcd\xb3\x9eM\xf7\x13`\xc8\xce\xf8g1H&\xe2\x9b'     \
@@ -125,3 +125,55 @@ def test_easy_repr():
     else:
         assert False, 'easy_repr with no attributes should not be allowed'
 
+
+def test_histogram():
+    import functools
+    from io import StringIO
+
+    bins = [-100, 25, 100, -50]
+
+    # sorted: [-100, -50, 25, 100]
+    bins_sorted = sorted(bins)
+    final_values = [1, 1, 2, 1, 1]
+    percentages = [16.67, 16.67, 33.33, 16.67, 16.67]
+    bars = [15, 15, 30, 15, 15]
+
+    hist = Histogram(bins)
+    hist.increment(1)
+    assert hist.get_values() == [0, 0, 1, 0, 0]
+    hist.increment(0)
+    assert hist.get_values() == [0, 0, 2, 0, 0]
+    hist.increment(25)
+    assert hist.get_values() == [0, 0, 2, 1, 0]
+    hist.increment(-250)
+    assert hist.get_values() == [1, 0, 2, 1, 0]
+    hist.increment(-60)
+    assert hist.get_values() == [1, 1, 2, 1, 0]
+    hist.increment(1124)
+    assert hist.get_values() == final_values
+
+    output = StringIO()
+
+    def writeline_callback(output, fmt, *args):
+        output.write(fmt % args + '\n')
+
+    hist.show_graph(functools.partial(writeline_callback, output), 30)
+    output.seek(0)
+    lines = output.read().splitlines()
+    assert len(lines) == len(final_values)
+    for i, line in enumerate(lines):
+        current_bins, percent, bar = line.split('|')
+        if i == 0:
+            assert '<' in current_bins
+            assert current_bins.split('<')[1].strip() == str(bins_sorted[0])
+        elif i == len(lines) - 1:
+            assert '<' in current_bins
+            assert current_bins.split('<')[0].strip() == str(bins_sorted[-1])
+        else:
+            middle = len(current_bins) // 2
+            assert current_bins[middle] == '-'
+            assert int(current_bins[:middle]) == bins_sorted[i - 1]
+            assert int(current_bins[middle + 1:]) == bins_sorted[i]
+
+        assert float(percent.strip(' %')) == percentages[i]
+        assert bar.strip() == '-' * bars[i]

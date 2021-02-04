@@ -720,3 +720,74 @@ def easy_repr(*attributes):
         return cls
     return _decorator
 
+
+class Histogram():
+    """
+    Simple management of saving and displaying histogram values
+    """
+
+    def __init__(self, bins):
+        """
+        :param bins: a list of bin values
+        """
+        self._bins = sorted(bins)
+        self._values = [0] * (len(bins) + 1)
+
+    def __str__(self):
+        return '%s, %s' % (self._values, self._bins)
+
+    def increment(self, value):
+        # could be improved by using binary search assuming `bins` is already sorted
+        for i, current_bin in enumerate(self._bins):
+            if value < current_bin:
+                self._values[i] += 1
+                return
+
+        self._values[-1] += 1
+
+    def get_values(self):
+        return self._values[:]
+
+    def show_graph(self, writeline_callback, size):
+        """
+        Shows a nice graph of the current values
+
+        :param writeline_callback: a callback which can take a format string and arguments (fmt, *args)
+        :param size: the maximum size of each bar
+        """
+
+        def make_bar(val, ratio):
+            bar_length = int(val * ratio)
+            if bar_length == 0 and val > 0:
+                bar_length = 1
+
+            return '-' * bar_length
+
+        if len(self._bins) < 1:
+            return
+
+        # check both min and max in case of negative numbers
+        max_bin_length = max(len(str(max(self._bins))), len(str(min(self._bins))))
+        first_record_format = '{}<%-{}d| %5.2f%% | %s'.format(' ' * max_bin_length, max_bin_length)
+        mid_record_format = '%{}d-%-{}d| %5.2f%% | %s'.format(max_bin_length, max_bin_length)
+        last_record_format = '%{}d<{}| %5.2f%% | %s'.format(max_bin_length, ' ' * max_bin_length)
+        max_val = max(self._values)
+        arr_sum = sum(self._values)
+        if max_val > 0:
+            ratio = size / max_val
+        else:
+            ratio = 0
+
+        writeline_callback(
+            first_record_format,
+            self._bins[0], self._values[0] / arr_sum * 100, make_bar(self._values[0], ratio))
+
+        if len(self._bins) > 1:
+            for i in range(1, len(self._bins)):
+                writeline_callback(
+                    mid_record_format,
+                    self._bins[i - 1], self._bins[i], self._values[i] / arr_sum * 100, make_bar(self._values[i], ratio))
+
+        writeline_callback(
+            last_record_format,
+            self._bins[-1], self._values[-1] / arr_sum * 100, make_bar(self._values[-1], ratio))
