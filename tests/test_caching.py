@@ -274,6 +274,24 @@ def test_caching_gc_leaks(cache_decorator):
     assert leaked() is None
 
 
+def test_cached_property():
+
+    num = 0
+
+    class Foo:
+        @cached_property
+        def num(self):
+            nonlocal num
+            num += 1
+            return num
+
+    f = Foo()
+    assert f.num == 1
+    assert f.num == 1
+    del f.num
+    assert f.num == 2
+
+
 def test_resilient_between_timecaches():
     class ExceptionLeakedThroughResilient(Exception):
         pass

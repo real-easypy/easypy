@@ -348,22 +348,31 @@ class cached_property(object):
         self._function = function
         self._locking = locking
         self._safe = safe
+        self._attr_name = "_cached_%s" % self._function.__name__
+
+    def __set_name__(self, obj, name):
+        self._attr_name = "_cached_%s" % name
 
     def __get__(self, obj, _=None):
         if obj is None:
             return self
-        func_name = self._function.__name__
+
+        try:
+            return getattr(obj, self._attr_name)
+        except AttributeError:
+            pass
+
         with ExitStack() as stack:
             if self._locking:
                 if not hasattr(obj, self.LOCKS_KEY):  # double synchronisation strategy to prevent more expensive lock entrance
                     with self.locks_lock:
                         if not hasattr(obj, self.LOCKS_KEY):
                             setattr(obj, self.LOCKS_KEY, defaultdict(RLock))
-                stack.enter_context(getattr(obj, self.LOCKS_KEY)[func_name])
+                stack.enter_context(getattr(obj, self.LOCKS_KEY)[self._attr_name])
 
                 try:
                     # another thread has cached the value by the time we acquired the lock
-                    return getattr(obj, "_cached_%s" % func_name)
+                    return getattr(obj, self._attr_name)
                 except AttributeError:
                     pass
 
@@ -376,9 +385,17 @@ class cached_property(object):
                 else:
                     raise
 
-            setattr(obj, "_cached_%s" % func_name, value)
-            setattr(obj, func_name, value)
+            setattr(obj, self._attr_name, value)
             return value
+
+    def __set__(self, obj, value):
+        setattr(obj, self._attr_name, value)
+
+    def __delete__(self, obj):
+        try:
+            delattr(obj, self._attr_name)
+        except AttributeError:
+            pass
 
     def __call__(self, func):
         self._function = func
