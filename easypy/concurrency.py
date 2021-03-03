@@ -250,18 +250,9 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
                 yield exc
 
     def render(self, *, width=80, color=True, **kw):
-        if self.count == self.invocations_count == 1:
-            exc = self.one
-            if isinstance(exc, MultiException):
-                return exc.render(width=width, color=color, **kw)
-            elif callable(getattr(exc, "render", None)):
-                return exc.render(**kw)
-            else:
-                return str(exc)
-        else:
-            buff = self._get_buffer(color=color, **kw)
-            text = buff.render(width=width, edges=not color)
-            return colorize("\n" + text)
+        buff = self._get_buffer(color=color, **kw)
+        text = buff.render(width=width, edges=not color)
+        return colorize("\n" + text)
 
     def _get_buffer(self, **kw):
         if kw.get("color", True):
