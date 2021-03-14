@@ -437,25 +437,32 @@ def test_synchronization_coordinator_with_context_manager():
         {(i, 'after yield') for i in range(3)})
 
 
-def test_tag_along_thread():
+@pytest.mark.parametrize("n", [2, 3, 6, 20])
+def test_tag_along_thread(n):
+    from random import random
+    data = set()
     counter = 0
+    called = 0
 
-    def increment_counter():
+    def _get_data():
+        nonlocal called
+        called += 1
+        sleep(0.05 * random() + 0.05)
+        return data
+
+    get_data = TagAlongThread(_get_data, 'counter-incrementer')
+
+    def change_and_verify():
         nonlocal counter
         counter += 1
-        sleep(0.5)
+        data.add(counter)
+        # ensure that the data we get from TagAlongThread includes our update
+        assert counter in get_data()
 
-    tag_along_thread = TagAlongThread(increment_counter, 'counter-incrementer')
-
-    MultiObject(range(8)).call(lambda _: tag_along_thread())
-
-    # The first call should get it's own iteration of the TagAlongThread. The
-    # rest should wait for it to finish, and then all use the second iteration.
-    # We don't have control over the timing inside the threads though, so we
-    # allow fewer or more iterations - as long as an iteration did happen(at
-    # least 1) and that invocations did stack together(less than 5 should do
-    # it)
-    assert 1 <= counter < 5
+    # ensure that regardless of how many threads there were,
+    # we do not trigger more than 2 invocations of _get_data
+    MultiObject(range(n)).call(lambda _: change_and_verify())
+    assert called <= 2
 
 
 def test_logged_lock():
