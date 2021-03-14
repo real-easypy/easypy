@@ -322,6 +322,7 @@ class TagAlongThread(object):
 
         self._last_exception = None
         self._last_result = None
+        self._generation = 0
 
         self.__alive = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name=name)
@@ -330,12 +331,12 @@ class TagAlongThread(object):
     def _loop(self):
         while self.__alive:
             self._iteration_trigger.wait()
-            self._iteration_trigger.clear()
 
             # Mark that we are now iterating
             self._not_iterating.clear()
             self._iterating.set()
 
+            self._generation += 1
             try:
                 self._last_exception, self._last_result = None, self._func()
             except Exception as e:
@@ -346,6 +347,7 @@ class TagAlongThread(object):
             self._not_iterating.set()
 
             time.sleep(self.minimal_sleep)
+            self._iteration_trigger.clear()
 
         # Set all events so nothing will get blocked
         self._iteration_trigger.set()
@@ -357,20 +359,25 @@ class TagAlongThread(object):
 
     def __call__(self):
         assert self.__alive, '%s is dead' % self
-        # We can't use an iteration that's already started - maybe it's already at a too advanced stage?
-        if self._iterating.is_set():
-            self._not_iterating.wait()
 
-        self._iteration_trigger.set()  # Signal that we want an iteration
+        cur_generation = self._generation
 
-        while not self._iterating.wait(1):  # Wait until an iteration starts
-            # It is possible that we missed the loop and _iterating was already
-            # cleared. If this is the case, _not_iterating will not be set -
-            # and we can use it as a signal to stop waiting for iteration.
-            if self._not_iterating.is_set():
+        while True:
+            self._iteration_trigger.set()  # Signal that we want an iteration
+
+            while not self._iterating.wait(1):  # Wait until an iteration starts
+                # It is possible that we missed the loop and _iterating was already
+                # cleared. If this is the case, _not_iterating will not be set -
+                # and we can use it as a signal to stop waiting for iteration.
+                if self._not_iterating.is_set():
+                    break
+            else:
+                self._not_iterating.wait()  # Wait until it finishes
+
+            # make sure that this iteration started *after* this call was made,
+            # otherwise wait for the next iteration
+            if self._generation > cur_generation:
                 break
-        else:
-            self._not_iterating.wait()  # Wait until it finishes
 
         # To avoid races, copy last exception and result to local variables
         last_exception, last_result = self._last_exception, self._last_result
