@@ -18,10 +18,6 @@ DAY = time.strftime("%d")
 
 TIMESTAMP_GETTERS = [
 
-    # 01:21:27
-    (re.compile(r"^(\d+:\d+:\d+)"),
-     lambda ts: time.mktime(time.strptime("%s-%s-%s %s" % (YEAR, MONTH, DAY, ts), "%Y-%m-%d %H:%M:%S"))),
-
     # Apr 6 17:13:40
     (re.compile(r"^(\w{3} +\d+ +\d+:\d+:\d+)"),
      lambda ts: time.mktime(time.strptime("%s %s" % (YEAR, ts), "%Y %b %d %H:%M:%S"))),
@@ -36,8 +32,7 @@ TIMESTAMP_GETTERS = [
      lambda *args: datetime.strptime("{}.{}{}{}".format(*args), '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()),
 
     # 2018-04-06 17:13:40,955
-    # 2018-04-23 04:48:11,811|
-    (re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})[| ]"),
+    (re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),(\d{3})\b"),
      lambda ts, ms: time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S")) + float(ms) / 1000),
 
     # 2018-04-06 17:13:40
@@ -47,10 +42,10 @@ TIMESTAMP_GETTERS = [
     (re.compile(r"^\[?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})(?:\.(\d{6}))?"),
      lambda ts, ms: time.mktime(time.strptime(ts.replace("/", "-"), "%Y-%m-%d %H:%M:%S")) + float(ms or 0) / 1000000),
 
-    # for strace logs
-    # 16255 15:08:52.554223
-    (re.compile(r"\d+ (\d{2}:\d{2}:\d{2}).(\d{6})"),
-     lambda ts, ms: time.mktime(time.strptime("%s-%s-%s %s" % (YEAR, MONTH, DAY, ts), "%Y-%m-%d %H:%M:%S")) + float(ms) / 1000000),
+    # 01:21:27
+    # 01:21:27.554223
+    (re.compile(r"\b(\d{2}:\d{2}:\d{2})(?:\.(\d{6}))?"),
+     lambda ts, ms: time.mktime(time.strptime("%s-%s-%s %s" % (YEAR, MONTH, DAY, ts), "%Y-%m-%d %H:%M:%S")) + float(ms or 0) / 1000000),
 ]
 
 
@@ -96,13 +91,15 @@ class TimestampedStream(object):
         return 0
 
 
-def iter_zipped_logs(*log_streams, prefix="> ", show_intervals=None):
+def iter_zipped_logs(*log_streams, prefix="> ", show_intervals=None, show_timestamp=False):
     """
     Line iterator that merges lines from different log streams based on their timestamp.
     Timestamp patterns are found in the TIMESTAMP_GETTERS list in this module.
 
-    :param prefix: Prepend this prefix to each line where a timestamp was identified
-    :param show_intervals: `s` or `ms` - Prepend the duration since the previous log line
+    :param prefix: Prepend this prefix to each line where a timestamp was identified.
+        This can also be an iterable that can be zipped with the `log_streams`, so that
+        each stream gets a unique prefix.
+    :param show_intervals: `s` or `ms` - Prepend the duration (in secs or msecs) since the previous log line
     """
 
     # A sorted queue of (timestamp, stream) tuples (lowest-timestamp first)
@@ -132,6 +129,14 @@ def iter_zipped_logs(*log_streams, prefix="> ", show_intervals=None):
     else:
         def formatted(line, current_ts, last_ts):
             return line
+
+    if show_timestamp:
+        _formatted = formatted
+
+        def formatted(line, current_ts, last_ts):
+            line = _formatted(line, current_ts, last_ts)
+            dt = datetime.fromtimestamp(current_ts)
+            return "{:%Y-%m-%d %H:%M:%S.%f} {}".format(dt, line)
 
     while not streams.empty():
         current_ts, line, stream = streams.get()

@@ -9,7 +9,7 @@ def test_ziplog():
     01:21:27                         -  2
     05:41:27                         -  4
     ;
-    16255 15:08:52.554223|           -  5
+    15:08:52.554223|                 -  5
     16155 19:08:52.554223|           - 11
     ;
     2018-04-01 04:48:11,811|         -  1
@@ -34,7 +34,7 @@ def test_ziplog():
     ziplog.DAY = 6
 
     streams = [StringIO(line.lstrip()) for line in streams.split(";")]
-    lines = ziplog.iter_zipped_logs(*streams, prefix="> ")
+    lines = ziplog.iter_zipped_logs(*streams, prefix="> ", show_timestamp=True)
     prev = 0
     print()
     for line in lines:
