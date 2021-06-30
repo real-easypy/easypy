@@ -1,9 +1,12 @@
 import pytest
 
 from functools import wraps
+from io import StringIO
+from pydoc import doc
 
 from easypy.decorations import lazy_decorator
 from easypy.decorations import ensure_same_defaults, DefaultsMismatch
+from easypy.decorations import kwargs_from
 from easypy.misc import kwargs_resilient
 
 
@@ -190,3 +193,77 @@ def test_ensure_same_defaults_ignore():
         def foo(a=2, b=3):
             pass
     assert exc.value.param_names == ['a']
+
+
+def signature_line(thing):
+    with StringIO() as capture:
+        doc(thing, output=capture)
+        return capture.getvalue().splitlines()[2]
+
+
+def test_kwargs_from():
+    import sys
+    if sys.version_info < (3, 7):
+        fix_annotations = lambda sign: sign.replace(': ', ':')
+    else:
+        fix_annotations = lambda sign: sign
+
+    def foo(*, a, b: int, c=3):
+        pass
+
+    @kwargs_from(foo)
+    def bar(a=1, **kwargs) -> bool:
+        return False
+
+    assert signature_line(bar) == fix_annotations('bar(a=1, *, b: int, c=3) -> bool')
+
+    @kwargs_from(bar)
+    def baz(c=4, **kwargs):
+        pass
+
+    assert signature_line(baz) == fix_annotations('baz(c=4, *, a=1, b: int)')
+
+
+def test_kwargs_from_no_kwargs():
+    with pytest.raises(TypeError):
+        @kwargs_from(lambda *, x, y: ...)
+        def foo(a):
+            pass
+
+    with pytest.raises(TypeError):
+        @kwargs_from(lambda *, x, y: ...)
+        def bar(x, y):
+            pass
+
+    @kwargs_from(lambda *args: ...)
+    def baz(a, **kwargs):
+        pass
+
+    assert signature_line(baz) == 'baz(a)'
+
+
+def test_kwargs_from_keep_kwargs():
+    def foo(*, a, b, **foos):
+        pass
+
+    @kwargs_from(foo)
+    def bar(x, **bars):
+        pass
+
+    assert signature_line(bar) == 'bar(x, *, a, b, **bars)'
+
+
+def test_kwargs_from_multiple():
+    @kwargs_from(lambda a, b: ..., lambda x, y, a: ...)
+    def bar(**kwargs):
+        pass
+
+    assert signature_line(bar) == 'bar(*, a, b, x, y)'
+
+
+def test_kwargs_from_exclude():
+    @kwargs_from(lambda a, b, c, w: ..., exclude=['w'])
+    def bar(**kwargs):
+        pass
+
+    assert signature_line(bar) == 'bar(*, a, b, c)'
