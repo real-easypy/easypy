@@ -2,7 +2,9 @@
 This module is about making it easier to create decorators
 """
 
+from collections import OrderedDict
 from functools import wraps, partial, update_wrapper
+from itertools import chain
 from operator import attrgetter
 from abc import ABCMeta, abstractmethod
 import inspect
@@ -188,3 +190,58 @@ def ensure_same_defaults(source_of_truth, ignore=()):
                 param_names=mismatches)
         return func
     return wrapper
+
+
+__KEYWORD_PARAMS = (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+
+
+def kwargs_from(*functions, exclude=()):
+    """
+    Edits the decorated function's signature to expand the variadic keyword
+    arguments parameter to the possible keywords from the wrapped functions.
+    This allows better completions inside interactive tools such as IPython.
+
+    :param functions: The functions to get the keywords from.
+    :param exclude: A list of parameters to exclude from the new signature.
+    :raises TypeError: When the decorated function does not have a variadic
+                       keyword argument.
+
+    >>> def foo(*, a, b, c):
+    ...     ...
+    >>> @kwargs_from(foo)
+    ... def bar(**kwargs):
+    ...     ...
+    >>> help(bar)
+    Help on function bar in module __main__:
+    bar(*, a, b, c)
+    """
+    exclude = set(exclude or ())
+    all_original_params = (inspect.signature(func).parameters for func in functions)
+    def _decorator(func):
+        signature = inspect.signature(func)
+
+        kws_param = None
+        params = OrderedDict()
+        for param in signature.parameters.values():
+            if param.kind != inspect.Parameter.VAR_KEYWORD:
+                params[param.name] = param
+            else:
+                kws_param = param
+        if kws_param is None:
+            raise TypeError("kwargs_from can only wrap functions with variadic keyword arguments")
+
+        keep_kwargs = False
+        for param in chain.from_iterable(original_params.values() for original_params in all_original_params):
+            if param.name in exclude:
+                pass
+            elif param.kind in __KEYWORD_PARAMS and param.name not in params:
+                params[param.name] = param.replace(kind=inspect.Parameter.KEYWORD_ONLY)
+            elif param.kind == inspect.Parameter.VAR_KEYWORD:
+                keep_kwargs = True
+
+        if keep_kwargs:
+            params['**'] = kws_param
+
+        func.__signature__ = signature.replace(parameters=params.values())
+        return func
+    return _decorator
