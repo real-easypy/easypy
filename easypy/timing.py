@@ -118,11 +118,11 @@ class Timer(object):
 
     def __init__(self, now=None, expiration=None):
         self.reset(now)
-        self.t1 = None
         self.expiration = None if expiration is None else Duration(expiration)
 
     def reset(self, now=None):
         self.t0 = now or time.time()
+        self.t1 = None
 
     def stop(self):
         self.t1 = time.time()
