@@ -315,6 +315,8 @@ class TagAlongThread(object):
         self._func = func
         self.minimal_sleep = minimal_sleep
 
+        self._lock = threading.RLock()
+
         self._iteration_trigger = threading.Event()
 
         self._iterating = threading.Event()
@@ -328,6 +330,7 @@ class TagAlongThread(object):
         self.__alive = True
         self._thread = threading.Thread(target=self._loop, daemon=True, name=name)
         self._thread.start()
+        self._results = {}
 
     def _loop(self):
         while self.__alive:
@@ -336,12 +339,15 @@ class TagAlongThread(object):
             # Mark that we are now iterating
             self._not_iterating.clear()
             self._iterating.set()
-
             self._generation += 1
+
             try:
-                self._last_exception, self._last_result = None, self._func()
+                exc, result = None, self._func()
             except Exception as e:
-                self._last_exception = e
+                exc, result = e, None
+
+            self._results[self._generation] = exc, result
+            self._results.pop(self._generation - 3, None)
 
             # Mark that we are no longer iterating
             self._iterating.clear()
@@ -358,15 +364,15 @@ class TagAlongThread(object):
     def __repr__(self):
         return 'TagAlongThread<%s>' % (self._thread.name,)
 
-    def __call__(self):
+    def wait(self, current_generation=False):
         assert self.__alive, '%s is dead' % self
 
-        cur_generation = self._generation
+        target_generation = self._generation + (1 - current_generation)
 
         while True:
             self._iteration_trigger.set()  # Signal that we want an iteration
 
-            while not self._iterating.wait(1):  # Wait until an iteration starts
+            while not self._iterating.wait(.1):  # Wait until an iteration starts
                 # It is possible that we missed the loop and _iterating was already
                 # cleared. If this is the case, _not_iterating will not be set -
                 # and we can use it as a signal to stop waiting for iteration.
@@ -375,17 +381,20 @@ class TagAlongThread(object):
             else:
                 self._not_iterating.wait()  # Wait until it finishes
 
-            # make sure that this iteration started *after* this call was made,
-            # otherwise wait for the next iteration
-            if self._generation > cur_generation:
+            ret = self._results.get(target_generation)
+            if ret:
+                # make sure that this iteration started *after* this call was made,
+                # otherwise wait for the next iteration
                 break
 
         # To avoid races, copy last exception and result to local variables
-        last_exception, last_result = self._last_exception, self._last_result
+        last_exception, last_result = ret
         if last_exception:
             raise last_exception
         else:
             return last_result
+
+    __call__ = wait
 
     def _kill(self, wait=True):
         self.__alive = False

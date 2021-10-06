@@ -440,24 +440,28 @@ def test_synchronization_coordinator_with_context_manager():
 @pytest.mark.parametrize("n", [2, 3, 6, 20])
 def test_tag_along_thread(n):
     from random import random
+    from itertools import count
     data = set()
-    counter = 0
+    counter = count()
     called = 0
 
     def _get_data():
         nonlocal called
         called += 1
+        _data = data.copy()
         sleep(0.05 * random() + 0.05)
-        return data
+        return _data
 
     get_data = TagAlongThread(_get_data, 'counter-incrementer')
 
     def change_and_verify():
-        nonlocal counter
-        counter += 1
-        data.add(counter)
+        _counter = next(counter)
+        data.add(_counter)
         # ensure that the data we get from TagAlongThread includes our update
-        assert counter in get_data()
+        with timing() as t:
+            _data = get_data()
+        print(t)
+        assert _counter in _data
 
     # ensure that regardless of how many threads there were,
     # we do not trigger more than 2 invocations of _get_data
