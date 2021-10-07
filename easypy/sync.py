@@ -311,9 +311,10 @@ def shared_contextmanager(func):
 
 class TagAlongThread(object):
 
-    def __init__(self, func, name, minimal_sleep=0):
+    def __init__(self, func, name, minimal_sleep=0, wait_for_trigger=True):
         self._func = func
         self.minimal_sleep = minimal_sleep
+        self.wait_for_trigger = wait_for_trigger
 
         self._lock = threading.RLock()
 
@@ -334,7 +335,8 @@ class TagAlongThread(object):
 
     def _loop(self):
         while self.__alive:
-            self._iteration_trigger.wait()
+            if self.wait_for_trigger:
+                self._iteration_trigger.wait()
 
             # Mark that we are now iterating
             self._not_iterating.clear()
@@ -401,6 +403,15 @@ class TagAlongThread(object):
         self._iteration_trigger.set()
         if wait:
             self._thread.join()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self._kill(wait=True)
+
+    def __del__(self):
+        self._kill(wait=False)
 
 
 class SynchronizationCoordinatorWrongWait(TException):
