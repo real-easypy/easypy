@@ -458,15 +458,32 @@ def test_tag_along_thread(n):
         _counter = next(counter)
         data.add(_counter)
         # ensure that the data we get from TagAlongThread includes our update
-        with timing() as t:
-            _data = get_data()
-        print(t)
+        _data = get_data()
         assert _counter in _data
 
     # ensure that regardless of how many threads there were,
     # we do not trigger more than 2 invocations of _get_data
     MultiObject(range(n)).call(lambda _: change_and_verify())
     assert called <= 2
+
+
+def test_auto_tag_along_thread():
+    called = 0
+    d = 0.01
+    s = 0.1
+
+    def _get_data():
+        nonlocal called
+        called += 1
+        sleep(d)
+
+    with TagAlongThread(_get_data, 'counter-incrementer', wait_for_trigger=True):
+        sleep(s)
+        assert called == 0
+
+    with TagAlongThread(_get_data, 'counter-incrementer', wait_for_trigger=False):
+        sleep(s)
+        assert called >= (s / d)
 
 
 def test_logged_lock():
