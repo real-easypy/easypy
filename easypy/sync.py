@@ -329,9 +329,10 @@ class TagAlongThread(object):
         self._generation = 0
 
         self.__alive = True
+        self._results = {}
+
         self._thread = threading.Thread(target=self._loop, daemon=True, name=name)
         self._thread.start()
-        self._results = {}
 
     def _loop(self):
         while self.__alive:
