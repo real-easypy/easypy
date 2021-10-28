@@ -6,7 +6,7 @@ from easypy.threadtree import get_thread_stacks, ThreadContexts
 from easypy.concurrency import concurrent, MultiObject, MultiException
 
 
-@pytest.yield_fixture(params=[True, False], ids=['concurrent', 'nonconcurrent'])
+@pytest.fixture(params=[True, False], ids=['concurrent', 'nonconcurrent'])
 def concurrency_enabled_and_disabled(request):
     if request.param:  # concurrency enabled
         yield
