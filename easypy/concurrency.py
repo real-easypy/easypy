@@ -67,7 +67,7 @@ from collections import defaultdict
 from contextlib import contextmanager, ExitStack
 from functools import partial, wraps
 from importlib import import_module
-from itertools import chain
+from itertools import chain, count
 from traceback import format_tb
 import inspect
 import logging
@@ -119,6 +119,10 @@ except ImportError:
 
 
 _logger = logging.getLogger(__name__)
+
+
+TPE_ID = count(1)
+CONCURRENT_ID = count(1)
 
 
 def disable():
@@ -386,7 +390,7 @@ class Futures(list):
 
     @classmethod
     @contextmanager
-    def execution(cls, workers=None, ctx={}, initial_log_interval=2 * MINUTE):
+    def execution(cls, workers=None, ctx={}, initial_log_interval=2 * MINUTE, name=None):
         """
         A context-manager for scheduling asynchronous executions and waiting on them as upon exiting the context::
 
@@ -426,7 +430,16 @@ class Futures(list):
             def shutdown(self, *args, **kwargs):
                 executor.shutdown(*args, **kwargs)
 
-        with ThreadPoolExecutor(workers) as executor:
+        if not name:
+            parts = ["TPE-%X" % next(TPE_ID)]
+            current_thread_name = threading.current_thread().name
+            if current_thread_name:
+                parts = current_thread_name.split('::') + parts
+            if len(parts) > 2:
+                parts[:-2] = ['...']
+            name = "::".join(parts)
+
+        with ThreadPoolExecutor(workers, thread_name_prefix=name) as executor:
 
             futures = PooledFutures()
 
@@ -941,13 +954,15 @@ class _concurrent(object):
         self.timer = None
         self.console_logging = kwargs.pop('console_logging', True)
         self.threadname = kwargs.pop('threadname', None)
+
         if not self.threadname:
+            parts = ["C-%X" % next(CONCURRENT_ID)]
             current_thread_name = threading.current_thread().name
             if current_thread_name:
-                current_thread_name = current_thread_name.split('::')[0]  # We want to see only the context
-                self.threadname = "%s::%X" % (current_thread_name, id(self))
-            else:
-                self.threadname = "anon-%X" % id(self)
+                parts = current_thread_name.split('::') + parts
+            if len(parts) > 2:
+                parts[:-2] = ['...']
+            self.threadname = "::".join(parts)
 
         real_thread_no_greenlet = kwargs.pop('real_thread_no_greenlet', False)
         if IS_GEVENT:
