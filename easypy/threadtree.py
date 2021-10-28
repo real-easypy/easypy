@@ -112,6 +112,8 @@ if is_module_patched("threading"):
     IDENT_TO_UUID[main_thread_ident_before_patching] = get_thread_uuid()
     from weakref import WeakValueDictionary
     IDENT_TO_GREENLET = WeakValueDictionary()
+    thread = threading.current_thread()
+    IDENT_TO_GREENLET[thread.ident] = gevent.getcurrent()
 
     def iter_thread_frames():
         current_thread_ident = threading.current_thread().ident
