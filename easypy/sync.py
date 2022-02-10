@@ -94,6 +94,10 @@ class NotInitialized(TException):
     template = "Signal type not initialized, must use bind_to_subthread_exceptions in the main thread"
 
 
+class LockNotAquired(TException):
+    template = "Lock {lock} - attempt release but not aquired by {thread}"
+
+
 def async_raise_in_main_thread(exc, use_concurrent_loop=True):
     """
     Uses a unix signal to raise an exception to be raised in the main thread.
@@ -700,7 +704,13 @@ class RWLock(object):
         return self
 
     def __enter__(self):
-        while not self.cond.acquire(timeout=15):
+        self.aquire()
+
+    def __exit__(self, *args):
+        self.release()
+
+    def aquire(self, timeout=15):
+        while not self.cond.acquire(timeout=timeout):
             _logger.debug("%s - waiting...", self)
 
         try:
@@ -710,12 +720,14 @@ class RWLock(object):
         finally:
             self.cond.release()
 
-    def __exit__(self, *args):
-        while not self.cond.acquire(timeout=15):
+    def release(self, timeout=15):
+        while not self.cond.acquire(timeout=timeout):
             _logger.debug("%s - waiting...", self)
 
         try:
             my_ident = _get_my_ident()
+            if self.owners[my_ident] == 0:
+                raise LockNotAquired(lock=self, thread=my_ident)
             self.owners[my_ident] -= 1
             if not self.owners[my_ident]:
                 self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
