@@ -779,21 +779,33 @@ class RWLock(object):
             self.cond.release()
 
     @contextmanager
-    def exclusive(self, need_to_wait_message=None):
-        while not self.cond.acquire(timeout=15):
+    def exclusive(self, timeout=None, need_to_wait_message=None):
+        t = Timer(expiration=timeout)
+        
+        while not self.cond.acquire(timeout=min(t.remain, 15)):
+            if t.expired:
+                raise TimeoutException()
             _logger.debug("%s - waiting...", self)
 
         # wait until this thread is the sole owner of this lock
-        while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=15):
-            _check_exiting()
-            if need_to_wait_message:
-                _logger.info(need_to_wait_message)
-                need_to_wait_message = None  # only print it once
-            _logger.debug("%s - waiting (for exclusivity)...", self)
+        try:
+            while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=min(t.remain, 15)):
+                if t.expired:
+                    raise TimeoutException()
+                _check_exiting()
+                if need_to_wait_message:
+                    _logger.info(need_to_wait_message)
+                    need_to_wait_message = None  # only print it once
+                _logger.debug("%s - waiting (for exclusivity)...", self)
+        except TimeoutException:
+            self.cond.release()
+            raise
+
         my_ident = _get_my_ident()
         self.owners[my_ident] += 1
         self._lease_timer = Timer()
         _verbose_logger.debug("%s - acquired (as writer)", self)
+
         try:
             yield
         finally:

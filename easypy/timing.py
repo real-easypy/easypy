@@ -177,7 +177,7 @@ class Timer(object):
 
     @property
     def remain(self):
-        return Duration(max(0, self.expiration - self.elapsed)) if self.expiration is not None else None
+        return Duration(max(0, self.expiration - self.elapsed)) if self.expiration is not None else float('inf')
 
     @property
     def start_time(self):

@@ -1,9 +1,11 @@
 import threading
 import pytest
 import logging
+from time import sleep
 from easypy.concurrency import concurrent
 from easypy.sync import RWLock
 from easypy.bunch import Bunch
+from easypy.sync import RWLock
 
 
 def test_rwlock():
@@ -105,3 +107,23 @@ def test_rwlock_different_threads():
         with concurrent(b, "same"):
             pass
         assert lock.owners
+
+
+def test_wrlock_exclusive_timeout():
+    wrlock = RWLock()
+    
+    def acquire_lock():
+        nonlocal wrlock
+        wrlock.acquire()
+        sleep(1)
+        wrlock.release()
+    
+    t1 = threading.Thread(target=acquire_lock)
+    t1.start()
+    
+    sleep(0.01)
+    with pytest.raises(TimeoutException):
+        with wrlock.exclusive(timeout=0.5):
+            pass
+    
+    t1.join()
