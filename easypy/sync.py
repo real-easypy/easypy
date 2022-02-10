@@ -725,12 +725,12 @@ class RWLock(object):
             self.cond.release()
 
     @contextmanager
-    def exclusive(self, need_to_wait_message=None):
-        while not self.cond.acquire(timeout=15):
+    def exclusive(self, timeout=15, need_to_wait_message=None):
+        while not self.cond.acquire(timeout=timeout):
             _logger.debug("%s - waiting...", self)
 
         # wait until this thread is the sole owner of this lock
-        while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=15):
+        while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=timeout):
             _check_exiting()
             if need_to_wait_message:
                 _logger.info(need_to_wait_message)
