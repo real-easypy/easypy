@@ -3,7 +3,7 @@ import pytest
 import logging
 from time import sleep
 from easypy.concurrency import concurrent
-from easypy.sync import RWLock
+from easypy.sync import RWLock, TimeoutException
 from easypy.bunch import Bunch
 from easypy.sync import RWLock
 

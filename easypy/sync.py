@@ -779,7 +779,7 @@ class RWLock(object):
             self.cond.release()
 
     @contextmanager
-    def exclusive(self, timeout=None, need_to_wait_message=None):
+    def exclusive(self, timeout=None, identifier=None, need_to_wait_message=None):
         t = Timer(expiration=timeout)
         
         while not self.cond.acquire(timeout=min(t.remain, 15)):
@@ -787,9 +787,12 @@ class RWLock(object):
                 raise TimeoutException()
             _logger.debug("%s - waiting...", self)
 
+        if not identifier:
+            identifier = _get_my_ident()
+        
         # wait until this thread is the sole owner of this lock
         try:
-            while not self.cond.wait_for(lambda: self.owner_count == self.owners[_get_my_ident()], timeout=min(t.remain, 15)):
+            while not self.cond.wait_for(lambda: self.owner_count == self.owners[identifier], timeout=min(t.remain, 15)):
                 if t.expired:
                     raise TimeoutException()
                 _check_exiting()
@@ -801,8 +804,7 @@ class RWLock(object):
             self.cond.release()
             raise
 
-        my_ident = _get_my_ident()
-        self.owners[my_ident] += 1
+        self.owners[identifier] += 1
         self._lease_timer = Timer()
         _verbose_logger.debug("%s - acquired (as writer)", self)
 
@@ -811,9 +813,9 @@ class RWLock(object):
         finally:
             _verbose_logger.debug('%s - releasing (as writer)', self)
             self._lease_timer = None
-            self.owners[my_ident] -= 1
-            if not self.owners[my_ident]:
-                self.owners.pop(my_ident)  # don't inflate the soft lock keys with threads that does not own it
+            self.owners[identifier] -= 1
+            if not self.owners[identifier]:
+                self.owners.pop(identifier)  # don't inflate the soft lock keys with threads that does not own it
             self.cond.notify()
             self.cond.release()
 
