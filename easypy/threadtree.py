@@ -106,6 +106,8 @@ threading.Thread.uuid = property(get_thread_uuid)
 
 if is_module_patched("threading"):
     _REGISTER_GREENLETS = True
+    from gevent import Greenlet
+    import gc
     import gevent.monkey
     gevent.monkey.saved['threading']['Thread'].parent = property(get_thread_parent)
     gevent.monkey.saved['threading']['Thread'].uuid = property(get_thread_uuid)
@@ -131,8 +133,11 @@ if is_module_patched("threading"):
                 continue
             yield fix(ident, frame)
 
+        all_greenlets = {g for g in gc.get_objects() if isinstance(g, Greenlet)}
+
         for thread in threading.enumerate():
             greenlet = IDENT_TO_GREENLET.get(thread.ident)
+            all_greenlets.discard(greenlet)
             if not greenlet:
                 # some inbetween state, before greenlet started or after it died?...
                 pass
@@ -143,6 +148,10 @@ if is_module_patched("threading"):
                 # If we switch to another greenlet by the time we get there we will get inconsistent dup of threads.
                 # TODO - make best-effort attempt to show coherent thread dump
                 yield fix(thread.ident, main_thread_frame)
+
+        for greenlet in sorted(all_greenlets, key=id):
+            if greenlet.gr_frame:
+                yield id(greenlet) * -1, greenlet.gr_frame
 
 else:
     def iter_thread_frames():
@@ -218,7 +227,7 @@ def get_thread_trees(including_this=True):
     def add_thread(parent_thread, parent):
         for thread in sorted(tree[parent_thread], key=lambda thread: thread.name):
             ident = thread.ident or 0
-            stack, ts, frame_id = stacks.get(ident, ("", 0, 0))
+            stack, ts, frame_id = stacks.pop(ident, ("", 0, 0))
             context = contexts.get(ident, {})
             context_line = ", ".join("%s: %s" % (k, context[k]) for k in "host context".split() if context.get(k))
 
@@ -231,7 +240,7 @@ def get_thread_trees(including_this=True):
                 timestamp=ts,
                 frame_id=frame_id,
                 children=[],
-                )
+            )
             parent.children.append(this)
             if thread in tree:
                 add_thread(thread, this)
@@ -239,6 +248,19 @@ def get_thread_trees(including_this=True):
 
     root = Bunch(children=[])
     add_thread(None, root)
+
+    for ident, (stack, ts, frame_id) in stacks.items():
+        orphan = Bunch(
+            name="<Greenlet>" if ident < 0 else "<Orphan>",
+            daemon="[D]",
+            ident=abs(ident),
+            context_line="",
+            stack=stack,
+            timestamp=ts,
+            frame_id=frame_id,
+            children=[],
+        )
+        root.children.append(orphan)
     return root.children
 
 
