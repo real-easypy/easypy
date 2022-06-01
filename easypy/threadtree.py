@@ -19,7 +19,6 @@ from easypy.collections import ilistify
 from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT, MAIN_UUID, _BOOTSTRAPPERS, get_thread_uuid
 
 
-
 _REGISTER_GREENLETS = False
 _orig_start_new_thread = _thread.start_new_thread
 
@@ -117,6 +116,9 @@ if is_module_patched("threading"):
     thread = threading.current_thread()
     IDENT_TO_GREENLET[thread.ident] = gevent.getcurrent()
 
+    def get_all_greenlets():
+        return {g for g in gc.get_objects() if isinstance(g, Greenlet)}
+
     def iter_thread_frames():
         current_thread_ident = threading.current_thread().ident
 
@@ -133,7 +135,7 @@ if is_module_patched("threading"):
                 continue
             yield fix(ident, frame)
 
-        all_greenlets = {g for g in gc.get_objects() if isinstance(g, Greenlet)}
+        all_greenlets = get_all_greenlets()
 
         for thread in threading.enumerate():
             greenlet = IDENT_TO_GREENLET.get(thread.ident)
