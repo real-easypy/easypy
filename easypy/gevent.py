@@ -9,6 +9,7 @@ except ImportError:
 from logging import getLogger
 import threading   # this will be reloaded after patching
 
+import atexit
 import time
 import sys
 
@@ -25,6 +26,8 @@ main_thread_ident_before_patching = threading.main_thread().ident
 HUB = None
 
 HOGGING_TIMEOUT = 1
+
+_HOGGING_DETECTION_RUNNING = False
 
 
 def apply_patch(hogging_detection=False, real_threads=1):
@@ -63,7 +66,15 @@ def apply_patch(hogging_detection=False, real_threads=1):
     if hogging_detection:
         import greenlet
         greenlet.settrace(lambda *args: _greenlet_trace_func(*args))
-        defer_to_thread(detect_hogging, 'detect-hogging')
+        global _HOGGING_DETECTION_RUNNING
+        _HOGGING_DETECTION_RUNNING = True
+        wait = defer_to_thread(detect_hogging, 'detect-hogging')
+
+        @atexit.register
+        def stop_detection():
+            global _HOGGING_DETECTION_RUNNING
+            _HOGGING_DETECTION_RUNNING = False
+            wait()
 
 
 def _patch_module_locks():
@@ -133,7 +144,7 @@ def detect_hogging():
     current_blocker_time = 0
     last_warning_time = 0
 
-    while True:
+    while _HOGGING_DETECTION_RUNNING:
         non_gevent_sleep(HOGGING_TIMEOUT)
         if did_switch:
             # all good
