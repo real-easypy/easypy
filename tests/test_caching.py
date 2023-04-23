@@ -292,6 +292,49 @@ def test_cached_property():
     assert f.num == 2
 
 
+def test_cached_exception_property():
+
+    num = 0
+
+    class Foo:
+        @cached_property(cacheable_exceptions=ZeroDivisionError)
+        def num(self):
+            nonlocal num
+            num += 1
+            1 / 0
+
+    f = Foo()
+
+    with pytest.raises(ZeroDivisionError):
+        f.num
+    assert num == 1
+
+    with pytest.raises(ZeroDivisionError):
+        f.num
+    assert num == 1
+
+
+def test_locking_exception_timecache():
+
+    values = []
+
+    @timecache(cacheable_exceptions=ZeroDivisionError)
+    def test(x):
+        values.append(x)
+        return 1 / x
+
+    test(1)
+    test(1)
+    test(2)
+    test(2)
+
+    with pytest.raises(ZeroDivisionError):
+        test(0)
+        test(0)
+
+    assert values == [1, 2, 0]
+
+
 def test_resilient_between_timecaches():
     class ExceptionLeakedThroughResilient(Exception):
         pass

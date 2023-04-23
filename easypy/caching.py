@@ -177,7 +177,12 @@ else:
         bound_arguments.apply_defaults()
 
 
+class _CachedException(tuple):
+    pass
+
+
 class _TimeCache(DecoratingDescriptor):
+
     def __init__(self, func, **kwargs):
         update_wrapper(self, func)  # this needs to be first to avoid overriding attributes we set
         super().__init__(func=func, cached=True)
@@ -186,6 +191,7 @@ class _TimeCache(DecoratingDescriptor):
         self.expiration = kwargs['expiration']
         self.get_ts_func = kwargs['get_ts_func']
         self.log_recalculation = kwargs['log_recalculation']
+        self.cacheable_exceptions = kwargs['cacheable_exceptions']
         self.sig = inspect.signature(func)
 
         key_func = kwargs['key_func']
@@ -243,10 +249,16 @@ class _TimeCache(DecoratingDescriptor):
             if result is self.NOT_FOUND:
                 if self.log_recalculation:
                     _logger.debug('time cache expired, calculating new value for %s', self.__name__)
-                result = self.func(*args, **kwargs)
+                try:
+                    result = self.func(*args, **kwargs)
+                except self.cacheable_exceptions as exc:
+                    result = _CachedException([exc])
                 self.cache[key] = result, self.get_ts_func()
 
-            return result
+            if isinstance(result, _CachedException):
+                raise result[0]
+            else:
+                return result
 
     def cache_clear(self):
         with self.main_lock:
@@ -286,7 +298,7 @@ class _TimeCache(DecoratingDescriptor):
         return type(self)(method, **self.kwargs)
 
 
-def timecache(expiration=0, get_ts_func=time.time, log_recalculation=False, key_func=None):
+def timecache(expiration=0, get_ts_func=time.time, log_recalculation=False, key_func=None, cacheable_exceptions=()):
     """
     A thread-safe cache decorator with time expiration.
 
@@ -307,6 +319,7 @@ def timecache(expiration=0, get_ts_func=time.time, log_recalculation=False, key_
             get_ts_func=get_ts_func,
             log_recalculation=log_recalculation,
             key_func=key_func,
+            cacheable_exceptions=cacheable_exceptions,
         )
 
     return deco
@@ -316,7 +329,7 @@ timecache.__doc__ = _TimeCache.__doc__
 
 
 @parametrizeable_decorator
-def locking_cache(func=None, log_recalculation=False, key_func=None):
+def locking_cache(func=None, log_recalculation=False, key_func=None, cacheable_exceptions=()):
     """
     A syntactic sugar for a locking cache without time expiration.
 
@@ -326,10 +339,11 @@ def locking_cache(func=None, log_recalculation=False, key_func=None):
     :type key_func: callable, optional
     """
 
-    return timecache(log_recalculation=log_recalculation, key_func=key_func)(func)
+    return timecache(log_recalculation=log_recalculation, key_func=key_func, cacheable_exceptions=cacheable_exceptions)(func)
 
 
-class cached_property(object):
+@parametrizeable_decorator
+def cached_property(function=None, locking=True, safe=True, cacheable_exceptions=()):
     """
     A property whose value is computed only once.
 
@@ -340,15 +354,20 @@ class cached_property(object):
     :param safe: See `easypy.properties.safe_property`, defaults to True
     :type safe: bool, optional
     """
+    return _cached_property(function=function, locking=locking, safe=safe, cacheable_exceptions=cacheable_exceptions)
+
+
+class _cached_property(object):
 
     locks_lock = RLock()
     LOCKS_KEY = '__cached_properties_locks'
 
-    def __init__(self, function=None, locking=True, safe=True):
+    def __init__(self, function, locking, safe, cacheable_exceptions):
         self._function = function
         self._locking = locking
         self._safe = safe
         self._attr_name = "_cached_%s" % self._function.__name__
+        self._cacheable_exceptions = cacheable_exceptions
 
     def __set_name__(self, obj, name):
         self._attr_name = "_cached_%s" % name
@@ -358,9 +377,14 @@ class cached_property(object):
             return self
 
         try:
-            return getattr(obj, self._attr_name)
+            value = getattr(obj, self._attr_name)
         except AttributeError:
             pass
+        else:
+            if isinstance(value, _CachedException):
+                raise value[0]
+            else:
+                return value
 
         with ExitStack() as stack:
             if self._locking:
@@ -378,6 +402,8 @@ class cached_property(object):
 
             try:
                 value = self._function(obj)
+            except self._cacheable_exceptions as exc:
+                value = _CachedException([exc])
             except AttributeError:
                 if self._safe:
                     _, exc, tb = sys.exc_info()
@@ -386,7 +412,11 @@ class cached_property(object):
                     raise
 
             setattr(obj, self._attr_name, value)
-            return value
+
+            if isinstance(value, _CachedException):
+                raise value[0]
+            else:
+                return value
 
     def __set__(self, obj, value):
         setattr(obj, self._attr_name, value)
