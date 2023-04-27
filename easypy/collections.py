@@ -5,6 +5,7 @@ This module helps you with handling and generating collections of items.
 
 from __future__ import absolute_import
 import collections
+import collections.abc
 from numbers import Integral
 from itertools import chain, islice
 from functools import partial
@@ -838,7 +839,7 @@ def separate(sequence, key=None):
 
 
 def iterable(obj):
-    return isinstance(obj, collections.Iterable) and not isinstance(obj, (str, bytes, dict))
+    return isinstance(obj, collections.abc.Iterable) and not isinstance(obj, (str, bytes, dict))
 
 
 def ilistify(obj):
