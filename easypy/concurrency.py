@@ -126,6 +126,10 @@ TPE_ID = count(1)
 CONCURRENT_ID = count(1)
 
 
+TPE_ID = count(1)
+CONCURRENT_ID = count(1)
+
+
 def disable():
     """
     Force MultiObject and concurrent calls to run synchronuously in the current thread.

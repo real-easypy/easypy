@@ -255,6 +255,10 @@ class Timebomb(object):
         timer = Timer(expiration=self.timeout)
         if not self.quiet:
             _logger.info("Timebomb set - this process will YELLOW<<self-destruct>> in RED<<%r>>...", timer.remain)
+            if sys.stdin.isatty():
+                import builtins
+                builtins.defuse_timebombs = defuse_timebombs
+                _logger.info("(Call the 'built-in' 'WHITE<<defuse_timebombs()>>' to cancel)")
         while not timer.expired:
             if self.alert_interval:
                 _logger.info("Time Elapsed: MAGENTA<<%r>>", timer.elapsed)
@@ -273,6 +277,14 @@ class Timebomb(object):
 
 def set_timebomb(timeout, alert_interval=None):
     return Timebomb(timeout=timeout, alert_interval=alert_interval).start()
+
+
+def defuse_timebombs():
+    from gc import get_objects
+    for o in get_objects():
+        if isinstance(o, Timebomb):
+            o.cancel()
+            _logger.info("cancelling: %s", o)
 
 
 @wrapper_decorator
