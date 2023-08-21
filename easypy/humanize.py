@@ -10,7 +10,6 @@ import traceback
 from math import ceil
 from collections import namedtuple
 from contextlib import contextmanager
-from inspect import getargspec
 from io import StringIO
 from datetime import datetime, timedelta
 
