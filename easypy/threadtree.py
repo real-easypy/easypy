@@ -117,7 +117,14 @@ if is_module_patched("threading"):
     IDENT_TO_GREENLET[thread.ident] = gevent.getcurrent()
 
     def get_all_greenlets():
-        return {g for g in gc.get_objects() if isinstance(g, Greenlet)}
+        found = set()
+        for g in gc.get_objects():
+            try:
+                if isinstance(g, Greenlet):
+                    found.add(g)
+            except ReferenceError:
+                pass
+        return found
 
     def iter_thread_frames():
         current_thread_ident = threading.current_thread().ident
