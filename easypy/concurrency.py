@@ -190,7 +190,13 @@ class MultiExceptionMeta(type):
                 if exception_type in cls._SUBTYPES:
                     return cls._SUBTYPES[exception_type]
                 bases = tuple(cls[base] for base in exception_type.__bases__ if base and issubclass(base, BaseException))
-                subtype = type("MultiException[%s]" % exception_type.__qualname__, bases, dict(COMMON_TYPE=exception_type))
+                core_type = exception_type.CORE_COMMON_TYPE if issubclass(exception_type, cls) else exception_type
+                depth = exception_type.DEPTH + 1 if issubclass(exception_type, cls) else 1
+                name = core_type.__qualname__
+                for _ in range(depth - 1):
+                    name = "[%s]" % name
+                name = "MultiException[%s]" % name
+                subtype = type(name, bases, dict(COMMON_TYPE=exception_type, CORE_COMMON_TYPE=core_type, DEPTH=depth))
                 cls._SUBTYPES[exception_type] = subtype
                 return subtype
 
@@ -221,6 +227,8 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
     """
 
     COMMON_TYPE = BaseException  # the fallback common type
+    CORE_COMMON_TYPE = BaseException  # the fallback core common type
+    DEPTH = 0
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
 
     def __reduce__(self):
