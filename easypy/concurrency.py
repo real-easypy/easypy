@@ -179,6 +179,9 @@ class MultiExceptionMeta(type):
     def __getitem__(cls, exception_type):
         if exception_type is BaseException:
             return MultiException
+        elif isinstance(exception_type, list):
+            [exception_type] = exception_type
+            return cls[cls[exception_type]]
 
         assert isinstance(exception_type, type), "Must use an Exception type"
         assert issubclass(exception_type, BaseException), "Must inherit for BaseException"
