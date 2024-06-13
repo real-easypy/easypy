@@ -966,8 +966,8 @@ class LoggedCondition():
                     # NOTE: without a timeout we will never get here
                     if pred():  # Try one last time, to make sure the last check was not (possibly too long) before the timeout
                         return
-                    raise TimeoutException('{condition} timed out after {duration} waiting for {msg}',
-                                           condition=self, msg=msg % args, duration=timer.elapsed)
+                    raise TimeoutException('{condition} timed out after {duration}(out of {timeout}) waiting for {msg}',
+                                           condition=self, msg=msg % args, duration=timer.elapsed, timeout=timeout)
                 _logger.debug('%s - waiting for ' + msg, self, *args)
             yield
 
