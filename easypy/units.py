@@ -1,7 +1,8 @@
-import re
 from itertools import repeat
-import random
+from math import floor
 import numbers
+import random
+import re
 from easypy.exceptions import TException
 
 
@@ -323,6 +324,7 @@ class Duration(float):
         ss = float(self)
         if unit not in ("ms", "s"):
             mm, ss = divmod(ss, 60)
+            ss = floor(ss)
         if unit != "m":
             hh, mm = divmod(mm, 60)
         if unit != "h":
