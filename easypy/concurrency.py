@@ -692,6 +692,8 @@ def nonconcurrent_map(func, params, log_contexts=None, **kw):
     has_exceptions = False
     for args, ctx in zip(_to_args_list(params), log_contexts):
         future = Future()
+        future.ctx = ctx
+        future.funcname = _get_func_name(func)
         futures.append(future)
         try:
             result = _run_with_exception_logging(func, args, kw, ctx)
