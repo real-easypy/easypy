@@ -5,7 +5,7 @@ This is useful in our contextualized logging, so that threads inherit logging co
 import sys
 from importlib import import_module
 from uuid import uuid4
-from weakref import WeakKeyDictionary
+from weakref import WeakKeyDictionary, WeakSet
 import time
 import logging
 from copy import deepcopy
@@ -28,10 +28,13 @@ def start_new_thread(target, *args, **kwargs):
     A wrapper for the built in 'start_new_thread' used to capture the parent of each new thread.
     """
     parent_uuid = get_thread_uuid()
+    tc_fork = ThreadContexts.fork(parent_uuid)
+    tc_fork.send(None)
 
     def wrapper(*args, **kwargs):
         thread = threading.current_thread()
         uuid = get_thread_uuid(thread)
+        tc_fork.send(uuid)
         UUIDS_TREE[uuid] = parent_uuid
         if _REGISTER_GREENLETS:
             IDENT_TO_GREENLET[thread.ident] = gevent.getcurrent()
@@ -402,28 +405,39 @@ class ThreadContexts():
 
     """
 
+    # prevent setting custom attributes
+    __slots__ = "_context_data _defaults _counters _stacks".split()
+
+    # registry of all TCs
+    _ALL = set()
+
     def __init__(self, defaults={}, counters=None, stacks=None):
         self._context_data = WeakKeyDictionary()
         self._defaults = defaults.copy()
         self._counters = set(ilistify(counters or []))
         self._stacks = set(ilistify(stacks or []))
+        self._ALL.add(self)
+
+    def __del__(self):
+        self._ALL.discard(self)
 
     def update_defaults(self, **kwargs):
         self._defaults.update(kwargs)
 
-    def _get_context_data(self, thread_uuid=None, combined=False):
-        if not thread_uuid:
-            thread_uuid = get_thread_uuid()
+    @classmethod
+    def fork(cls, parent_thread):
+        data = {}
+        for tc in cls._ALL:
+            # we copy the list itself, and each Bunch within it
+            data[tc] = [c.copy() for c in tc._get_context_data(parent_thread)]
 
-        ctx = self._context_data.setdefault(thread_uuid, [])
-        if not combined:
-            return ctx
+        child_thread = yield
+        for tc in cls._ALL:
+            tc._context_data[child_thread] = data[tc]
+        yield
 
-        parent_uuid = get_parent_uuid(thread_uuid)
-        if parent_uuid:
-            parent_ctx = self._get_context_data(parent_uuid, combined=True)
-            ctx = deepcopy(parent_ctx) + ctx
-        return ctx
+    def _get_context_data(self, thread_uuid=None):
+        return self._context_data.setdefault(thread_uuid or get_thread_uuid(), [])
 
     def get(self, k, default=None):
         """
@@ -451,7 +465,7 @@ class ThreadContexts():
             if context and not getattr(exc, "context", None):
                 try:
                     exc.context = context
-                except:
+                except:  # noqa: E722
                     logging.warning("could not attach context to exception")
             raise
         finally:
@@ -461,7 +475,7 @@ class ThreadContexts():
         """
         return a flattened dict of all inherited context data for the current thread
         """
-        stack = self._get_context_data(thread_uuid=thread_uuid, combined=True)
+        stack = self._get_context_data(thread_uuid=thread_uuid)
         concats = {k: self._defaults.get(k, []) for k in self._stacks}
         accums = {k: self._defaults.get(k, 0) for k in self._counters}
         extra = dict(self._defaults)
