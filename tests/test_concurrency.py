@@ -45,6 +45,36 @@ def test_call_concurrent_timeout():
         c(timeout_=0.1)
 
 
+def test_thread_contexts_persistence():
+    TC = ThreadContexts(dict(user='a'))
+    assert TC.user == 'a'
+
+    def check_user_is_b():
+        assert TC.user == 'b'
+        with TC(user='b2'):
+            assert TC.user == 'b2'
+
+    with TC(user='b'):
+        assert TC.user == 'b'
+
+        check = concurrent(check_user_is_b, loop=True, sleep=0.05).start()
+        sleep(0.1)
+        assert TC.user == 'b'
+
+        with TC(user='c'):
+            assert TC.user == 'c'
+            sleep(0.1)
+
+        assert TC.user == 'b'
+
+    assert TC.user == 'a'
+    sleep(0.1)
+    assert TC.user == 'a'
+    check.stop()
+    check.join()
+    assert TC.user == 'a'
+
+
 def test_thread_contexts_counters():
     TC = ThreadContexts(counters=('i', 'j'))
     assert TC.i == TC.j == 0

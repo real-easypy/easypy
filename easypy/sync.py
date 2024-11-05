@@ -23,7 +23,7 @@ from easypy.gevent import is_module_patched
 from easypy.decorations import wrapper_decorator, parametrizeable_decorator
 from easypy.caching import locking_cache
 from easypy.exceptions import PException, TException
-from easypy.units import NEVER, MINUTE, HOUR
+from easypy.units import NEVER, MINUTE, HOUR, Duration
 from easypy.misc import Hex
 from easypy.humanize import time_duration  # due to interference with jrpc
 from easypy.misc import kwargs_resilient
@@ -966,7 +966,7 @@ class LoggedCondition():
                     # NOTE: without a timeout we will never get here
                     if pred():  # Try one last time, to make sure the last check was not (possibly too long) before the timeout
                         return
-                    raise TimeoutException('{condition} timed out after {duration} waiting for {msg}',
+                    raise TimeoutException('{condition} timed out after {duration!r} waiting for {msg}',
                                            condition=self, msg=msg % args, duration=timer.elapsed)
                 _logger.debug('%s - waiting for ' + msg, self, *args)
             yield
@@ -1055,11 +1055,11 @@ def iter_wait(
 
     if message is None:
         if caption:
-            message = "Waiting %s timed out after {duration:.1f} seconds" % (caption,)
+            message = "Waiting %s timed out after {duration!r}" % (caption,)
         elif pred:
-            message = "Waiting on predicate (%s) timed out after {duration:.1f} seconds" % (pred,)
+            message = "Waiting on predicate (%s) timed out after {duration!r}" % (pred,)
         else:
-            message = "Timed out after {duration:.1f} seconds"
+            message = "Timed out after {duration!r}"
 
     if pred:
         pred_decorator = kwargs_resilient(negligible=['is_final_attempt'])
@@ -1129,7 +1129,7 @@ def iter_wait(
                     yield ret
                     return
             if expired:
-                duration = l_timer.stop()
+                duration = Duration(l_timer.stop())
                 start_time = l_timer.start_time
                 if throw:
                     if last_exc:
