@@ -31,7 +31,7 @@ class FrameSnapshot(NamedTuple):
     f_lineno: int
     f_code_name: str  # f_code.co_name
     f_code_filename: str  # f_code.co_filename
-    f_thread_ident: str
+    f_thread_ident: int
     f_back: Optional["FrameSnapshot"]
 
     def __repr__(self) -> str:
@@ -52,7 +52,7 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
         f_lineno=frame.f_lineno,
         f_code_name=frame.f_code.co_name,
         f_code_filename=frame.f_code.co_filename,
-        f_thread_ident=str(thread.ident),
+        f_thread_ident=thread.ident,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
     return snapshot
