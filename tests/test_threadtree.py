@@ -1,13 +1,15 @@
 import threading
+from types import TracebackType
+from typing import cast
 
-from easypy.threadtree import walk_frame_snapshots
+from easypy.threadtree import walk_frames
 
 
-def collect_frame_snapshots():
+def collect_frames():
     """Collect only interesting frames"""
     result = []
 
-    for frame in walk_frame_snapshots():
+    for frame in walk_frames(across_threads=True):
         if (
             "python" in str(frame)
             or "concurrency" in str(frame)
@@ -19,17 +21,15 @@ def collect_frame_snapshots():
     return result
 
 
-def test_frame_snapshots():
-    snapshots = None
+def test_walk_frames():
+    frames = []
     event_a = threading.Event()
     event_b= threading.Event()
 
-
     def func_b():
-        nonlocal snapshots
+        nonlocal frames
         event_b.wait()
-        snapshots = collect_frame_snapshots()
-
+        frames = collect_frames()
 
     t2 = threading.Thread(target=func_b)
 
@@ -46,13 +46,12 @@ def test_frame_snapshots():
     t1.join()
     t2.join()
 
-
     expected = [
-        "collect_frame_snapshots",
+        "collect_frames",
         "func_b",
         "func_a",
-        "test_frame_snapshots",  # NOTE: must match the name of this test
+        "test_walk_frames",  # NOTE: must match the name of this test
         "<module>",
     ]
-    actual = [frame.f_code_name for frame in snapshots]
+    actual = [frame.f_code.co_name for frame in frames]
     assert actual == expected

@@ -30,8 +30,8 @@ _orig_start_new_thread = _thread.start_new_thread
 class FCode(NamedTuple):
     co_name: str
     co_filename: str
-    co_firstlineno: int
-    co_names: Tuple[str]=['frame_snapshot__co_names_skipped']
+    co_firstlineno: Optional[int]
+    co_names: Tuple[str, ...] = tuple("_frame_snapshot__co_names_skipped")
 
 class FrameSnapshot(NamedTuple):
     f_lineno: int
@@ -40,7 +40,7 @@ class FrameSnapshot(NamedTuple):
     f_thread_ident: int
     f_globals: Dict[str, Any]
     f_back: Optional["FrameSnapshot"]
-    f_locals: Dict = {'frame_snapshot__locals_skipped': None}
+    f_locals: Dict = {"_frame_snapshot__locals_skipped": None}
 
     def __repr__(self) -> str:
         return (
@@ -59,12 +59,15 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
     snapshot = FrameSnapshot(
         f_lineno=frame.f_lineno,
         f_lasti=frame.f_lasti,
-        f_code=FCode(co_name=frame.f_code.co_name,
-                     co_filename=frame.f_code.co_filename,
-                     co_firstlineno=frame.f_code.f_firstlineno,
-                     ),
-        f_globals={"__name__": frame.f_globals.get("__name__"),
-                   'frame_snapshot__globals_skipped': None},
+        f_code=FCode(
+            co_name=frame.f_code.co_name,
+            co_filename=frame.f_code.co_filename,
+            co_firstlineno=getattr(frame.f_code, "f_firstlineno", None),
+        ),
+        f_globals={
+            "__name__": frame.f_globals.get("__name__"),
+            "_frame_snapshot__globals_skipped": None,
+        },
         f_thread_ident=thread.ident,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
