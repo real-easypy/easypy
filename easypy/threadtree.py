@@ -53,7 +53,7 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
         f_lineno=frame.f_lineno,
         f_code_name=frame.f_code.co_name,
         f_code_filename=frame.f_code.co_filename,
-        f_globals={"__name__": frame.f_globals["__name__"]},
+        f_globals={"__name__": frame.f_globals.get("__name__")},
         f_thread_ident=thread.ident,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
