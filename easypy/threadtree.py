@@ -5,7 +5,7 @@ This is useful in our contextualized logging, so that threads inherit logging co
 import sys
 from collections import defaultdict
 from importlib import import_module
-from typing import NamedTuple, Optional, Any, Dict
+from typing import NamedTuple, Optional, Any, Dict, List, Tuple
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 import time
@@ -30,19 +30,22 @@ _orig_start_new_thread = _thread.start_new_thread
 class FCode(NamedTuple):
     co_name: str
     co_filename: str
+    co_firstlineno: int
+    co_names: Tuple[str]=['frame_snapshot__co_names_skipped']
 
 class FrameSnapshot(NamedTuple):
     f_lineno: int
+    f_lasti: int
     f_code: FCode
     f_thread_ident: int
     f_globals: Dict[str, Any]
     f_back: Optional["FrameSnapshot"]
-    f_locals: Dict = {}   # We don't care for f_locals, at least not yet...
+    f_locals: Dict = {'frame_snapshot__locals_skipped': None}
 
     def __repr__(self) -> str:
         return (
-            f"FrameSnapshot(thread {self.f_thread_ident}, file '{self.f_code_filename}', "
-            f"line {self.f_lineno}, code {self.f_code_name})"
+            f"FrameSnapshot(thread {self.f_thread_ident}, file '{self.f_code.co_filename}', "
+            f"line {self.f_lineno}, code {self.f_code.co_name})"
         )
 
 
@@ -55,10 +58,13 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
 
     snapshot = FrameSnapshot(
         f_lineno=frame.f_lineno,
+        f_lasti=frame.f_lasti,
         f_code=FCode(co_name=frame.f_code.co_name,
                      co_filename=frame.f_code.co_filename,
+                     co_firstlineno=frame.f_code.f_firstlineno,
                      ),
-        f_globals={"__name__": frame.f_globals.get("__name__")},
+        f_globals={"__name__": frame.f_globals.get("__name__"),
+                   'frame_snapshot__globals_skipped': None},
         f_thread_ident=thread.ident,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
@@ -219,15 +225,14 @@ def walk_frames(thread=None, *, across_threads=False):
     """
     Yields the stack frames of the current/specified thread.
 
-    :param across_threads: yield frames of ancestor threads.
-    Note that the parent thread might be off to other things, and not actually in the frame that spawned the thread at the tip.
-    If this is not desired behaviour please use walk_frame_snapshots instead.
+    :param across_threads: yield frames of ancestor threads. For ancestor threads, yield FrameSnapshot instances
     """
 
     if not thread:
         thread = threading.current_thread()
-
-    frame = dict(iter_thread_frames()).get(thread.ident)
+        frame = sys._getframe(0)
+    else:
+        frame = dict(iter_thread_frames()).get(thread.ident)
 
     while frame:
 
@@ -235,25 +240,7 @@ def walk_frames(thread=None, *, across_threads=False):
 
         frame = frame.f_back
         if not frame and across_threads and thread.parent:
-            thread = thread.parent
-            frame = dict(iter_thread_frames()).get(thread.ident)
-
-
-def walk_frame_snapshots():
-    """
-    Yields snapshots of the current thread's stack frames together with all ancestor threads.
-    """
-    frame = sys._getframe(0)
-    thread = threading.current_thread()
-    snapshot = create_frame_snapshot(frame, thread)
-
-    while snapshot:
-
-        yield snapshot
-
-        snapshot = snapshot.f_back
-        if not snapshot and thread.parent:
-            snapshot = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.ident][thread.ident]
+            frame = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.ident][thread.ident]
             thread = thread.parent
 
 
