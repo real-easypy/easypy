@@ -5,7 +5,7 @@ This is useful in our contextualized logging, so that threads inherit logging co
 import sys
 from collections import defaultdict
 from importlib import import_module
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Any, Dict
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 import time
@@ -31,7 +31,7 @@ class FrameSnapshot(NamedTuple):
     f_lineno: int
     f_code_name: str  # f_code.co_name
     f_code_filename: str  # f_code.co_filename
-    f_lasti: int
+    f_globals: Dict[str, Any]
     f_thread_ident: int
     f_back: Optional["FrameSnapshot"]
 
@@ -53,7 +53,7 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
         f_lineno=frame.f_lineno,
         f_code_name=frame.f_code.co_name,
         f_code_filename=frame.f_code.co_filename,
-        f_lasti=frame.f_lasti,
+        f_globals={"__name__": frame.f_globals["__name__"]},
         f_thread_ident=thread.ident,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
