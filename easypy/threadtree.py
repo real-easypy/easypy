@@ -34,9 +34,10 @@ class FCode(NamedTuple):
 class FrameSnapshot(NamedTuple):
     f_lineno: int
     f_code: FCode
-    f_globals: Dict[str, Any]
     f_thread_ident: int
+    f_globals: Dict[str, Any]
     f_back: Optional["FrameSnapshot"]
+    f_locals: Dict = {}   # We don't care for f_locals, at least not yet...
 
     def __repr__(self) -> str:
         return (
