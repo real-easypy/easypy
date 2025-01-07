@@ -1,6 +1,4 @@
 import threading
-from types import TracebackType
-from typing import cast
 
 from easypy.threadtree import walk_frames
 
