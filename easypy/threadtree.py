@@ -22,6 +22,7 @@ from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT
 
 _REGISTER_GREENLETS = False
 
+# See walk_frames docstring for the env var description
 DISABLE_ACROSS_THREADS = os.getenv('EASYPY_DISABLE_ACROSS_THREADS', '')
 _FRAME_SNAPSHOTS_REGISTRY = {}
 
@@ -249,7 +250,7 @@ def walk_frames(thread=None, *, across_threads=False):
             if DISABLE_ACROSS_THREADS:
                 # The "across threads" feature is disabled using "EASYPY_DISABLE_ACROSS_THREADS" explicitly.
                 # Breaking the loop.
-                return
+                break
             frame = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.ident, thread.ident]
             thread = thread.parent
 
