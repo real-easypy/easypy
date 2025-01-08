@@ -2,9 +2,10 @@
 This module monkey-patches python's (3.x) threading module so that we can find which thread spawned which.
 This is useful in our contextualized logging, so that threads inherit logging context from their 'parent'.
 """
+import os
 import sys
 from importlib import import_module
-from uuid import uuid4
+from typing import NamedTuple, Optional, Any, Dict, Tuple
 from weakref import WeakKeyDictionary
 import time
 import logging
@@ -20,17 +21,75 @@ from easypy._multithreading_init import UUIDS_TREE, IDENT_TO_UUID, UUID_TO_IDENT
 
 
 _REGISTER_GREENLETS = False
+
+# See walk_frames docstring for the env var description
+DISABLE_ACROSS_THREADS = os.getenv('EASYPY_DISABLE_ACROSS_THREADS', '')
+_FRAME_SNAPSHOTS_REGISTRY = {}
+
 _orig_start_new_thread = _thread.start_new_thread
+
+
+class FCode(NamedTuple):
+    co_name: str
+    co_filename: str
+    co_firstlineno: Optional[int]
+    co_names: Tuple[str, ...] = tuple("_frame_snapshot__co_names_skipped")
+
+class FrameSnapshot(NamedTuple):
+    f_lineno: int
+    f_lasti: int
+    f_code: FCode
+    f_thread_ident: int
+    f_globals: Dict[str, Any]
+    f_back: Optional["FrameSnapshot"]
+    f_locals: Dict = {"_frame_snapshot__locals_skipped": None}
+
+    def __repr__(self) -> str:
+        return (
+            f"FrameSnapshot(thread {self.f_thread_ident}, file '{self.f_code.co_filename}', "
+            f"line {self.f_lineno}, code {self.f_code.co_name})"
+        )
+
+
+def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
+    if not frame:
+        frame = sys._getframe(0)
+
+    if not thread:
+        thread = threading.current_thread()
+
+    snapshot = FrameSnapshot(
+        f_lineno=frame.f_lineno,
+        f_lasti=frame.f_lasti,
+        f_code=FCode(
+            co_name=frame.f_code.co_name,
+            co_filename=frame.f_code.co_filename,
+            co_firstlineno=getattr(frame.f_code, "f_firstlineno", None),
+        ),
+        f_globals={
+            "__name__": frame.f_globals.get("__name__"),
+            "_frame_snapshot__globals_skipped": None,
+        },
+        f_thread_ident=thread.ident,
+        f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
+    )
+    return snapshot
 
 
 def start_new_thread(target, *args, **kwargs):
     """
-    A wrapper for the built in 'start_new_thread' used to capture the parent of each new thread.
+    A wrapper for the built-in 'start_new_thread' used to capture the parent of each new thread.
     """
-    parent_uuid = get_thread_uuid()
+    parent_thread = threading.current_thread()
+    parent_uuid = get_thread_uuid(parent_thread)
+    parent_frame = sys._getframe(0)
 
     def wrapper(*args, **kwargs):
         thread = threading.current_thread()
+        if not DISABLE_ACROSS_THREADS:
+            _FRAME_SNAPSHOTS_REGISTRY[parent_thread.ident, thread.ident] = (
+                create_frame_snapshot(parent_frame, parent_thread)
+            )
         uuid = get_thread_uuid(thread)
         UUIDS_TREE[uuid] = parent_uuid
         if _REGISTER_GREENLETS:
@@ -171,14 +230,16 @@ def walk_frames(thread=None, *, across_threads=False):
     """
     Yields the stack frames of the current/specified thread.
 
-    :param across_threads: yield frames of ancestor threads.
-    Note that the parent thread might be off to other things, and not actually in the frame that spawned the thread at the tip.
+    :param across_threads: yield frames of ancestor threads. For ancestor threads, yield FrameSnapshot instances
+    NOTE: The "across_threads" feature can be disabled explicitly using "EASYPY_DISABLE_ACROSS_THREADS" env var.
+        It makes sense to do it if _FRAME_SNAPSHOTS_REGISTRY takes too much memory space.
     """
 
     if not thread:
         thread = threading.current_thread()
-
-    frame = dict(iter_thread_frames()).get(thread.ident)
+        frame = sys._getframe(0)
+    else:
+        frame = dict(iter_thread_frames()).get(thread.ident)
 
     while frame:
 
@@ -186,8 +247,12 @@ def walk_frames(thread=None, *, across_threads=False):
 
         frame = frame.f_back
         if not frame and across_threads and thread.parent:
+            if DISABLE_ACROSS_THREADS:
+                # The "across threads" feature is disabled using "EASYPY_DISABLE_ACROSS_THREADS" explicitly.
+                # Breaking the loop.
+                break
+            frame = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.ident, thread.ident]
             thread = thread.parent
-            frame = dict(iter_thread_frames()).get(thread.ident)
 
 
 this_module = import_module(__name__)
