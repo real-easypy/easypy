@@ -40,6 +40,7 @@ class FrameSnapshot(NamedTuple):
     f_lasti: int
     f_code: FCode
     f_thread_ident: int
+    f_thread_name: str
     f_globals: Dict[str, Any]
     f_back: Optional["FrameSnapshot"]
     f_locals: Dict = {"_frame_snapshot__locals_skipped": None}
@@ -71,6 +72,7 @@ def create_frame_snapshot(frame=None, thread=None) -> FrameSnapshot:
             "_frame_snapshot__globals_skipped": None,
         },
         f_thread_ident=thread.ident,
+        f_thread_name=thread.name,
         f_back=create_frame_snapshot(frame.f_back, thread) if frame.f_back else None,
     )
     return snapshot
