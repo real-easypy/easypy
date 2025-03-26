@@ -303,7 +303,10 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
         def add_details(exc):
             if kw.get("timestamp", True) and getattr(exc, "timestamp", None):
-                ts = datetime.fromtimestamp(exc.timestamp).isoformat()
+                if isinstance(exc.timestamp, (int, float)):
+                    ts = datetime.fromtimestamp(exc.timestamp).isoformat()
+                else:
+                    ts = exc.timestamp
                 buff.write(normalize_color("MAGENTA<<Timestamp: %s>>" % ts))
             if kw.get("context", True) and getattr(exc, "context", None):
                 buff.write("Context: %s" % _format_context(exc.context))
