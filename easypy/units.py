@@ -223,9 +223,9 @@ class Duration(float):
 
     def __mul__(self, mul):
         if isinstance(mul, self.__class__):
-            raise TypeError('Cannot multiply %s by %s' % (self, mul))
+            raise TypeError('Cannot multiply %r by %r' % (self, mul))
         if not isinstance(mul, numbers.Real):
-            raise TypeError('Cannot multiply %s by %r' % (self, mul))
+            raise TypeError('Cannot multiply %r by %r' % (self, mul))
         return self.__class__(super(Duration, self).__mul__(mul))
     __rmul__ = __mul__
 
