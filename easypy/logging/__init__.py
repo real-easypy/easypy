@@ -145,7 +145,10 @@ class ContextableLoggerMixin(object):
         from easypy.timing import timing as timing_context
 
         level = if_auto(level, G.NOTICE)
-        header = (header % args) if header else ""
+        if header:
+            header = (header % args) if args else header
+        else:
+            header = ""
         self.log(level, "WHITE@[%s]@" % header, extra=dict(decoration=G.graphics.INDENT_OPEN))
         with ExitStack() as stack:
             stack.enter_context(THREAD_LOGGING_CONTEXT(indentation=1))
