@@ -87,9 +87,7 @@ def start_new_thread(target, *args, **kwargs):
     def wrapper(*args, **kwargs):
         thread = threading.current_thread()
         if not DISABLE_ACROSS_THREADS:
-            _FRAME_SNAPSHOTS_REGISTRY[parent_thread.ident, thread.ident] = (
-                create_frame_snapshot(parent_frame, parent_thread)
-            )
+            _FRAME_SNAPSHOTS_REGISTRY[parent_thread.uuid, thread.uuid] = create_frame_snapshot(parent_frame, parent_thread)
         uuid = get_thread_uuid(thread)
         UUIDS_TREE[uuid] = parent_uuid
         if _REGISTER_GREENLETS:
@@ -251,7 +249,7 @@ def walk_frames(thread=None, *, across_threads=False):
                 # The "across threads" feature is disabled using "EASYPY_DISABLE_ACROSS_THREADS" explicitly.
                 # Breaking the loop.
                 break
-            frame = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.ident, thread.ident]
+            frame = _FRAME_SNAPSHOTS_REGISTRY[thread.parent.uuid, thread.uuid]
             thread = thread.parent
 
 

@@ -22,7 +22,7 @@ def collect_frames():
 def test_walk_frames():
     frames = []
     event_a = threading.Event()
-    event_b= threading.Event()
+    event_b = threading.Event()
 
     def func_b():
         nonlocal frames
