@@ -244,7 +244,7 @@ def walk_frames(thread=None, *, across_threads=False):
         yield frame
 
         frame = frame.f_back
-        if not frame and across_threads and thread.parent:
+        if not frame and across_threads and getattr(thread, "parent", None):
             if DISABLE_ACROSS_THREADS:
                 # The "across threads" feature is disabled using "EASYPY_DISABLE_ACROSS_THREADS" explicitly.
                 # Breaking the loop.
