@@ -34,8 +34,8 @@ if sys.version_info[:2] >= (3, 5):
 
 
 def _format_predicate(pred):
-    args = inspect.formatargspec(*inspect.getargspec(pred))
-    return "<lambda>" if pred.__name__ == "<lambda>" else "{pred.__name__}{args}".format(**locals())
+    signature = inspect.signature(pred)
+    return "<lambda>" if pred.__name__ == "<lambda>" else f"{pred.__name__}{signature}"
 
 
 def _format_filter_string(preds, filters):
