@@ -191,12 +191,13 @@ def patched_makeRecord(self, name, level, fn, lno, msg, args, exc_info, func=Non
         for key in extra:
             if (key in ["message", "asctime"]) or (key in rv.__dict__):
                 raise KeyError("Attempt to overwrite %r in LogRecord" % key)
-            rv.__dict__[key] = extra[key]
+            setattr(rv, key, extra[key])
 
     contexts = THREAD_LOGGING_CONTEXT.context
     extra = THREAD_LOGGING_CONTEXT.flatten()
     extra['context'] = "[%s]" % ";".join(contexts) if contexts else ""
-    rv.__dict__.update(dict(extra, **rv.__dict__))
+    for k, v in dict(extra, **rv.__dict__).items():
+        setattr(rv, k, v)
 
     indents = chain(repeat(G.graphics.INDENT_SEGMENT, rv.indentation), repeat(decoration, 1))
     rv.decoration = "".join(color(segment) for color, segment in zip(cycle(G.INDENT_COLORS), indents))

@@ -87,7 +87,7 @@ class DecoratingDescriptor(metaclass=ABCMeta):
                     return instance.__dict__[self.__property_name]
                 except KeyError:
                     bound = self._decorate(method, instance, owner)
-                    instance.__dict__[self.__property_name] = bound
+                    setattr(instance, self.__property_name, bound)
                     return bound
             else:
                 return self._decorate(method, instance, owner)

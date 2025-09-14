@@ -405,8 +405,8 @@ class TypedDict(TypedCollection, dict):
 
 class TypedBunch(TypedDict, Bunch):
     def __init__(self, owner, field):
-        # Hack around Bunch's __getattr__()
-        self.__dict__.update(_field=field, _owner=owner)
+        self._field = field
+        self._owner = owner
 
 
 TypedBunch.__name__ = 'Bunch'  # make it look like a Bunch when formatted
