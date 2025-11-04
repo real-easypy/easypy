@@ -68,7 +68,7 @@ from contextlib import contextmanager, ExitStack
 from functools import partial, wraps
 from importlib import import_module
 from itertools import chain, count
-from traceback import format_tb
+from traceback import format_tb, extract_tb
 import inspect
 import logging
 import threading
@@ -93,6 +93,7 @@ from easypy.decorations import parametrizeable_decorator
 
 MAX_THREAD_POOL_SIZE = int(os.environ.get('EASYPY_MAX_THREAD_POOL_SIZE', 50))
 DISABLE_CONCURRENCY = yesno_to_bool(os.getenv("EASYPY_DISABLE_CONCURRENCY", "no"))
+SHOULD_COALESCE_DUPLICATED_TBS = yesno_to_bool(os.getenv('EASYPY_MULTIEXCEPTION_COALESCE_DUPLICATED_TBS', 'true'))
 
 this_module = import_module(__name__)
 THREADING_MODULE_PATHS = [threading.__file__]
@@ -233,6 +234,7 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
     CORE_COMMON_TYPE = BaseException  # the fallback core common type
     DEPTH = 0
     template = "{0.common_type.__qualname__} raised from concurrent invocation (x{0.count}/{0.invocations_count})"
+    tb_coalesce_template = "  See exception ({}) for traceback"
 
     def __reduce__(self):
         return (MultiException, (self.exceptions, [PickledFuture(ctx=f.ctx, funcname=f.funcname) for f in self.futures]))
@@ -273,7 +275,9 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         text = buff.render(width=width, edges=not color)
         return colorize("\n" + text)
 
-    def _get_buffer(self, **kw):
+    def _get_buffer(self, exc_num_prefix='', **kw):
+        unique_tbs_to_exc_num = kw.setdefault("unique_tbs_to_exc_num", {})
+
         if kw.get("color", True):
             normalize_color = lambda x: x
         else:
@@ -313,19 +317,32 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
         add_details(self)
 
-        for exc in self.actual:
-            with buff.indent("{.__class__.__qualname__}", exc):
+        for exc_num, exc in enumerate(self.actual, 1):
+            show_traceback = hasattr(exc, "__traceback__") and getattr(exc, 'traceback', None) is not False
+            full_exc_num_with_same_tb = None
+            full_exc_num = f"{exc_num_prefix}{exc_num}"
+
+            if SHOULD_COALESCE_DUPLICATED_TBS and show_traceback:
+                if tb := tuple((frame.filename, frame.lineno) for frame in extract_tb(exc.__traceback__)):
+                    if tb in unique_tbs_to_exc_num:
+                        full_exc_num_with_same_tb = unique_tbs_to_exc_num[tb]
+                    else:
+                        unique_tbs_to_exc_num[tb] = full_exc_num
+
+
+            with buff.indent(f"{{.__class__.__qualname__}} ({full_exc_num})", exc):
                 if isinstance(exc, MultiException):
-                    buff.extend(exc._get_buffer(**kw))
+                    buff.extend(exc._get_buffer(exc_num_prefix=f"{full_exc_num}.", **kw))
                 elif callable(getattr(exc, "render", None)):
                     buff.write(exc.render(**kw))
                 else:
                     buff.write("{}", exc)
                     add_details(exc)
-                if hasattr(exc, "__traceback__"):
-                    show_traceback = getattr(exc, 'traceback', None)
-                    if show_traceback is not False:
-                        buff.write("Traceback:")
+                if show_traceback:
+                    buff.write("Traceback:")
+                    if full_exc_num_with_same_tb:
+                        buff.write(self.tb_coalesce_template.format(full_exc_num_with_same_tb))
+                    else:
                         for line in format_tb(exc.__traceback__):
                             buff.write(traceback_fmt, line.rstrip())
 
