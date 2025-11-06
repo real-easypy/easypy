@@ -275,9 +275,9 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
         text = buff.render(width=width, edges=not color)
         return colorize("\n" + text)
 
-    def _get_buffer(self, exc_num_prefix='', **kw):
-        unique_tbs_to_exc_num = kw.setdefault("unique_tbs_to_exc_num", {})
-
+    def _get_buffer(self, exc_num_prefix='', unique_tbs_to_exc_num=None, **kw):
+        if unique_tbs_to_exc_num is None:
+            unique_tbs_to_exc_num = {}
         if kw.get("color", True):
             normalize_color = lambda x: x
         else:
@@ -332,7 +332,10 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
             with buff.indent(f"{{.__class__.__qualname__}} ({full_exc_num})", exc):
                 if isinstance(exc, MultiException):
-                    buff.extend(exc._get_buffer(exc_num_prefix=f"{full_exc_num}.", **kw))
+                    buff.extend(exc._get_buffer(
+                        exc_num_prefix=f"{full_exc_num}.",
+                        unique_tbs_to_exc_num=unique_tbs_to_exc_num,
+                        **kw))
                 elif callable(getattr(exc, "render", None)):
                     buff.write(exc.render(**kw))
                 else:
