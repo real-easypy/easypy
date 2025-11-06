@@ -332,9 +332,10 @@ class MultiException(PException, metaclass=MultiExceptionMeta):
 
             with buff.indent(f"{{.__class__.__qualname__}} ({full_exc_num})", exc):
                 if isinstance(exc, MultiException):
-                    buff.extend(exc._get_buffer(exc_num_prefix=f"{full_exc_num}.",
-                                                unique_tbs_to_exc_num=unique_tbs_to_exc_num,
-                                                **kw))
+                    buff.extend(exc._get_buffer(
+                        exc_num_prefix=f"{full_exc_num}.",
+                        unique_tbs_to_exc_num=unique_tbs_to_exc_num,
+                        **kw))
                 elif callable(getattr(exc, "render", None)):
                     buff.write(exc.render(**kw))
                 else:
