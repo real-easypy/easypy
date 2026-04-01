@@ -1,5 +1,7 @@
-from easypy.units import byte, KiB, SECOND
+import pytest
 
+from easypy.units import byte, KiB, MiB, GiB, TiB, PiB, SECOND
+from easypy.units import to_data_size, UnknownDataSizeError
 
 def test_data_sizes():
     assert "{0!s}, {0!r}, {0:10text}".format(byte) == "byte, byte,     1 byte"
@@ -40,3 +42,48 @@ def test_operators():
     foo = Foo()
 
     assert KiB // foo is foo
+
+
+def test_to_data_size_edge_cases():
+    assert to_data_size("0G") == 0
+    assert to_data_size("1.5G") == 2 * GiB
+    assert to_data_size("  10G  ") == 10 * GiB
+
+    for invalid in ["k", "M", "GiB", "Ki", "", " "]:
+        with pytest.raises(UnknownDataSizeError):
+            to_data_size(invalid)
+
+
+def test_to_data_size():
+    assert to_data_size(10) == 10
+    assert to_data_size(1.5) == 1.5
+    assert to_data_size("10") == 10
+    assert to_data_size("10k") == 10 * KiB
+    assert to_data_size("10K") == 10 * KiB
+    assert to_data_size("10m") == 10 * MiB
+    assert to_data_size("10M") == 10 * MiB
+    assert to_data_size("10g") == 10 * GiB
+    assert to_data_size("10G") == 10 * GiB
+    assert to_data_size("10t") == 10 * TiB
+    assert to_data_size("10T") == 10 * TiB
+    assert to_data_size("10p") == 10 * PiB
+    assert to_data_size("10P") == 10 * PiB
+
+
+def test_to_data_size_iec_suffixes():
+    assert to_data_size("10Gi") == 10 * GiB
+    assert to_data_size("10gi") == 10 * GiB
+    assert to_data_size("10GiB") == 10 * GiB
+    assert to_data_size("10gib") == 10 * GiB
+    assert to_data_size("10Ki") == 10 * KiB
+    assert to_data_size("10KiB") == 10 * KiB
+    assert to_data_size("10Mi") == 10 * MiB
+    assert to_data_size("10MiB") == 10 * MiB
+    assert to_data_size("10Ti") == 10 * TiB
+    assert to_data_size("10TiB") == 10 * TiB
+    assert to_data_size("10Pi") == 10 * PiB
+    assert to_data_size("10PiB") == 10 * PiB
+
+    for invalid in ["10GB", "10Gb", "10gb", "10xyz", "abc"]:
+        with pytest.raises(UnknownDataSizeError):
+            to_data_size(invalid)
