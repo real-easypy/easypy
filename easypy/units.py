@@ -395,9 +395,16 @@ def to_data_size(size):
     if isinstance(size, (int, float)):
         return size
     try:
-        if size[-1].isalpha():
-            return ceil(float(size[:-1])) * sizes_table[size[-1].lower()]
+        # Accepts: plain numbers ("10"), single-letter units ("10G"),
+        # and IEC units ("10Gi", "10GiB"). Rejects "GB"/"Gb" since
+        # "Gb" (gigabits) is not the same as "GiB" (gibibytes).
+        match = re.fullmatch(r'([\d.]+)([kmgtp](?:ib?)?)?', size.strip(), re.IGNORECASE)
+        if not match:
+            raise ValueError(size)
+        number, unit = match.groups()
+        if unit:
+            return ceil(float(number)) * sizes_table[unit[0].lower()]
         else:
-            return ceil(float(size))
+            return ceil(float(number))
     except (KeyError, ValueError):
-            raise UnknownDataSizeError(size)
+        raise UnknownDataSizeError(size)
